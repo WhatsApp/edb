@@ -66,6 +66,11 @@ jobs:
         run: rebar3 fmt --check
       - name: XRef
         run: rebar3 xref
+      - name: Upload EDB escript
+        uses: "actions/upload-artifact@v3"
+        with:
+          name: edb-${{ matrix.os }}-${{ matrix.otp-version }}
+          path: _build/default/bin/edb
       - name: Cache Dialyzer PLTs
         uses: actions/cache@v1
         with:
