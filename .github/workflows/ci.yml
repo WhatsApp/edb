@@ -71,7 +71,7 @@ jobs:
       - name: Create tarball edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
         run: 'tar -zcvf edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz -C _build/default/bin edb'
       - name: Upload EDB escript
-        uses: "actions/upload-artifact@v3"
+        uses: "actions/upload-artifact@v4"
         with:
           name: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
           path: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
