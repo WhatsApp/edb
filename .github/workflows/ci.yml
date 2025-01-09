@@ -6,6 +6,8 @@ on:
   pull_request:
     branches:
       - main
+  release:
+    types: [published]
 jobs:
   build:
     strategy:
@@ -67,10 +69,26 @@ jobs:
       - name: XRef
         run: rebar3 xref
       - name: Upload EDB escript
-        uses: "actions/upload-artifact@v3"
+        uses: "actions/upload-artifact@v4"
         with:
           name: edb-${{ matrix.os }}-${{ matrix.otp-version }}
           path: _build/default/bin/edb
+      - env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        id: get_release_url
+        name: Get release url
+        if: ${{ github.event_name == 'release' }}
+        uses: "bruceadams/get-release@v1.3.2"
+      - env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        name: Upload release edb-${{ matrix.os }}-${{ matrix.otp-version }}.tar.gz
+        if: ${{ github.event_name == 'release' }}
+        uses: "actions/upload-release-asset@v1.0.2"
+        with:
+          asset_content_type: application/octet-stream
+          asset_name: edb-${{ matrix.os }}-${{ matrix.otp-version }}.tar.gz
+          asset_path: edb-${{ matrix.os }}-${{ matrix.otp-version }}.tar.gz
+          upload_url: "${{ steps.get_release_url.outputs.upload_url }}"
       - name: Cache Dialyzer PLTs
         uses: actions/cache@v1
         with:
