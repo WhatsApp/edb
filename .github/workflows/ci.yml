@@ -1,0 +1,85 @@
+name: CI
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            otp-version: 27
+            rebar3-version: 3.24.0
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp-version}}
+          # TODO(T206197595): Restore once OTP 28 is generally available
+          # rebar3-version: ${{matrix.rebar3-version}}
+      - name: Cache custom Erlang/OTP build
+        uses: actions/cache@v4
+        id: otp-cache
+        with:
+          path: otp-bin
+          key: ${{ runner.os }}-otp-${{ hashFiles(format('{0}{1}', github.workspace, '/otp')) }}
+      - name: Build and install custom version of Erlang/OTP
+        working-directory: otp
+        run: ./configure --prefix=$(pwd)/../otp-bin && make -j$(nproc) && make -j$(nproc) install
+        if: steps.otp-cache.outputs.cache-hit != 'true'
+      - name: Patch PATH
+        run: echo $(pwd)/otp-bin/bin >> $GITHUB_PATH
+      - name: Cache Hex packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/rebar3/hex/hexpm/packages
+          key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+          restore-keys: |
+            ${{ runner.os }}-hex-
+      # TODO(T206197595): Remove once OTP 28 is generally available
+      - name: Checkout rebar3 repository
+        uses: "actions/checkout@v3"
+        with:
+          repository: erlang/rebar3
+          path: rebar3
+          ref: ${{ matrix.rebar3-version }}
+      - name: Bootstrap rebar3
+        run: ./bootstrap
+        working-directory: rebar3
+      - name: Add rebar3 to PATH
+        run: echo $(pwd)/rebar3 >> $GITHUB_PATH
+      - name: Compile
+        run: rebar3 compile
+      - name: Escriptize
+        run: rebar3 escriptize
+      - name: Test
+        run: rebar3 ct
+      - name: Format
+        run: rebar3 fmt --check
+      - name: XRef
+        run: rebar3 xref
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/rebar3/rebar3_*.plt
+          key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+          restore-keys: |
+            ${{ runner.os }}-dialyzer-
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/rebar3/rebar3_*.plt
+          key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+          restore-keys: |
+            ${{ runner.os }}-dialyzer-
+      # T198620072: Solve the existing Dialyzer issues, then enable this
+      # - name: Dialyzer
+      #   run: rebar3 dialyzer
