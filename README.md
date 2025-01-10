@@ -44,6 +44,25 @@ Run Tests
 
     $ rebar3 ct
 
+Produce an Escript
+------------------
+
+You can produce an [escript](https://www.erlang.org/doc/apps/stdlib/escript.html) executable for the `edb` project.
+This is convenient to use the debugger from an IDE via the [DAP](https://microsoft.github.io/debug-adapter-protocol/) protocol.
+
+    $ rebar3 escriptize
+
+The produced `edb` escript will be available in:
+
+    _build/default/bin/edb
+
+Start the DAP adapter for `edb`
+-------------------------------
+
+To start the debugger CLI
+
+    $ _build/default/bin/edb dap
+
 License
 -------
 
