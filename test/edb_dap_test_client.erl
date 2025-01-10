@@ -73,7 +73,8 @@ initialize(Client, Args) ->
 
 -spec wait_for_event(edb_dap:event_type(), client()) -> ok.
 wait_for_event(Type, Client) ->
-    gen_server:call(Client, {'$wait_for_event', Type}).
+    WaitTimeoutSecs = 10_000,
+    gen_server:call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
 
 -spec launch(client(), edb_dap:launch_request_arguments()) -> ok.
 launch(Client, Args) ->
