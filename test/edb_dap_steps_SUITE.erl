@@ -114,7 +114,7 @@ test_step_out_works(Config) ->
         ~"-export([go/0]).          %L02\n",
         ~"go() ->                   %L03\n",
         ~"    X = f(23),            %L04\n",
-        ~"    x + 42.               %L05\n",
+        ~"    X + 42.               %L05\n",
         ~"                          %L06\n",
         ~"f(X) ->                   %L07\n",
         ~"    Y = g(X * 3 + 1),     %L08\n",
