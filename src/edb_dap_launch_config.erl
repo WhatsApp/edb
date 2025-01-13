@@ -47,7 +47,8 @@ parse(LaunchConfig) ->
         launchCommand => #{
             cwd => fun is_binary/1,
             command => fun is_binary/1,
-            arguments => {optional, fun is_valid_arguments/1}
+            arguments => {optional, fun is_valid_arguments/1},
+            env => {optional, fun is_valid_env/1}
         },
         targetNode => #{
             name => fun is_binary/1,
@@ -85,11 +86,21 @@ is_valid_arguments(Arguments) when is_list(Arguments) ->
 is_valid_arguments(_) ->
     false.
 
+-spec is_valid_env(term()) -> boolean().
+is_valid_env(Env) when is_map(Env) ->
+    lists:all(fun is_true/1, [is_atom(Key) andalso is_binary(Value) || Key := Value <- Env]);
+is_valid_env(_) ->
+    false.
+
 -spec is_node_type(term()) -> boolean().
 is_node_type(Type) when is_binary(Type) ->
     lists:member(Type, [~"longnames", ~"shortnames"]);
 is_node_type(_Type) ->
     false.
+
+-spec is_true(boolean()) -> boolean().
+is_true(true) -> true;
+is_true(false) -> false.
 
 %% --------------------------------------------------------------------
 %% Parser functions

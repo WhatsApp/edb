@@ -65,11 +65,13 @@ launch(State, Args) ->
     AttachTimeoutInSecs = maps:get(timeout, Args, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
     StripSourcePrefix = maps:get(stripSourcePrefix, Args, <<>>),
     Arguments = maps:get(arguments, LaunchCommand, []),
+    Env = maps:get(env, LaunchCommand, #{}),
     RunInTerminalRequest = #{
         kind => <<"integrated">>,
         title => <<"EDB">>,
         cwd => Cwd,
-        args => [Command | Arguments]
+        args => [Command | Arguments],
+        env => Env
     },
     #{
         response => #{success => true},

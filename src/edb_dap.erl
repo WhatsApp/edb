@@ -240,7 +240,8 @@ build_error_response(Id, Format) ->
     launchCommand := #{
         cwd := binary(),
         command := binary(),
-        arguments => [binary()]
+        arguments => [binary()],
+        env => #{binary() => binary()}
     },
     targetNode := target_node(),
     stripSourcePath => binary()
