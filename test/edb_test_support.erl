@@ -45,9 +45,10 @@ random_node(Prefix) ->
     list_to_atom(lists:flatten(io_lib:format("~s@localhost", [Name]))).
 
 -spec random_node_name(Prefix :: string() | binary()) -> atom().
+random_node_name(Prefix) when is_binary(Prefix) ->
+    random_node_name(binary_to_list(Prefix));
 random_node_name(Prefix) ->
-    Hash = erlang:phash2(erlang:timestamp()),
-    list_to_atom(lists:flatten(io_lib:format("~s_~p", [Prefix, Hash]))).
+    list_to_atom(peer:random_name(Prefix)).
 
 -spec start_peer_node(CtConfig, NamePrefix | {exact, node()}) -> {ok, Peer, Node, Cookie} when
     CtConfig :: ct_suite:ct_config(),
