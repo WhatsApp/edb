@@ -85,7 +85,8 @@ start_peer_node(CtConfig, NamePrefix) ->
     Peer :: peer().
 stop_peer_node(Peer) ->
     try peer:stop(Peer) of
-        ok -> ok
+        ok ->
+            ok
     catch
         exit:noproc ->
             ok
@@ -97,7 +98,18 @@ stop_all_peer_nodes() ->
         undefined ->
             ok;
         Peers when is_map(Peers) ->
-            [ok = stop_peer_node(Peer) || Peer <- maps:keys(Peers)],
+            [
+                begin
+                    % If the node is paused by edb, peer:stop() would silently timeout
+                    % (init:stop() gets blocked, etc) so it will end up just "disconnecting"
+                    % the peer node. The actual node keeps up, though, so we leak
+                    % a OS process on each invocation of the test. So let's ensure the debugger
+                    % is stopped (which resumes every process) to avoid leaking resources
+                    catch erpc:call(Node, edb_server, stop, [], 30_000),
+                    ok = stop_peer_node(Peer)
+                end
+             || Peer := Node <- Peers
+            ],
             erlang:erase(?PROC_DICT_PEERS_KEY),
             ok
     end.
