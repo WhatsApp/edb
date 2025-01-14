@@ -40,6 +40,7 @@
 
 -define(MAX_TERM_SIZE, 1_000_000).
 -define(DEFAULT_ATTACH_TIMEOUT_IN_SECS, 60).
+-define(ERL_FLAGS, <<"+D">>).
 
 -spec initialize(edb_dap_state:t(), edb_dap:initialize_request_arguments()) ->
     reaction(edb_dap:initialize_response()).
@@ -71,7 +72,7 @@ launch(State, Args) ->
         title => <<"EDB">>,
         cwd => Cwd,
         args => [Command | Arguments],
-        env => Env
+        env => Env#{'ERL_FLAGS' => ?ERL_FLAGS}
     },
     #{
         response => #{success => true},
