@@ -287,9 +287,7 @@ add_explicit(Module, Line, Breakpoints0) ->
     case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
         {ok, Breakpoints1} ->
             #breakpoints{explicits = Explicits1} = Breakpoints1,
-            BreakpointInfos1 = maps:get(Module, Explicits1, #{}),
-            BreakpointInfos2 = BreakpointInfos1#{Line => []},
-            Explicits2 = Explicits1#{Module => BreakpointInfos2},
+            Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
             Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
             {ok, Breakpoints2};
         {error, Reason} ->
