@@ -275,9 +275,7 @@ add_step(Pid, Module, Line, Breakpoints0) ->
     case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
-            PidSteps1 = maps:get(Pid, Steps1, #{}),
-            PidSteps2 = PidSteps1#{{Module, Line} => []},
-            Steps2 = Steps1#{Pid => PidSteps2},
+            Steps2 = edb_server_maps:add(Pid, {Module, Line}, [], Steps1),
             Breakpoints1#breakpoints{steps = Steps2};
         {error, _} ->
             % This is not a line where we can set a breakpoint, do nothing.
@@ -339,9 +337,7 @@ unregister_explicit(Module, Line, Breakpoints0) ->
 add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
-    Reasons0 = maps:get({Module, Line}, VmBreakpoints0, #{}),
-    Reasons1 = Reasons0#{Reason => []},
-    VmBreakpoints1 = VmBreakpoints0#{{Module, Line} => Reasons1},
+    VmBreakpoints1 = edb_server_maps:add({Module, Line}, Reason, [], VmBreakpoints0),
     Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
 
     %% Set the VM breakpoint.
