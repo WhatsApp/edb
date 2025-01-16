@@ -28,7 +28,6 @@
     subtract/2,
     to_map/2,
     map_subtract_keys/2,
-    new/0,
     is_empty/1,
     fold/3
 ]).
@@ -39,10 +38,6 @@
 %% Map-based sets
 %% -------------------------------------------------------------------
 -type set(A) :: #{A => term()}.
-
--spec new() -> set(none()).
-new() ->
-    #{}.
 
 -spec is_empty(set(_)) -> boolean().
 is_empty(Set) ->
