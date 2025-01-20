@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkstaticdocs_starter=self.webpackChunkstaticdocs_starter||[]).push([[428],{89373:function(s){s.exports=JSON.parse('{"label":"edb","permalink":"/edb/blog/tags/edb","allTagsPath":"/edb/blog/tags","count":2}')}}]);

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>EDB Blog</title>
+        <link>https://whatsapp.github.io/edb/blog</link>
+        <description>EDB Blog</description>
+        <lastBuildDate>Mon, 20 Jan 2025 00:00:00 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <language>en</language>
+        <item>
+            <title><![CDATA[Stepping into step]]></title>
+            <link>https://whatsapp.github.io/edb/blog/stepping-into-step</link>
+            <guid>https://whatsapp.github.io/edb/blog/stepping-into-step</guid>
+            <pubDate>Mon, 20 Jan 2025 00:00:00 GMT</pubDate>
+            <description><![CDATA[We're exploring various single-process examples of stepping to inform our design decisions in the Erlang debugger. We discuss cases like stepping over function calls, handling closures, recursion, and tail recursion, highlighting the importance of stack frame awareness.]]></description>
+            <content:encoded><![CDATA[<p>We're exploring various single-process examples of stepping to inform our design decisions in the Erlang debugger. We discuss cases like stepping over function calls, handling closures, recursion, and tail recursion, highlighting the importance of stack frame awareness.</p><p>TBD</p>]]></content:encoded>
+            <category>edb</category>
+            <category>erlang</category>
+            <category>debugger</category>
+        </item>
+        <item>
+            <title><![CDATA[A new Erlang debugger prototype]]></title>
+            <link>https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype</link>
+            <guid>https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype</guid>
+            <pubDate>Fri, 17 Jan 2025 00:00:00 GMT</pubDate>
+            <description><![CDATA[We dive into the internals of the Erlang VM in order to prototype edb, an Erlang debugger closely integrated to the VM. In this post we give an overview of the overall design, look at the existing capabilities in the VM we were able to leverage, and what features needed to be added.]]></description>
+            <content:encoded><![CDATA[<p>We dive into the internals of the Erlang VM in order to prototype edb, an Erlang debugger closely integrated to the VM. In this post we give an overview of the overall design, look at the existing capabilities in the VM we were able to leverage, and what features needed to be added.</p><p>TBD</p>]]></content:encoded>
+            <category>edb</category>
+            <category>erlang</category>
+            <category>debugger</category>
+        </item>
+    </channel>
+</rss>
