@@ -10,42 +10,39 @@ import styles from './HomepageFeatures.module.css';
 
 const FeatureList = [
   {
+    title: 'No timeouts',
+    icon: '⏰',
+    description: (
+      <>
+        EDB freezes (or rather it gives the illusion of freezing) the Erlang VM, to prevent timeouts during a debugging session.
+      </>
+    ),
+  },
+  {
     title: 'Easy to Use',
-    Svg: require('../../static/img/undraw_docusaurus_mountain.svg').default,
+    icon: '😌',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        EDB provides a simple and intuitive step-by-step debugging experience.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('../../static/img/undraw_docusaurus_tree.svg').default,
+    title: 'DAP Included',
+    icon: '🔋',
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
-      </>
-    ),
-  },
-  {
-    title: 'Powered by React',
-    Svg: require('../../static/img/undraw_docusaurus_react.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        By shipping with a fully featured <a href='https://microsoft.github.io/debug-adapter-protocol/' target='_blank'>DAP adapter</a>, ELP easily integrates into your IDE of choice.
       </>
     ),
   },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({icon, title, description}) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} alt={title} />
+      <div className="text--center" style={{fontSize: '400%'}}>
+        {icon}
       </div>
       <div className="text--center padding-horiz--md">
         <h3>{title}</h3>

@@ -10,8 +10,8 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 // With JSDoc @type annotations, IDEs can provide config autocompletion
 /** @type {import('@docusaurus/types').DocusaurusConfig} */
 (module.exports = {
-  title: 'EDB: A new debugger for Erlang',
-  tagline: 'EDB: A new debugger for Erlang',
+  title: 'EDB',
+  tagline: 'A new debugger for Erlang',
   url: 'https://whatsapp.github.io',
   baseUrl: '/edb/',
   onBrokenLinks: 'throw',
