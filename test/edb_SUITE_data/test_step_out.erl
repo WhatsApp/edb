@@ -1,7 +1,8 @@
--module(test_step).
+-module(test_step_out).
 
-%% elp:ignore W0012 (missing warn_missing_spec_all) TODO T210600617 restore it when splitting files
--export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, id/1, swap/1]).
+-compile([warn_missing_spec_all]).
+
+-export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1]).
 
 %% Utility function to check executed lines
 
@@ -70,12 +71,3 @@ make_closure(Controller) ->
         sync(Controller, ?LINE),
         ok
     end.
-
-%% No specs between functions. TODO T210600617 We should split abstract code tests in another file.
-
-id(X) ->
-    Y = X,
-    Y.
-
-swap({X, Y}) ->
-    {Y, X}.

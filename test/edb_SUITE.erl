@@ -57,10 +57,7 @@
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
 
-%% Test cases for code inspection.
-%% TODO T208747149 - they will be grouped with test_step_over as they are a critical part of the
-%% implementation and share some corner cases. Once we have a better support from OTP for code
-%% inspection, we can remove the tests.
+%% Test cases for the test_code_inspection group
 -export([test_fetch_fun_block_surrounding/1]).
 
 %% Test cases for the test_stackframes group
@@ -102,14 +99,18 @@ groups() ->
             test_clear_breakpoints_clears_all_breakpoints,
             test_get_breakpoints_reports_current_set_breakpoints
         ]},
-        {test_step, [], [
+        {test_step_over, [], [
             test_step_over_goes_to_next_line,
             test_step_over_skips_same_name_fun_call,
             test_step_over_fails_on_running_process,
             test_step_over_to_caller_on_return,
             test_step_over_within_and_out_of_closure,
-            test_step_over_within_and_out_of_external_closure,
-            test_step_out_of_external_closure,
+            test_step_over_within_and_out_of_external_closure
+        ]},
+        {test_step_out, [], [
+            test_step_out_of_external_closure
+        ]},
+        {test_code_inspection, [], [
             test_fetch_fun_block_surrounding
         ]},
         {test_stackframes, [], [
@@ -129,7 +130,9 @@ all() ->
     [
         {group, test_subscriptions},
         {group, test_breakpoints},
-        {group, test_step},
+        {group, test_step_over},
+        {group, test_step_out},
+        {group, test_code_inspection},
         {group, test_stackframes},
         {group, test_format}
     ].
@@ -1125,18 +1128,18 @@ test_get_breakpoints_reports_current_set_breakpoints(_Config) ->
 
 test_step_over_goes_to_next_line(_Config) ->
     % Add a breakpoint to step from
-    ok = edb:add_breakpoint(test_step, 19),
+    ok = edb:add_breakpoint(test_step_over, 20),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(test_step, go, [self()]),
+    Pid = erlang:spawn(test_step_over, go, [self()]),
     {ok, stopped} = edb:wait(),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(18, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Sanity check that we hit the breapoint
     ?assertEqual(
-        #{Pid => #{line => 19, module => test_step}},
+        #{Pid => #{line => 20, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1157,14 +1160,14 @@ test_step_over_goes_to_next_line(_Config) ->
 
         % TODO T208352500 Stepping should not count as hitting a breakpoint
         ?assertEqual(
-            #{Pid => #{line => NextLine, module => test_step}},
+            #{Pid => #{line => NextLine, module => test_step_over}},
             edb:get_breakpoints_hit()
         )
     end,
 
-    CheckStepOnLine(20),
     CheckStepOnLine(21),
     CheckStepOnLine(22),
+    CheckStepOnLine(23),
 
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
@@ -1172,7 +1175,7 @@ test_step_over_goes_to_next_line(_Config) ->
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, go, 1}, {line, 19}}},
+            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}},
@@ -1190,10 +1193,10 @@ test_step_over_goes_to_next_line(_Config) ->
 
 test_step_over_skips_same_name_fun_call(_Config) ->
     % Add a breakpoint to step from
-    ok = edb:add_breakpoint(test_step, 43),
+    ok = edb:add_breakpoint(test_step_over, 44),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(test_step, just_sync, [self(), unused_argument]),
+    Pid = erlang:spawn(test_step_over, just_sync, [self(), unused_argument]),
     {ok, stopped} = edb:wait(),
 
     % No sync received yet
@@ -1201,7 +1204,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
     % Sanity check that we hit the breapoint
     ?assertEqual(
-        #{Pid => #{line => 43, module => test_step}},
+        #{Pid => #{line => 44, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1210,18 +1213,18 @@ test_step_over_skips_same_name_fun_call(_Config) ->
     {ok, stopped} = edb:wait(),
 
     % We went through the call to just_sync/1
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(38, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(39, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check that we reached the next line of just_sync/2
     ?assertMatch(
-        #{Pid := #{status := breakpoint, current_bp := {line, 44}}},
+        #{Pid := #{status := breakpoint, current_bp := {line, 45}}},
         edb:processes()
     ),
 
     % TODO T208352500 Stepping should not count as hitting a breakpoint
     ?assertEqual(
-        #{Pid => #{line => 44, module => test_step}},
+        #{Pid => #{line => 45, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1229,7 +1232,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, just_sync, 2}, {line, 43}}},
+            {stopped, {breakpoint, Pid, {test_step_over, just_sync, 2}, {line, 44}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}}
@@ -1241,7 +1244,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
 test_step_over_fails_on_running_process(_Config) ->
     % Spawn a process that will loop forever without hitting any breakpoint
-    Pid = erlang:spawn(test_step, cycle, [self(), left]),
+    Pid = erlang:spawn(test_step_over, cycle, [self(), left]),
 
     % Sanity check: no breakpoint should have been hit
     ?assertEqual(
@@ -1267,18 +1270,18 @@ test_step_over_fails_on_running_process(_Config) ->
 
 test_step_over_to_caller_on_return(_Config) ->
     % Add a breakpoint at the end of the callee just_sync/1
-    ok = edb:add_breakpoint(test_step, 39),
+    ok = edb:add_breakpoint(test_step_over, 40),
 
     % Spawn a process that will hit this breakpoint through the caller just_sync/2
-    Pid = erlang:spawn(test_step, just_sync, [self(), unused_argument]),
+    Pid = erlang:spawn(test_step_over, just_sync, [self(), unused_argument]),
     {ok, stopped} = edb:wait(),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(38, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(39, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check that we reach the breakpoint location
     ?assertMatch(
-        {ok, [#{mfa := {_, just_sync, 1}, line := 39} | _]},
+        {ok, [#{mfa := {_, just_sync, 1}, line := 40} | _]},
         edb:stack_frames(Pid)
     ),
 
@@ -1288,7 +1291,7 @@ test_step_over_to_caller_on_return(_Config) ->
 
     % Check that we stopped on the next line of just_sync/2
     ?assertMatch(
-        {ok, [#{mfa := {_, just_sync, 2}, line := 44} | _]},
+        {ok, [#{mfa := {_, just_sync, 2}, line := 45} | _]},
         edb:stack_frames(Pid)
     ),
 
@@ -1298,7 +1301,7 @@ test_step_over_to_caller_on_return(_Config) ->
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, just_sync, 1}, {line, 39}}},
+            {stopped, {breakpoint, Pid, {test_step_over, just_sync, 1}, {line, 40}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}}
@@ -1310,26 +1313,26 @@ test_step_over_to_caller_on_return(_Config) ->
 
 test_step_over_within_and_out_of_closure(_Config) ->
     % Add a breakpoint to step from, in the closure
-    ok = edb:add_breakpoint(test_step, 53),
+    ok = edb:add_breakpoint(test_step_over, 54),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(test_step, call_closure, [self()]),
+    Pid = erlang:spawn(test_step_over, call_closure, [self()]),
     {ok, stopped} = edb:wait(),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(50, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(51, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 53, module => test_step}},
+        #{Pid => #{line => 54, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
     % Check that we are inside the closure
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, '-call_closure/1-fun-0-', 2}, line := 53},
-            #{mfa := {test_step, call_closure, 1}, line := 52}
+            #{mfa := {test_step_over, '-call_closure/1-fun-0-', 2}, line := 54},
+            #{mfa := {test_step_over, call_closure, 1}, line := 53}
         ]},
         edb:stack_frames(Pid)
     ),
@@ -1340,13 +1343,13 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, '-call_closure/1-fun-0-', 2}, line := 54},
-            #{mfa := {test_step, call_closure, 1}, line := 52}
+            #{mfa := {test_step_over, '-call_closure/1-fun-0-', 2}, line := 55},
+            #{mfa := {test_step_over, call_closure, 1}, line := 53}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(53, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(54, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Step over to reach next executable line -- after closure call
@@ -1355,7 +1358,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_closure, 1}, line := 56}
+            #{mfa := {test_step_over, call_closure, 1}, line := 57}
         ]},
         edb:stack_frames(Pid)
     ),
@@ -1366,19 +1369,19 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_closure, 1}, line := 57}
+            #{mfa := {test_step_over, call_closure, 1}, line := 58}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(56, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(57, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check the events delivered
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, '-call_closure/1-fun-0-', 2}, {line, 53}}},
+            {stopped, {breakpoint, Pid, {test_step_over, '-call_closure/1-fun-0-', 2}, {line, 54}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}},
@@ -1396,18 +1399,18 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
 test_step_over_within_and_out_of_external_closure(_Config) ->
     % Add a breakpoint to step from, in the external closure
-    ok = edb:add_breakpoint(test_step, 70),
+    ok = edb:add_breakpoint(test_step_over, 71),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(test_step, call_external_closure, [self()]),
+    Pid = erlang:spawn(test_step_over, call_external_closure, [self()]),
     {ok, stopped} = edb:wait(),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(61, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(62, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 70, module => test_step}},
+        #{Pid => #{line => 71, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1415,8 +1418,8 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
     % The closure-defining make_closure doesn't appear in the stack
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, '-make_closure/1-fun-0-', 1}, line := 70},
-            #{mfa := {test_step, call_external_closure, 1}, line := 63}
+            #{mfa := {test_step_over, '-make_closure/1-fun-0-', 1}, line := 71},
+            #{mfa := {test_step_over, call_external_closure, 1}, line := 64}
         ]},
         edb:stack_frames(Pid)
     ),
@@ -1427,13 +1430,13 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, '-make_closure/1-fun-0-', 1}, line := 71},
-            #{mfa := {test_step, call_external_closure, 1}, line := 63}
+            #{mfa := {test_step_over, '-make_closure/1-fun-0-', 1}, line := 72},
+            #{mfa := {test_step_over, call_external_closure, 1}, line := 64}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(70, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(71, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Step over to reach next executable line -- after closure call, back in closure caller
@@ -1442,7 +1445,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_external_closure, 1}, line := 64}
+            #{mfa := {test_step_over, call_external_closure, 1}, line := 65}
         ]},
         edb:stack_frames(Pid)
     ),
@@ -1453,19 +1456,19 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_external_closure, 1}, line := 65}
+            #{mfa := {test_step_over, call_external_closure, 1}, line := 66}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(64, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(65, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check the events delivered
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, '-make_closure/1-fun-0-', 1}, {line, 70}}},
+            {stopped, {breakpoint, Pid, {test_step_over, '-make_closure/1-fun-0-', 1}, {line, 71}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}},
@@ -1481,20 +1484,24 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     ok.
 
+%% ------------------------------------------------------------------
+%% Test cases for test_step_out fixture
+%% ------------------------------------------------------------------
+
 test_step_out_of_external_closure(_Config) ->
     % Add a breakpoint to step from, in the external closure
-    ok = edb:add_breakpoint(test_step, 70),
+    ok = edb:add_breakpoint(test_step_out, 71),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(test_step, call_external_closure, [self()]),
+    Pid = erlang:spawn(test_step_out, call_external_closure, [self()]),
     {ok, stopped} = edb:wait(),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(61, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(62, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 70, module => test_step}},
+        #{Pid => #{line => 71, module => test_step_out}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1502,8 +1509,8 @@ test_step_out_of_external_closure(_Config) ->
     % The closure-defining make_closure doesn't appear in the stack
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, '-make_closure/1-fun-0-', 1}, line := 70},
-            #{mfa := {test_step, call_external_closure, 1}, line := 63}
+            #{mfa := {test_step_out, '-make_closure/1-fun-0-', 1}, line := 71},
+            #{mfa := {test_step_out, call_external_closure, 1}, line := 64}
         ]},
         edb:stack_frames(Pid)
     ),
@@ -1514,12 +1521,12 @@ test_step_out_of_external_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_external_closure, 1}, line := 64}
+            #{mfa := {test_step_out, call_external_closure, 1}, line := 65}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(70, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(71, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Sanity check that we can still step over in the caller
@@ -1528,19 +1535,19 @@ test_step_out_of_external_closure(_Config) ->
 
     ?assertMatch(
         {ok, [
-            #{mfa := {test_step, call_external_closure, 1}, line := 65}
+            #{mfa := {test_step_out, call_external_closure, 1}, line := 66}
         ]},
         edb:stack_frames(Pid)
     ),
 
-    ?ASSERT_SYNC_RECEIVED_FROM_LINE(64, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(65, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check the events delivered
     ?assertEqual(
         [
             {stopped, {paused, all}},
-            {stopped, {breakpoint, Pid, {test_step, '-make_closure/1-fun-0-', 1}, {line, 70}}},
+            {stopped, {breakpoint, Pid, {test_step_out, '-make_closure/1-fun-0-', 1}, {line, 71}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}},
@@ -1553,6 +1560,10 @@ test_step_out_of_external_closure(_Config) ->
 
     ok.
 
+%% ------------------------------------------------------------------
+%% Test cases for test_code_inspection fixture
+%% ------------------------------------------------------------------
+
 test_fetch_fun_block_surrounding(_Config) ->
     %% Auxiliary function to check that a fun block is retrieved from all its lines
     CheckIsFunBlock = fun(FirstLine, LastLine) ->
@@ -1561,30 +1572,30 @@ test_fetch_fun_block_surrounding(_Config) ->
             ?assertEqual(
                 %% Add the line number to the block, to make it easier to debug
                 {line, Line, {ok, Lines}},
-                {line, Line, edb_server_code:fetch_fun_block_surrounding(test_step, Line)}
+                {line, Line, edb_server_code:fetch_fun_block_surrounding(test_code_inspection, Line)}
             )
          || Line <- Lines
         ]
     end,
 
     %% go/1 (Simple case)
-    CheckIsFunBlock(17, 22),
+    CheckIsFunBlock(14, 19),
 
     %% cycle/2 (multiple clauses)
-    CheckIsFunBlock(27, 32),
+    CheckIsFunBlock(24, 29),
 
     %% just_sync/1 (arity overloading)
-    CheckIsFunBlock(37, 39),
+    CheckIsFunBlock(34, 36),
 
     %% just_sync/2 (arity overloading)
-    CheckIsFunBlock(42, 44),
+    CheckIsFunBlock(39, 41),
 
     %% make_closure/1 (ends with a non-executable line: `end.`)
-    CheckIsFunBlock(68, 71),
+    CheckIsFunBlock(46, 49),
 
     %% id/1 and swap/1: no specs inbetween (consecutive function forms)
-    CheckIsFunBlock(76, 78),
-    CheckIsFunBlock(80, 81),
+    CheckIsFunBlock(54, 56),
+    CheckIsFunBlock(58, 59),
 
     ok.
 
