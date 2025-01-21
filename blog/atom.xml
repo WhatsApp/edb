@@ -1,30 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <id>https://whatsapp.github.io/edb/blog</id>
+    <id>https://whatsapp.github.io/edb/blog/</id>
     <title>EDB Blog</title>
     <updated>2025-01-20T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
-    <link rel="alternate" href="https://whatsapp.github.io/edb/blog"/>
+    <link rel="alternate" href="https://whatsapp.github.io/edb/blog/"/>
     <subtitle>EDB Blog</subtitle>
     <icon>https://whatsapp.github.io/edb/img/favicon.ico</icon>
     <entry>
         <title type="html"><![CDATA[Stepping into step]]></title>
-        <id>https://whatsapp.github.io/edb/blog/stepping-into-step</id>
-        <link href="https://whatsapp.github.io/edb/blog/stepping-into-step"/>
+        <id>https://whatsapp.github.io/edb/blog/stepping-into-step/</id>
+        <link href="https://whatsapp.github.io/edb/blog/stepping-into-step/"/>
         <updated>2025-01-20T00:00:00.000Z</updated>
         <summary type="html"><![CDATA[We're exploring various single-process examples of stepping to inform our design decisions in the Erlang debugger. We discuss cases like stepping over function calls, handling closures, recursion, and tail recursion, highlighting the importance of stack frame awareness.]]></summary>
-        <content type="html"><![CDATA[<p>We're exploring various single-process examples of stepping to inform our design decisions in the Erlang debugger. We discuss cases like stepping over function calls, handling closures, recursion, and tail recursion, highlighting the importance of stack frame awareness.</p><p>TBD</p>]]></content>
+        <content type="html"><![CDATA[<p>We're exploring various single-process examples of stepping to inform our design decisions in the Erlang debugger. We discuss cases like stepping over function calls, handling closures, recursion, and tail recursion, highlighting the importance of stack frame awareness.</p>
+<p>TBD</p>]]></content>
         <category label="edb" term="edb"/>
         <category label="erlang" term="erlang"/>
         <category label="debugger" term="debugger"/>
     </entry>
     <entry>
         <title type="html"><![CDATA[A new Erlang debugger prototype]]></title>
-        <id>https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype</id>
-        <link href="https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype"/>
+        <id>https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype/</id>
+        <link href="https://whatsapp.github.io/edb/blog/a-new-erlang-debugger-prototype/"/>
         <updated>2025-01-17T00:00:00.000Z</updated>
         <summary type="html"><![CDATA[We dive into the internals of the Erlang VM in order to prototype edb, an Erlang debugger closely integrated to the VM. In this post we give an overview of the overall design, look at the existing capabilities in the VM we were able to leverage, and what features needed to be added.]]></summary>
-        <content type="html"><![CDATA[<p>We dive into the internals of the Erlang VM in order to prototype edb, an Erlang debugger closely integrated to the VM. In this post we give an overview of the overall design, look at the existing capabilities in the VM we were able to leverage, and what features needed to be added.</p><p>TBD</p>]]></content>
+        <content type="html"><![CDATA[<p>We dive into the internals of the Erlang VM in order to prototype edb, an Erlang debugger closely integrated to the VM. In this post we give an overview of the overall design, look at the existing capabilities in the VM we were able to leverage, and what features needed to be added.</p>
+<p>TBD</p>]]></content>
         <category label="edb" term="edb"/>
         <category label="erlang" term="erlang"/>
         <category label="debugger" term="debugger"/>

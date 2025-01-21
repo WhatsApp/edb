@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkstaticdocs_starter=self.webpackChunkstaticdocs_starter||[]).push([[535],{45641:function(e){e.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"Stepping into step","permalink":"/edb/blog/stepping-into-step"},{"title":"A new Erlang debugger prototype","permalink":"/edb/blog/a-new-erlang-debugger-prototype"}]}')}}]);

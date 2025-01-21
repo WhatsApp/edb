@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkstaticdocs_starter=self.webpackChunkstaticdocs_starter||[]).push([[991],{9030:function(a){a.exports=JSON.parse('{"label":"erlang","permalink":"/edb/blog/tags/erlang","allTagsPath":"/edb/blog/tags","count":2}')}}]);
