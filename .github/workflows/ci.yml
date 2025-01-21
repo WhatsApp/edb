@@ -16,15 +16,18 @@ jobs:
           - os: ubuntu-22.04
             otp-version: 27
             rebar3-version: 3.24.0
+          - os: macos-14
+            otp-version: 27
+            rebar3-version: 3.24.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{matrix.otp-version}}
+      # - uses: erlef/setup-beam@v1
+        # with:
+          # otp-version: ${{matrix.otp-version}}
           # TODO(T206197595): Restore once OTP 28 is generally available
           # rebar3-version: ${{matrix.rebar3-version}}
       - name: Cache custom Erlang/OTP build
