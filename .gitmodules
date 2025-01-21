@@ -1,4 +1,4 @@
 [submodule "otp"]
 	path = otp
 	url = https://github.com/jcpetruzza/otp
-	branch = edb-2025-01-07
+	branch = edb-2025-01-21
