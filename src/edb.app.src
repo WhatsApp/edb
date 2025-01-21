@@ -14,7 +14,7 @@
 %% erlfmt:ignore
 {application, edb, [
     {description, "The edb debugger"},
-    {vsn, "0.1.0"},
+    {vsn, git},
     {modules, []},
     {registered, []},
     {applications, [
@@ -22,5 +22,7 @@
         kernel,
         stdlib
     ]},
+    {licenses, ["Apache-2.0"]},
+    {links, []},
     {mod, {edb_app, []}}
 ]}.
