@@ -1,5 +1,5 @@
 -module(test_stackframes). %01
--export([choose/2, ping/1, pong/0, hang/3]). %02
+-export([choose/2, ping/1, pong/0, hang/3, forty_two/0]). %02
 
 choose(N, K) when N =:= K -> %04
     N div K; %05 (convoluted way to say 1, to have N and K "alive")
@@ -29,3 +29,12 @@ pong() -> %23
 
 hang(X, Y, Z) -> %30
     hang(X, Y, Z). %31
+
+forty_two() -> %33
+    0 + forty_two(1337). %34 (force a non-tail call)
+
+forty_two(X) -> %36
+    Six = 6, %37
+    FortyTwo = Six * 7, %38
+    _KeepXAlive = X + X, %39 (force X to be alive)
+    FortyTwo. %40

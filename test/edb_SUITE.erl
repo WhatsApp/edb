@@ -68,6 +68,7 @@
 %% Test cases for the test_stackframes group
 -export([test_shows_stackframes_of_process_in_breakpoint/1]).
 -export([test_shows_stackframes_of_paused_processes_not_in_breakpoint/1]).
+-export([test_shows_stackframes_of_stepping_process/1]).
 -export([test_can_control_max_size_of_terms_in_vars_for_process_in_bp/1]).
 -export([test_can_control_max_size_of_terms_in_vars_for_process_not_in_bp/1]).
 -export([test_doesnt_show_stackframes_for_running_processes/1]).
@@ -126,6 +127,7 @@ groups() ->
         {test_stackframes, [], [
             test_shows_stackframes_of_process_in_breakpoint,
             test_shows_stackframes_of_paused_processes_not_in_breakpoint,
+            test_shows_stackframes_of_stepping_process,
             test_can_control_max_size_of_terms_in_vars_for_process_in_bp,
             test_can_control_max_size_of_terms_in_vars_for_process_not_in_bp,
             test_doesnt_show_stackframes_for_running_processes,
@@ -2092,6 +2094,64 @@ test_shows_stackframes_of_paused_processes_not_in_breakpoint(Config) ->
         }},
         edb:stack_frame_vars(PingPid, 2)
     ),
+    ok.
+
+test_shows_stackframes_of_stepping_process(Config) ->
+    TestModuleSource = proplists:get_value(erl_source, Config),
+
+    % Stop before computing 42
+    ok = edb:add_breakpoint(test_stackframes, 38),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_stackframes, forty_two, []),
+    {ok, stopped} = edb:wait(),
+
+    % Step to the next line
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    % Check that we can see the stack frames
+    {ok, Frames} = edb:stack_frames(Pid),
+    ?assertEqual(
+        [
+            % forty_two(1337)
+            #{id => 2, mfa => {test_stackframes, forty_two, 1}, source => TestModuleSource, line => 39},
+            % forty_two()
+            #{id => 1, mfa => {test_stackframes, forty_two, 0}, source => TestModuleSource, line => 34}
+        ],
+        Frames
+    ),
+
+    % Can't select the step frame
+    ?assertEqual(
+        undefined,
+        edb:stack_frame_vars(Pid, 3)
+    ),
+
+    % Can see variables in the top frame
+    ?assertEqual(
+        {ok, #{
+            vars => #{
+                <<"X">> => {value, 1337},
+                <<"Six">> => {value, 6},
+                <<"FortyTwo">> => {value, 42}
+            },
+            xregs => [
+                {value, 1337}
+            ],
+            yregs => []
+        }},
+        edb:stack_frame_vars(Pid, 2)
+    ),
+
+    % Sanity check that we can select the bottom frame
+    ?assertEqual(
+        {ok, #{
+            yregs => []
+        }},
+        edb:stack_frame_vars(Pid, 1)
+    ),
+
     ok.
 
 test_can_control_max_size_of_terms_in_vars_for_process_in_bp(_Config) ->
