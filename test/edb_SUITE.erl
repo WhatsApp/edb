@@ -55,6 +55,8 @@
 -export([test_step_over_within_and_out_of_external_closure/1]).
 -export([test_step_over_into_local_handler/1]).
 -export([test_step_over_into_caller_handler/1]).
+-export([test_step_over_progresses_from_breakpoint/1]).
+-export([test_breakpoint_consumes_step/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
@@ -110,7 +112,9 @@ groups() ->
             test_step_over_within_and_out_of_closure,
             test_step_over_within_and_out_of_external_closure,
             test_step_over_into_local_handler,
-            test_step_over_into_caller_handler
+            test_step_over_into_caller_handler,
+            test_step_over_progresses_from_breakpoint,
+            test_breakpoint_consumes_step
         ]},
         {test_step_out, [], [
             test_step_out_of_external_closure,
@@ -1598,6 +1602,130 @@ test_step_over_into_caller_handler(_Config) ->
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_step_over_progresses_from_breakpoint(_Config) ->
+    % We test that a succession of steps isn't impedimented by the presence of breakpoints
+
+    % Add a breakpoint to start stepping from
+    ok = edb:add_breakpoint(test_step_over, 20),
+
+    % Add a breakpoint that will be "stepped on and from"
+    ok = edb:add_breakpoint(test_step_over, 21),
+
+    % Spawn a process that will hit the first breakpoint
+    Pid = erlang:spawn(test_step_over, go, [self()]),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we hit the breakpoint
+    ?assertEqual(
+        #{Pid => #{line => 20, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Now step onto the next breakpoint
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(20, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % "Breakpoint hit wins": if we step on a breakpoint then we consider having hit it
+    ?assertEqual(
+        #{Pid => #{line => 21, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Step over from this breakpoint will keep progressing
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(21, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check that we end up on the line after
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, go, 1}, line := 22}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Check the events delivered
+    % In particular we should register a bp hit event after the step onto line 21
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_breakpoint_consumes_step(_Config) ->
+    % Add a breakpoint to start stepping from
+    ok = edb:add_breakpoint(test_step_over, 20),
+
+    % Add a breakpoint that will be "stepped on"
+    ok = edb:add_breakpoint(test_step_over, 21),
+
+    % Spawn a process that will hit the first breakpoint
+    Pid = erlang:spawn(test_step_over, go, [self()]),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we hit the breakpoint
+    ?assertEqual(
+        #{Pid => #{line => 20, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Now step onto the next breakpoint
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(20, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % "Breakpoint hit wins": if we step on a breakpoint then we consider having hit it
+    ?assertEqual(
+        #{Pid => #{line => 21, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Step has been consumed: if we continue from this breakpoint we don't stop again
+    {ok, resumed} = edb:continue(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(21, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(22, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check the events delivered
+    % In particular we should register a bp hit event after the step onto line 21
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
+            {resumed, {continue, all}}
         ],
         edb_test_support:collected_events()
     ),
