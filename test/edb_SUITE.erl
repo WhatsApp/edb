@@ -53,9 +53,12 @@
 -export([test_step_over_to_caller_on_return/1]).
 -export([test_step_over_within_and_out_of_closure/1]).
 -export([test_step_over_within_and_out_of_external_closure/1]).
+-export([test_step_over_into_local_handler/1]).
+-export([test_step_over_into_caller_handler/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
+-export([test_step_out_into_caller_handler/1]).
 
 %% Test cases for the test_code_inspection group
 -export([test_fetch_fun_block_surrounding/1]).
@@ -105,10 +108,13 @@ groups() ->
             test_step_over_fails_on_running_process,
             test_step_over_to_caller_on_return,
             test_step_over_within_and_out_of_closure,
-            test_step_over_within_and_out_of_external_closure
+            test_step_over_within_and_out_of_external_closure,
+            test_step_over_into_local_handler,
+            test_step_over_into_caller_handler
         ]},
         {test_step_out, [], [
-            test_step_out_of_external_closure
+            test_step_out_of_external_closure,
+            test_step_out_into_caller_handler
         ]},
         {test_code_inspection, [], [
             test_fetch_fun_block_surrounding
@@ -1484,6 +1490,120 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     ok.
 
+test_step_over_into_local_handler(_Config) ->
+    % Add a breakpoint to step from, before calling the chain of exception raises
+    ok = edb:add_breakpoint(test_step_over, 79),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_step_over, catch_exception, [self()]),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we end on the expected program point
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, catch_exception, 1}, line := 79}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Step over, that will raise the exception
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(94, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check that we end up on the handler
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, catch_exception, 1}, line := 82}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Sanity check that we can continue stepping over
+    ok = edb:step_over(Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(82, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, catch_exception, 1}, {line, 79}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_step_over_into_caller_handler(_Config) ->
+    % Add a breakpoint to step from, just before raising an exception
+    ok = edb:add_breakpoint(test_step_over, 95),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_step_over, catch_exception, [self()]),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(94, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we end on the expected program point
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, raise_exception, 1}, line := 95},
+            #{mfa := {test_step_over, indirect_raise_exception, 1}, line := 89},
+            #{mfa := {test_step_over, catch_exception, 1}, line := 79}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Step over, that will raise the exception
+    ok = edb:step_over(Pid),
+    {ok, stopped} = edb:wait(),
+
+    % Check that we end up on the handler
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, catch_exception, 1}, line := 82}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Sanity check that we can continue stepping
+    ok = edb:step_over(Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(82, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_over, raise_exception, 1}, {line, 95}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
 %% ------------------------------------------------------------------
 %% Test cases for test_step_out fixture
 %% ------------------------------------------------------------------
@@ -1548,6 +1668,63 @@ test_step_out_of_external_closure(_Config) ->
         [
             {stopped, {paused, all}},
             {stopped, {breakpoint, Pid, {test_step_out, '-make_closure/1-fun-0-', 1}, {line, 71}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_step_out_into_caller_handler(_Config) ->
+    % Add a breakpoint to step from, just before raising an exception
+    ok = edb:add_breakpoint(test_step_out, 95),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_step_out, catch_exception, [self()]),
+    {ok, stopped} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(94, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we end on the expected program point
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_out, raise_exception, 1}, line := 95},
+            #{mfa := {test_step_out, indirect_raise_exception, 1}, line := 89},
+            #{mfa := {test_step_out, catch_exception, 1}, line := 79}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Step out, that will raise the exception
+    ok = edb:step_out(Pid),
+    {ok, stopped} = edb:wait(),
+
+    % Check that we end up on the handler
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_out, catch_exception, 1}, line := 82}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Sanity check that we can continue stepping
+    ok = edb:step_over(Pid),
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(82, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid, {test_step_out, raise_exception, 1}, {line, 95}}},
             {resumed, {continue, all}},
             {stopped, {paused, all}},
             {stopped, {step, Pid}},
