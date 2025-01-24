@@ -1165,16 +1165,16 @@ test_step_over_goes_to_next_line(_Config) ->
 
         % Check that we stopped on the next line
         ?assertMatch(
-            #{Pid := #{status := breakpoint, current_bp := {line, NextLine}}},
-            edb:processes()
+            {ok, [#{mfa := {test_step_over, go, 1}, line := NextLine}]},
+            edb:stack_frames(Pid)
         ),
 
         ?ASSERT_SYNC_RECEIVED_FROM_LINE(NextLine - 1, Pid),
         ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
-        % TODO T208352500 Stepping should not count as hitting a breakpoint
+        % Stepping does not count as hitting a breakpoint
         ?assertEqual(
-            #{Pid => #{line => NextLine, module => test_step_over}},
+            #{},
             edb:get_breakpoints_hit()
         )
     end,
@@ -1232,14 +1232,8 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
     % Check that we reached the next line of just_sync/2
     ?assertMatch(
-        #{Pid := #{status := breakpoint, current_bp := {line, 45}}},
-        edb:processes()
-    ),
-
-    % TODO T208352500 Stepping should not count as hitting a breakpoint
-    ?assertEqual(
-        #{Pid => #{line => 45, module => test_step_over}},
-        edb:get_breakpoints_hit()
+        {ok, [#{mfa := {test_step_over, just_sync, 2}, line := 45}]},
+        edb:stack_frames(Pid)
     ),
 
     % Check the events delivered

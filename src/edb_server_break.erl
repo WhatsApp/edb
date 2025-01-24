@@ -116,9 +116,14 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
     case should_be_suspended(Module, Line, Pid, Breakpoints0) of
         {true, Reason} ->
             %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
-            %% TODO T208352500 steps shouldn't register explicit BP hits
             Breakpoints1 = register_resume_action(Pid, Resume, Breakpoints0),
-            Breakpoints2 = register_explicit_hit(Module, Line, Pid, Breakpoints1),
+            Breakpoints2 =
+                case Reason of
+                    step ->
+                        Breakpoints1;
+                    explicit ->
+                        register_explicit_hit(Module, Line, Pid, Breakpoints1)
+                end,
             {ok, Breakpoints3} = clear_steps(Pid, Breakpoints2),
             {suspend, Reason, Breakpoints3};
         false ->
