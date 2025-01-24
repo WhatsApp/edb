@@ -57,6 +57,7 @@
 -export([test_step_over_into_caller_handler/1]).
 -export([test_step_over_progresses_from_breakpoint/1]).
 -export([test_breakpoint_consumes_step/1]).
+-export([test_multiprocess_parallel_steps/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
@@ -115,7 +116,8 @@ groups() ->
             test_step_over_into_local_handler,
             test_step_over_into_caller_handler,
             test_step_over_progresses_from_breakpoint,
-            test_breakpoint_consumes_step
+            test_breakpoint_consumes_step,
+            test_multiprocess_parallel_steps
         ]},
         {test_step_out, [], [
             test_step_out_of_external_closure,
@@ -1728,6 +1730,99 @@ test_breakpoint_consumes_step(_Config) ->
             {stopped, {paused, all}},
             {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
             {resumed, {continue, all}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_multiprocess_parallel_steps(_Config) ->
+    % Helper function that we'll use to check that processes are currently executing a step
+    % Each step being awaiting on receiving a message, the Pid status can be either running or waiting
+    AssertInStep = fun(Pid) ->
+        {status, Status} = process_info(Pid, status),
+        ?assert(Status =:= waiting orelse Status =:= running)
+    end,
+
+    % Add a breakpoint to start stepping from
+    ok = edb:add_breakpoint(test_step_over, 100),
+
+    % Spawn one process that will hit the breakpoint
+    Pid1 = erlang:spawn(test_step_over, awaiting_steps, []),
+    {ok, stopped} = edb:wait(),
+
+    % Sanity check that we hit the breakpoint
+    ?assertEqual(
+        #{Pid1 => #{line => 100, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Engage the process into an awaiting step
+    ok = edb:step_over(Pid1),
+
+    % Spawn another process that will hit the breakpoint while the first is awaiting a step
+    Pid2 = erlang:spawn(test_step_over, awaiting_steps, []),
+    {ok, stopped} = edb:wait(),
+
+    % Pid2 should have hit its breakpoint
+    ?assertEqual(
+        #{Pid2 => #{line => 100, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Pid1 in await, Pid2 on a step
+    % Step Pid2 to resume the execution
+    ok = edb:step_over(Pid2),
+
+    % Now both processes should be awaiting
+    AssertInStep(Pid1),
+    AssertInStep(Pid2),
+
+    % Unblock Pid1 and wait for it to complete its step
+    Pid1 ! continue,
+    edb:wait(),
+
+    % Check that Pid1 has completed its step
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, awaiting_steps, 0}, line := 101}
+        ]},
+        edb:stack_frames(Pid1)
+    ),
+
+    % Engage Pid1 on a step again to resume the execution
+    ok = edb:step_over(Pid1),
+
+    % Both processes await
+    AssertInStep(Pid1),
+    AssertInStep(Pid2),
+
+    % Unblock Pid2 and wait for it to complete its (still first) step
+    Pid2 ! continue,
+    edb:wait(),
+
+    % Pid2 should now have finally completed its step
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over, awaiting_steps, 0}, line := 101}
+        ]},
+        edb:stack_frames(Pid2)
+    ),
+
+    % Check the delivered events
+    ?assertEqual(
+        [
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid1, {test_step_over, awaiting_steps, 0}, {line, 100}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {breakpoint, Pid2, {test_step_over, awaiting_steps, 0}, {line, 100}}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid1}},
+            {resumed, {continue, all}},
+            {stopped, {paused, all}},
+            {stopped, {step, Pid2}}
         ],
         edb_test_support:collected_events()
     ),
