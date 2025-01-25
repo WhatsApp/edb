@@ -161,7 +161,6 @@ has_breakpoint_frame([_ | MoreFrames]) -> has_breakpoint_frame(MoreFrames).
 when
     RawFrame :: erl_debugger:stack_frame(),
     ExtraInfo :: undefined | top_frame | RawFrame.
-% elp:ignore W0010 - T199490163 False positive
 lookup_raw_frame(FrameId, [TopFrame = {FrameId, _, _} | MoreFrames]) ->
     avoiding_frame_leaks({TopFrame, top_frame}, MoreFrames);
 lookup_raw_frame(FrameId, RawFrames) ->
@@ -173,10 +172,8 @@ when
     OptBpFrame :: undefined | top_frame | RawFrame,
     RawFrame :: erl_debugger:stack_frame(),
     ExtraInfo :: undefined | top_frame | RawFrame.
-% elp:ignore W0010 - T199490163 False positive
 lookup_raw_frame_1(FrameId, undefined, Frames = [FoundFrame = {FrameId, _, _} | _]) ->
     avoiding_frame_leaks({FoundFrame, undefined}, Frames);
-% elp:ignore W0010 - T199490163 False positive
 lookup_raw_frame_1(FrameId, BpFrame, [FoundFrame = {FrameId, _, _} | _]) ->
     {FoundFrame, BpFrame};
 lookup_raw_frame_1(FrameId, undefined, [BpFrame = {_, '<breakpoint>', _} | Rest]) ->
