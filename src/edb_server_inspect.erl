@@ -56,7 +56,7 @@ format_stack_frames(RawFrames) ->
 -spec format_stack_frames_1([RawFrame], Acc) -> Acc when
     RawFrame :: erl_debugger:stack_frame(),
     Acc :: [edb:stack_frame()].
-format_stack_frames_1([{_FrameNo, Terminator, []}], Acc) when is_atom(Terminator) ->
+format_stack_frames_1([{_FrameNo, Terminator, #{slots := []}}], Acc) when is_atom(Terminator) ->
     % Stuff like '<terminate process normally>' are not useful to the user
     lists:reverse(Acc);
 format_stack_frames_1([{_FrameNo, '<breakpoint>', _} | Rest], _Acc) ->
@@ -71,7 +71,7 @@ format_stack_frames_1([{FrameNo, 'unknown function', _} | RawFrames], Acc) ->
         line => undefined
     },
     format_stack_frames_1(RawFrames, [FormattedFrame | Acc]);
-format_stack_frames_1([{FrameNo, {MFA = {M, _, _}, Line}, _Yregs} | RawFrames], Acc) ->
+format_stack_frames_1([{FrameNo, #{function := MFA = {M, _, _}, line := Line}, _FrameInfo} | RawFrames], Acc) ->
     FormattedFrame = #{
         id => FrameNo,
         mfa => MFA,
@@ -94,7 +94,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
     case lookup_raw_frame(FrameId, RawFrames) of
         undefined ->
             undefined;
-        {{FrameId, FrameFun, FrameSlots}, XRegsLocation} ->
+        {{FrameId, FrameFun, #{slots := FrameSlots}}, XRegsLocation} ->
             YRegs = #{yregs => stack_frame_y_regs(Pid, {FrameId, FrameSlots}, MaxTermSize)},
 
             XRegs =
@@ -116,7 +116,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
                                     ]
                                 }
                         end;
-                    {BpFrameId, _, BpFrameSlots} ->
+                    {BpFrameId, _, #{slots := BpFrameSlots}} ->
                         % We are on the top-frame, but for a process that hit a breakpoint. We
                         % are given the "breakpoint frame" were all live X regs were saved.
                         % So we can retrieve them from this frame (as Y regs).
@@ -126,7 +126,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
             ResolveLocalVars = maps:get(resolve_local_vars, Opts),
             LocalVars =
                 case FrameFun of
-                    {{M, _F, _A}, Line} when ResolveLocalVars, is_atom(M), is_integer(Line) ->
+                    #{function := {M, _F, _A}, line := Line} when ResolveLocalVars, is_atom(M), is_integer(Line) ->
                         case get_debug_info(M, Line) of
                             {error, _} ->
                                 #{};
