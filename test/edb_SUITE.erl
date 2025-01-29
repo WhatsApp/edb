@@ -355,7 +355,7 @@ test_wait_waits_for_breakpoint_hit(_Config) ->
 
 test_continue_continues(_Config) ->
     % Initially, can continue() even while not stopped, but nothing happens
-    {ok, not_stopped} = edb:continue(),
+    {ok, not_paused} = edb:continue(),
 
     % We set a breakpoint on two lines of the test_breakpoints module.
     ok = edb:add_breakpoint(test_breakpoints, 7),

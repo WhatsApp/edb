@@ -408,13 +408,13 @@ get_breakpoints_hit_impl(State0) ->
     {reply, BreakpointsHit, State0}.
 
 -spec continue_impl(State0 :: state()) -> {reply, Result, State1 :: state()} when
-    Result :: {ok, resumed | not_stopped}.
+    Result :: {ok, resumed | not_paused}.
 continue_impl(State0) ->
     {ok, ActuallyResumed, State1} = resume_processes(all, continue, State0),
     Result =
         case maps:size(ActuallyResumed) > 0 of
             true -> resumed;
-            false -> not_stopped
+            false -> not_paused
         end,
     {reply, {ok, Result}, State1}.
 

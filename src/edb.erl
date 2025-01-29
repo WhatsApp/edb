@@ -275,8 +275,8 @@ get_breakpoints() ->
 
 %% @doc Continues the execution on the remote node and returns right away.
 %%
-%% Returns `not_stopped' if no process was paused, otherwise `resumed'.
--spec continue() -> {ok, resumed | not_stopped}.
+%% Returns `not_paused' if no process was paused, otherwise `resumed'.
+-spec continue() -> {ok, resumed | not_paused}.
 continue() ->
     call_server(continue).
 
