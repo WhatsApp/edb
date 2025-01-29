@@ -328,7 +328,7 @@ test_wait_waits_for_breakpoint_hit(_Config) ->
     Pid = erlang:spawn(fun() -> test_breakpoints:go(Me) end),
 
     % We call edb:wait(), blocking until the bp is hit
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % We ensure the process is suspended, in the line we expect,
     % and that we only saw the side-effects of the lines prior to
@@ -353,7 +353,7 @@ test_wait_waits_for_breakpoint_hit(_Config) ->
     ok.
 
 test_continue_continues(_Config) ->
-    % Initially, can continue() even while not stopped, but nothing happens
+    % Initially, can continue() even while not paused, but nothing happens
     {ok, not_paused} = edb:continue(),
 
     % We set a breakpoint on two lines of the test_breakpoints module.
@@ -366,7 +366,7 @@ test_continue_continues(_Config) ->
     Pid = erlang:spawn(fun() -> test_breakpoints:go(Me) end),
 
     % We wait for the first breakpoint to be hit
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Sanity check: process hit the first bp, and we saw the right side-effects
     ?assertEqual(
@@ -380,7 +380,7 @@ test_continue_continues(_Config) ->
     {ok, resumed} = edb:continue(),
 
     % We now sit and wait again
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % We ensure the process is suspended, in the second breakpoint,
     % and we saw the remaining side-effects
@@ -390,7 +390,7 @@ test_continue_continues(_Config) ->
         edb:get_breakpoints_hit()
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(7, Pid),
-    % stopped before sync on line 8
+    % paused before sync on line 8
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check the events delivered
@@ -422,7 +422,7 @@ test_hitting_a_breakpoint_suspends_other_processes(_Config) ->
     Pid = erlang:spawn(fun() -> test_breakpoints:do_stuff_and_wait(Me) end),
 
     % We call edb:wait(), blocking until the bp is hit
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % All newly created processes, get suspended
     ?assertEqual({status, suspended}, erlang:process_info(Pid, status)),
@@ -499,7 +499,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     DebugeePid = erlang:spawn(fun() -> test_breakpoints:do_stuff_and_wait(Me) end),
 
     % We call edb:wait(), blocking until the bp is hit
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Processes are now reported as paused / on a breakpoint
     ?assertMatch(
@@ -793,7 +793,7 @@ test_excluded_processes_dont_hit_breakpoints(_Config) ->
     ?assertMatch(#{ExcludedPid := _}, edb:excluded_processes()),
 
     % Wait for the BP
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % The breakpoint was not hit for the excluded pid and hit on the normal one
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(14, ExcludedPid),
@@ -816,7 +816,7 @@ test_excluding_a_process_makes_it_resume(_Config) ->
     Pid1 = erlang:spawn(test_breakpoints, go, [self()]),
     Pid2 = erlang:spawn(test_breakpoints, go, [self()]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     edb:exclude_process(Pid1),
@@ -938,7 +938,7 @@ test_including_a_process_can_suspend_it_immediately(_Config) ->
 
     % Make a process hit the breakpoint
     Pid3 = erlang:spawn(test_breakpoints, go, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Sanity-check: excluded processes not currently suspended
     ?assertEqual({status, waiting}, erlang:process_info(Pid1, status)),
@@ -972,7 +972,7 @@ test_clear_breakpoint_clears_breakpoints(_Config) ->
     Pid = erlang:spawn(test_breakpoints, go, [self()]),
 
     % We wait for the first breakpoint to be hit
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % We expect to be in line 8, since the breakpoint on line 7
     % was removed
@@ -982,7 +982,7 @@ test_clear_breakpoint_clears_breakpoints(_Config) ->
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(6, Pid),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(7, Pid),
-    % stopped before sync on line 8
+    % paused before sync on line 8
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
     % Check the events delivered
@@ -1037,7 +1037,7 @@ test_clear_breakpoints_clears_all_breakpoints(_Config) ->
 
     % We spawn a process that will go through those lines.
     Pid = erlang:spawn(test_breakpoints, go, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % We check that we only hit the later breakpoint
     ?assertEqual(
@@ -1132,7 +1132,7 @@ test_step_over_goes_to_next_line(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, go, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1147,7 +1147,7 @@ test_step_over_goes_to_next_line(_Config) ->
     CheckStepOnLine = fun(NextLine) ->
         % Step over to reach next line
         ok = edb:step_over(Pid),
-        {ok, stopped} = edb:wait(),
+        {ok, paused} = edb:wait(),
 
         % Check that we stopped on the next line
         ?assertMatch(
@@ -1193,7 +1193,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, just_sync, [self(), unused_argument]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % No sync received yet
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1206,7 +1206,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
     % Step over to reach next line
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % We went through the call to just_sync/1
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(39, Pid),
@@ -1262,7 +1262,7 @@ test_step_over_to_caller_on_return(_Config) ->
 
     % Spawn a process that will hit this breakpoint through the caller just_sync/2
     Pid = erlang:spawn(test_step_over, just_sync, [self(), unused_argument]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(39, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1275,7 +1275,7 @@ test_step_over_to_caller_on_return(_Config) ->
 
     % Step over to reach next line. This should take us to the caller just_sync/2
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Check that we stopped on the next line of just_sync/2
     ?assertMatch(
@@ -1303,7 +1303,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, call_closure, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(51, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1325,7 +1325,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     % Step within the closure
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1340,7 +1340,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     % Step over to reach next executable line -- after closure call
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1351,7 +1351,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     % Sanity check that we can still step over in the caller
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1385,7 +1385,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, call_external_closure, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(62, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1408,7 +1408,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     % Step within the closure
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1423,7 +1423,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     % Step over to reach next executable line -- after closure call, back in closure caller
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1434,7 +1434,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     % Sanity check that we can still step over in the caller
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1468,7 +1468,7 @@ test_step_over_into_local_handler(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, catch_exception, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1483,7 +1483,7 @@ test_step_over_into_local_handler(_Config) ->
 
     % Step over, that will raise the exception
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(94, Pid),
@@ -1522,7 +1522,7 @@ test_step_over_into_caller_handler(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_over, catch_exception, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
@@ -1541,7 +1541,7 @@ test_step_over_into_caller_handler(_Config) ->
 
     % Step over, that will raise the exception
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Check that we end up on the handler
     ?assertMatch(
@@ -1581,7 +1581,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     % Spawn a process that will hit the first breakpoint
     Pid = erlang:spawn(test_step_over, go, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1594,7 +1594,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     % Now step onto the next breakpoint
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(20, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1607,7 +1607,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     % Step over from this breakpoint will keep progressing
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(21, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1644,7 +1644,7 @@ test_breakpoint_consumes_step(_Config) ->
 
     % Spawn a process that will hit the first breakpoint
     Pid = erlang:spawn(test_step_over, go, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1657,7 +1657,7 @@ test_breakpoint_consumes_step(_Config) ->
 
     % Now step onto the next breakpoint
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(20, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1702,7 +1702,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Spawn one process that will hit the breakpoint
     Pid1 = erlang:spawn(test_step_over, awaiting_steps, []),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
@@ -1715,7 +1715,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Spawn another process that will hit the breakpoint while the first is awaiting a step
     Pid2 = erlang:spawn(test_step_over, awaiting_steps, []),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Pid2 should have hit its breakpoint
     ?assertEqual(
@@ -1788,7 +1788,7 @@ test_step_out_of_external_closure(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_out, call_external_closure, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(62, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
@@ -1811,7 +1811,7 @@ test_step_out_of_external_closure(_Config) ->
 
     % Step out the closure
     ok = edb:step_out(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1825,7 +1825,7 @@ test_step_out_of_external_closure(_Config) ->
 
     % Sanity check that we can still step over in the caller
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertMatch(
         {ok, [
@@ -1857,7 +1857,7 @@ test_step_out_into_caller_handler(_Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_step_out, catch_exception, [self()]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(77, Pid),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(88, Pid),
@@ -1876,7 +1876,7 @@ test_step_out_into_caller_handler(_Config) ->
 
     % Step out, that will raise the exception
     ok = edb:step_out(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Check that we end up on the handler
     ?assertMatch(
@@ -1955,7 +1955,7 @@ test_shows_stackframes_of_process_in_breakpoint(Config) ->
 
     Pid = erlang:spawn(test_stackframes, choose, [12, 8]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     {ok, Frames} = edb:stack_frames(Pid),
     ?assertEqual(
@@ -2040,7 +2040,7 @@ test_shows_stackframes_of_paused_processes_not_in_breakpoint(Config) ->
     PingPid = erlang:spawn_link(test_stackframes, ping, [PongPid]),
     HangPid = erlang:spawn_link(test_stackframes, hang, [bim, 42, "foo"]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % HangPid didn't hit a breakpoint, we can check its frames
     % We expect to see vars in X regs as it was suspended
@@ -2104,7 +2104,7 @@ test_shows_stackframes_of_paused_processes_not_in_breakpoint(Config) ->
     ),
 
     {ok, resumed} = edb:continue(),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
     ?assertEqual(
         {ok, #{
             yregs => [
@@ -2119,7 +2119,7 @@ test_shows_stackframes_of_paused_processes_not_in_breakpoint(Config) ->
     ),
 
     {ok, resumed} = edb:continue(),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
     ?assertEqual(
         {ok, #{
             yregs => [
@@ -2142,11 +2142,11 @@ test_shows_stackframes_of_stepping_process(Config) ->
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(test_stackframes, forty_two, []),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Step to the next line
     ok = edb:step_over(Pid),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % Check that we can see the stack frames
     {ok, Frames} = edb:stack_frames(Pid),
@@ -2204,7 +2204,7 @@ test_can_control_max_size_of_terms_in_vars_for_process_in_bp(_Config) ->
         LongList
     ]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % With size 0, we don't get any values
     ?assertEqual(
@@ -2288,7 +2288,7 @@ test_can_control_max_size_of_terms_in_vars_for_process_not_in_bp(_Config) ->
     PidNotInBp = erlang:spawn_link(test_stackframes, hang, ["blah", <<"my binary">>, LongList]),
     _PidInBp = erlang:spawn_link(test_stackframes, choose, [6, 3]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     % With size 0, we don't get any values
     ?assertEqual(
@@ -2368,7 +2368,7 @@ test_doesnt_show_stackframes_for_running_processes(_Config) ->
     % Try again when other processes are paused
     edb:add_breakpoint(test_stackframes, 5),
     erlang:spawn(test_stackframes, choose, [8, 3]),
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     ?assertEqual(
         not_paused,
@@ -2387,7 +2387,7 @@ test_shows_a_path_that_exists_for_otp_sources(_Config) ->
     ok = edb:add_breakpoint(test_stackframes, 11),
     _PingPid = erlang:spawn_link(test_stackframes, ping, [InOtpCodePid]),
 
-    {ok, stopped} = edb:wait(),
+    {ok, paused} = edb:wait(),
 
     {ok, Frames} = edb:stack_frames(InOtpCodePid),
     case Frames of

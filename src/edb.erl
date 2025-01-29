@@ -287,8 +287,8 @@ step_over(Pid) ->
 step_out(Pid) ->
     call_server({step_out, Pid}).
 
-%% @doc Waits until any process gets stopped.
--spec wait() -> {ok, stopped}.
+%% @doc Waits until the node gets paused.
+-spec wait() -> {ok, paused}.
 wait() ->
     {ok, Subscription} = subscribe(),
     case is_paused() of
@@ -302,9 +302,9 @@ wait() ->
             end
     end,
     release_subscription(Subscription),
-    {ok, stopped}.
+    {ok, paused}.
 
-%% @doc Get the list of processes currently stopped at a breakpoint on the remote node.
+%% @doc Get the list of processes currently paused at a breakpoint on the remote node.
 -spec get_breakpoints_hit() -> #{pid() => breakpoint_info()}.
 get_breakpoints_hit() ->
     call_server(get_breakpoints_hit).
@@ -319,7 +319,7 @@ process_info(Pid) ->
 processes() ->
     call_server(processes).
 
-%% @doc List the pids that will not be stopped by the debugger on the remote node.
+%% @doc List the pids that will not be paused by the debugger on the remote node.
 -spec excluded_processes() -> #{pid() => []}.
 excluded_processes() ->
     call_server(excluded_processes).
