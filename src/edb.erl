@@ -132,12 +132,12 @@
 -type catch_handler() :: {'catch', {mfa(), {line, pos_integer() | undefined}}}.
 
 -export_type([event_envelope/1, event_subscription/0]).
--export_type([event/0, resumed_event/0, stopped_event/0]).
+-export_type([event/0, resumed_event/0, paused_event/0]).
 -type event_envelope(Event) :: {edb_event, event_subscription(), Event}.
 -type event_subscription() :: edb_events:subscription().
 -type event() ::
     {resumed, resumed_event()}
-    | {stopped, stopped_event()}
+    | {paused, paused_event()}
     | {sync, reference()}
     | {terminated, Reason :: term()}
     | unsubscribed
@@ -146,7 +146,7 @@
     {continue, all}
     | {excluded, #{pid() => []}}
     | {termination, all}.
--type stopped_event() ::
+-type paused_event() ::
     {breakpoint, pid(), mfa(), {line, pos_integer()}}
     | {step, pid()}.
 
@@ -298,7 +298,7 @@ wait() ->
         false ->
             % Wait for a process to be paused
             receive
-                {edb_event, Subscription, {stopped, _}} -> ok
+                {edb_event, Subscription, {paused, _}} -> ok
             end
     end,
     release_subscription(Subscription),

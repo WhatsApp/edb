@@ -270,8 +270,8 @@ dispatch_response(#{command := Command, body := Body}, DAPState) ->
 
 -spec dispatch_event(edb:event(), edb_dap_state:t()) ->
     edb_dap_events:reaction().
-dispatch_event({stopped, StoppedEvent}, DAPState) ->
-    edb_dap_events:stopped(DAPState, StoppedEvent);
+dispatch_event({paused, PausedEvent}, DAPState) ->
+    edb_dap_events:stopped(DAPState, PausedEvent);
 dispatch_event({nodedown, Node, Reason}, DAPState) ->
     edb_dap_events:exited(DAPState, Node, Reason);
 dispatch_event(Event, _DAPState) ->

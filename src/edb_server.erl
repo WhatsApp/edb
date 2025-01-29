@@ -277,7 +277,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                     {suspend, Reason, BP1} ->
                         State1 = State0#state{breakpoints = BP1},
                         {ok, State2} = suspend_all_processes(Universe, UnsuspendablePids, State1),
-                        StoppedEvent =
+                        PausedEvent =
                             case Reason of
                                 explicit ->
                                     {breakpoint, Pid, MFA, {line, Line}};
@@ -285,7 +285,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                                     {step, Pid}
                             end,
                         ok = edb_events:broadcast(
-                            {stopped, StoppedEvent},
+                            {paused, PausedEvent},
                             State2#state.event_subscribers
                         ),
                         State2

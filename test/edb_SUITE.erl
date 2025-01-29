@@ -346,7 +346,7 @@ test_wait_waits_for_breakpoint_hit(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
+            {paused, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -396,11 +396,11 @@ test_continue_continues(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 7}}},
+            {paused, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 7}}},
 
             {resumed, {continue, all}},
 
-            {stopped, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
+            {paused, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -443,7 +443,7 @@ test_hitting_a_breakpoint_suspends_other_processes(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
+            {paused, {breakpoint, Pid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
 
             {resumed, {continue, all}}
         ],
@@ -584,7 +584,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, DebugeePid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
+            {paused, {breakpoint, DebugeePid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
             {resumed, {continue, all}}
         ],
         edb_test_support:collected_events()
@@ -802,7 +802,7 @@ test_excluded_processes_dont_hit_breakpoints(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, NormalPid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}}
+            {paused, {breakpoint, NormalPid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -830,7 +830,7 @@ test_excluding_a_process_makes_it_resume(_Config) ->
     % Check the events delivered (multiple possible cases due to non-determinism)
     case edb_test_support:collected_events() of
         [
-            {stopped, {breakpoint, PidBp, {test_breakpoints, go, 1}, {line, 6}}},
+            {paused, {breakpoint, PidBp, {test_breakpoints, go, 1}, {line, 6}}},
 
             {resumed, {excluded, ExcludedMap1}},
             {resumed, {excluded, ExclidedMap2}}
@@ -841,8 +841,8 @@ test_excluding_a_process_makes_it_resume(_Config) ->
         ->
             ok;
         [
-            {stopped, {breakpoint, PidBp1, {test_breakpoints, go, 1}, {line, 6}}},
-            {stopped, {breakpoint, PidBp2, {test_breakpoints, go, 1}, {line, 6}}},
+            {paused, {breakpoint, PidBp1, {test_breakpoints, go, 1}, {line, 6}}},
+            {paused, {breakpoint, PidBp2, {test_breakpoints, go, 1}, {line, 6}}},
 
             {resumed, {excluded, ExcludedMap1}},
             {resumed, {excluded, ExclidedMap2}}
@@ -854,8 +854,8 @@ test_excluding_a_process_makes_it_resume(_Config) ->
             ok;
         Actual ->
             OneExpectedCase = [
-                {stopped, {breakpoint, Pid1, {test_breakpoints, go, 1}, {line, 6}}},
-                {stopped, {breakpoint, Pid2, {test_breakpoints, go, 1}, {line, 6}}},
+                {paused, {breakpoint, Pid1, {test_breakpoints, go, 1}, {line, 6}}},
+                {paused, {breakpoint, Pid2, {test_breakpoints, go, 1}, {line, 6}}},
 
                 {resumed, {excluded, #{Pid1 => []}}},
                 {resumed, {excluded, #{Pid2 => []}}}
@@ -954,7 +954,7 @@ test_including_a_process_can_suspend_it_immediately(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid3, {test_breakpoints, go, 1}, {line, 6}}}
+            {paused, {breakpoint, Pid3, {test_breakpoints, go, 1}, {line, 6}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -988,7 +988,7 @@ test_clear_breakpoint_clears_breakpoints(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
+            {paused, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 8}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1054,7 +1054,7 @@ test_clear_breakpoints_clears_all_breakpoints(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 10}}}
+            {paused, {breakpoint, Pid, {test_breakpoints, go, 1}, {line, 10}}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1174,13 +1174,13 @@ test_step_over_goes_to_next_line(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
+            {paused, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
 
         edb_test_support:collected_events()
@@ -1221,9 +1221,9 @@ test_step_over_skips_same_name_fun_call(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, just_sync, 2}, {line, 44}}},
+            {paused, {breakpoint, Pid, {test_step_over, just_sync, 2}, {line, 44}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
 
         edb_test_support:collected_events()
@@ -1288,9 +1288,9 @@ test_step_over_to_caller_on_return(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, just_sync, 1}, {line, 40}}},
+            {paused, {breakpoint, Pid, {test_step_over, just_sync, 1}, {line, 40}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1366,13 +1366,13 @@ test_step_over_within_and_out_of_closure(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, '-call_closure/1-fun-0-', 2}, {line, 54}}},
+            {paused, {breakpoint, Pid, {test_step_over, '-call_closure/1-fun-0-', 2}, {line, 54}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1449,13 +1449,13 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, '-make_closure/1-fun-0-', 1}, {line, 71}}},
+            {paused, {breakpoint, Pid, {test_step_over, '-make_closure/1-fun-0-', 1}, {line, 71}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1505,11 +1505,11 @@ test_step_over_into_local_handler(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, catch_exception, 1}, {line, 79}}},
+            {paused, {breakpoint, Pid, {test_step_over, catch_exception, 1}, {line, 79}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1559,11 +1559,11 @@ test_step_over_into_caller_handler(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, raise_exception, 1}, {line, 95}}},
+            {paused, {breakpoint, Pid, {test_step_over, raise_exception, 1}, {line, 95}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1624,11 +1624,11 @@ test_step_over_progresses_from_breakpoint(_Config) ->
     % In particular we should register a bp hit event after the step onto line 21
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
+            {paused, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
             {resumed, {continue, all}},
-            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
+            {paused, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1679,9 +1679,9 @@ test_breakpoint_consumes_step(_Config) ->
     % In particular we should register a bp hit event after the step onto line 21
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
+            {paused, {breakpoint, Pid, {test_step_over, go, 1}, {line, 20}}},
             {resumed, {continue, all}},
-            {stopped, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
+            {paused, {breakpoint, Pid, {test_step_over, go, 1}, {line, 21}}},
             {resumed, {continue, all}}
         ],
         edb_test_support:collected_events()
@@ -1765,13 +1765,13 @@ test_multiprocess_parallel_steps(_Config) ->
     % Check the delivered events
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid1, {test_step_over, awaiting_steps, 0}, {line, 100}}},
+            {paused, {breakpoint, Pid1, {test_step_over, awaiting_steps, 0}, {line, 100}}},
             {resumed, {continue, all}},
-            {stopped, {breakpoint, Pid2, {test_step_over, awaiting_steps, 0}, {line, 100}}},
+            {paused, {breakpoint, Pid2, {test_step_over, awaiting_steps, 0}, {line, 100}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid1}},
+            {paused, {step, Pid1}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid2}}
+            {paused, {step, Pid2}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1840,11 +1840,11 @@ test_step_out_of_external_closure(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_out, '-make_closure/1-fun-0-', 1}, {line, 71}}},
+            {paused, {breakpoint, Pid, {test_step_out, '-make_closure/1-fun-0-', 1}, {line, 71}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
@@ -1894,11 +1894,11 @@ test_step_out_into_caller_handler(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {stopped, {breakpoint, Pid, {test_step_out, raise_exception, 1}, {line, 95}}},
+            {paused, {breakpoint, Pid, {test_step_out, raise_exception, 1}, {line, 95}}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}},
+            {paused, {step, Pid}},
             {resumed, {continue, all}},
-            {stopped, {step, Pid}}
+            {paused, {step, Pid}}
         ],
         edb_test_support:collected_events()
     ),
