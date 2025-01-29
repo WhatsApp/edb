@@ -281,30 +281,32 @@ dispatch_event(Event, _DAPState) ->
 %% @doc Explicit mapping to avoid the risk of atom exhaustion
 -spec method_to_atom(binary()) -> atom().
 % Requests
-method_to_atom(<<"initialize">>) ->
+method_to_atom(~"initialize") ->
     initialize;
-method_to_atom(<<"launch">>) ->
+method_to_atom(~"launch") ->
     launch;
-method_to_atom(<<"disconnect">>) ->
+method_to_atom(~"disconnect") ->
     disconnect;
-method_to_atom(<<"setBreakpoints">>) ->
+method_to_atom(~"setBreakpoints") ->
     set_breakpoints;
-method_to_atom(<<"threads">>) ->
+method_to_atom(~"threads") ->
     threads;
-method_to_atom(<<"stackTrace">>) ->
+method_to_atom(~"stackTrace") ->
     stack_trace;
-method_to_atom(<<"continue">>) ->
+method_to_atom(~"pause") ->
+    pause;
+method_to_atom(~"continue") ->
     continue;
-method_to_atom(<<"next">>) ->
+method_to_atom(~"next") ->
     next;
-method_to_atom(<<"stepOut">>) ->
+method_to_atom(~"stepOut") ->
     step_out;
-method_to_atom(<<"scopes">>) ->
+method_to_atom(~"scopes") ->
     scopes;
-method_to_atom(<<"variables">>) ->
+method_to_atom(~"variables") ->
     variables;
 % Reverse requests
-method_to_atom(<<"runInTerminal">>) ->
+method_to_atom(~"runInTerminal") ->
     run_in_terminal;
 method_to_atom(Method) ->
     ?LOG_WARNING("Method not found: ~p", [Method]),

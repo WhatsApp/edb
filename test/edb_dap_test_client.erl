@@ -36,6 +36,7 @@
     set_breakpoints/2,
     threads/2,
     stack_trace/2,
+    pause/2,
     continue/2,
     next/2,
     step_out/2,
@@ -94,6 +95,11 @@ threads(Client, Args) ->
 -spec stack_trace(client(), edb_dap:stack_trace_request_arguments()) -> ok.
 stack_trace(Client, Args) ->
     Request = #{type => request, command => <<"stackTrace">>, arguments => Args},
+    gen_server:call(Client, Request).
+
+-spec pause(client(), edb_dap:pause_request_arguments()) -> ok.
+pause(Client, Args) ->
+    Request = #{type => request, command => <<"pause">>, arguments => Args},
     gen_server:call(Client, Request).
 
 -spec continue(client(), edb_dap:continue_request_arguments()) -> ok.

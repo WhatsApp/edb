@@ -77,7 +77,14 @@ stopped(_State, {step, Pid}) ->
         threadId => edb_dap_id_mappings:pid_to_thread_id(Pid),
         allThreadsStopped => true
     },
-    #{actions => [{event, <<"stopped">>, StoppedEventBody}]};
+    #{actions => [{event, ~"stopped", StoppedEventBody}]};
+stopped(_State, pause) ->
+    StoppedEventBody = #{
+        reason => ~"pause",
+        preserveFocusHint => true,
+        allThreadsStopped => true
+    },
+    #{actions => [{event, ~"stopped", StoppedEventBody}]};
 stopped(_State, Event) ->
     ?LOG_WARNING("Skipping stopped event: ~p", [Event]),
     #{}.

@@ -28,7 +28,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([initialize/2, launch/2, disconnect/2]).
--export([set_breakpoints/2, continue/2, next/2, step_out/2]).
+-export([set_breakpoints/2, pause/2, continue/2, next/2, step_out/2]).
 -export([threads/2, stack_trace/2, scopes/2, variables/2]).
 
 -type reaction(T) :: #{
@@ -386,6 +386,12 @@ stack_frames(State, ThreadId) ->
             ?LOG_WARNING("Cannot find pid for thread id ~p", [ThreadId]),
             []
     end.
+
+-spec pause(edb_dap_state:t(), edb_dap:pause_request_arguments()) ->
+    reaction(edb_dap:pause_response()).
+pause(_State, _Args) ->
+    ok = edb:pause(),
+    #{response => #{success => true, body => #{}}}.
 
 -spec continue(edb_dap_state:t(), edb_dap:continue_request_arguments()) ->
     reaction(edb_dap:continue_response()).

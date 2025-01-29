@@ -64,6 +64,8 @@
     message/0,
     next_request_arguments/0,
     next_response/0,
+    pause_request_arguments/0,
+    pause_response/0,
     protocol_message_type/0,
     protocol_message/0,
     request/0,
@@ -388,6 +390,18 @@ build_error_response(Id, Format) ->
     % be used to change the appearance of a frame in a 'subtle' way.
     % Values: normal | label | subtle
     presentationHint => binary()
+}.
+
+%%% Pause
+%%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
+-type pause_request_arguments() :: #{
+    % Pause execution for this thread.
+    threadId := thread_id()
+}.
+-type pause_response() :: #{
+    success := boolean(),
+    message => binary(),
+    body := #{}
 }.
 
 %%% Continue
