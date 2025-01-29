@@ -27,8 +27,10 @@
 
 -export([subscribe/0, unsubscribe/1, send_sync_event/1]).
 
+-export([pause/0, continue/0, wait/0]).
+
 -export([add_breakpoint/2, clear_breakpoint/2, clear_breakpoints/1, get_breakpoints/0]).
--export([continue/0, wait/0, get_breakpoints_hit/0]).
+-export([get_breakpoints_hit/0]).
 
 -export([step_over/1, step_out/1]).
 
@@ -148,6 +150,7 @@
     | {termination, all}.
 -type paused_event() ::
     {breakpoint, pid(), mfa(), {line, pos_integer()}}
+    | pause
     | {step, pid()}.
 
 %% -------------------------------------------------------------------
@@ -271,6 +274,11 @@ clear_breakpoint(Module, Line) ->
 -spec get_breakpoints() -> #{module() => [breakpoint_info()]}.
 get_breakpoints() ->
     call_server(get_breakpoints).
+
+%% @doc Pause the execution of the remote node.
+-spec pause() -> ok.
+pause() ->
+    call_server(pause).
 
 %% @doc Continues the execution on the remote node and returns right away.
 %%

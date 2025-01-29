@@ -31,6 +31,10 @@
 -export([test_can_subscribe_and_unsubscribe/1]).
 -export([test_terminated_event_is_sent/1]).
 
+%% Test cases for the test_pause group
+-export([test_pause_pauses/1]).
+-export([test_pause_is_idempotent/1]).
+
 %% Test for the test_breakpoints group
 -export([test_wait_waits_for_breakpoint_hit/1]).
 -export([test_continue_continues/1]).
@@ -91,6 +95,10 @@ groups() ->
             test_can_subscribe_and_unsubscribe,
             test_terminated_event_is_sent
         ]},
+        {test_pause, [], [
+            test_pause_pauses,
+            test_pause_is_idempotent
+        ]},
         {test_breakpoints, [], [
             test_wait_waits_for_breakpoint_hit,
             test_continue_continues,
@@ -126,6 +134,7 @@ groups() ->
         {test_code_inspection, [], [
             test_fetch_fun_block_surrounding
         ]},
+
         {test_stackframes, [], [
             test_shows_stackframes_of_process_in_breakpoint,
             test_shows_stackframes_of_paused_processes_not_in_breakpoint,
@@ -143,6 +152,7 @@ groups() ->
 all() ->
     [
         {group, test_subscriptions},
+        {group, test_pause},
         {group, test_breakpoints},
         {group, test_step_over},
         {group, test_step_out},
@@ -297,6 +307,74 @@ test_terminated_event_is_sent(_Config) ->
     ?ASSERT_RECEIVED_EDB_EVENT(Subscription, {terminated, normal}),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
+    ok.
+
+%% ------------------------------------------------------------------
+%% Test cases for test_pause fixture
+%% ------------------------------------------------------------------
+test_pause_pauses(_Config) ->
+    % Spawn a process that will run in a loop, sending us messages to sync
+    Me = self(),
+    Pid = erlang:spawn(test_pause, go, [Me, 0]),
+
+    {_, Ref, _} = ?expectReceive({Pid, _, 0}),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity-check: process currently waiting
+    ?assertEqual({status, waiting}, erlang:process_info(Pid, status)),
+
+    % Pause the VM
+    ok = edb:pause(),
+
+    % Process is now suspended
+    ?assertEqual({status, suspended}, erlang:process_info(Pid, status)),
+
+    % The process won't continue running even if "unblocked"
+    Pid ! {continue, Ref},
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    {ok, resumed} = edb:continue(),
+
+    % The process continues running
+    {_, _Ref2, _} = ?expectReceive({Pid, _, 1}),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+    ?assertEqual({status, waiting}, erlang:process_info(Pid, status)),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {paused, pause},
+            {resumed, {continue, all}}
+        ],
+        edb_test_support:collected_events()
+    ),
+    ok.
+
+test_pause_is_idempotent(_Config) ->
+    % Spawn a process that will run in a loop, sending us messages to sync
+    Me = self(),
+    Pid = erlang:spawn(test_pause, go, [Me, 0]),
+
+    % Call pause multiple times
+    ok = edb:pause(),
+    ok = edb:pause(),
+    ok = edb:pause(),
+    ok = edb:pause(),
+    ok = edb:pause(),
+
+    % Process is still suspended
+    ?assertEqual({status, suspended}, erlang:process_info(Pid, status)),
+
+    {ok, resumed} = edb:continue(),
+
+    % We only sent the paused event once
+    ?assertEqual(
+        [
+            {paused, pause},
+            {resumed, {continue, all}}
+        ],
+        edb_test_support:collected_events()
+    ),
     ok.
 
 %% ------------------------------------------------------------------

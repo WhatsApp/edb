@@ -125,6 +125,7 @@ find() ->
     | {clear_breakpoints, module()}
     | get_breakpoints
     | get_breakpoints_hit
+    | pause
     | continue
     | is_paused
     | {process_info, pid()}
@@ -207,6 +208,8 @@ handle_call(get_breakpoints, _From, State0) ->
     get_breakpoints_impl(State0);
 handle_call(get_breakpoints_hit, _From, State) ->
     get_breakpoints_hit_impl(State);
+handle_call(pause, _From, State0) ->
+    pause_impl(State0);
 handle_call(continue, _From, State0) ->
     continue_impl(State0);
 handle_call({process_info, Pid}, _From, State0) ->
@@ -407,6 +410,21 @@ get_breakpoints_hit_impl(State0) ->
     BreakpointsHit = edb_server_break:get_explicits_hit(Breakpoints0),
     {reply, BreakpointsHit, State0}.
 
+-spec pause_impl(State0 :: state()) -> {reply, ok, State1 :: state()}.
+pause_impl(State0) ->
+    State2 =
+        case is_paused(State0) of
+            true ->
+                State0;
+            false ->
+                Universe = erlang:processes(),
+                UnsuspendablePids = get_excluded_processes(Universe, State0),
+                {ok, State1} = suspend_all_processes(Universe, UnsuspendablePids, State0),
+                ok = edb_events:broadcast({paused, pause}, State0#state.event_subscribers),
+                State1
+        end,
+    {reply, ok, State2}.
+
 -spec continue_impl(State0 :: state()) -> {reply, Result, State1 :: state()} when
     Result :: {ok, resumed | not_paused}.
 continue_impl(State0) ->
@@ -493,9 +511,7 @@ processes_impl(State0) ->
     State1 :: state(),
     Result :: boolean().
 is_paused_impl(State0) ->
-    #state{suspended_procs = Procs} = State0,
-    HasAPausedProcess = maps:size(Procs) =/= 0,
-    {reply, HasAPausedProcess, State0}.
+    {reply, is_paused(State0), State0}.
 
 -spec excluded_processes_impl(State0) -> {reply, #{pid() => edb:excluded_process_info()}, State1} when
     State0 :: state(),
@@ -747,6 +763,12 @@ get_raw_stack_frames(Pid, State) ->
 %%--------------------------------------------------------------------
 %% State helpers
 %%--------------------------------------------------------------------
+
+-spec is_paused(State) -> boolean() when State :: state().
+is_paused(State) ->
+    #state{suspended_procs = Procs} = State,
+    HasAPausedProcess = maps:size(Procs) =/= 0,
+    HasAPausedProcess.
 
 -spec get_breakpoints(State0) -> #{module() => #{line() => []}} when State0 :: state().
 get_breakpoints(State0) ->
