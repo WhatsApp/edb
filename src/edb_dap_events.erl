@@ -58,10 +58,6 @@ exited(State, Node, Reason) ->
     end.
 
 -spec stopped(edb_dap_state:t(), edb:stopped_event()) -> reaction().
-stopped(_State, {paused, all}) ->
-    #{};
-stopped(_State, {paused, _Processes}) ->
-    #{};
 stopped(_State, {breakpoint, Pid, _MFA, _Line}) ->
     StoppedEventBody = #{
         reason => ~"breakpoint",

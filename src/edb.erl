@@ -148,8 +148,7 @@
     | {termination, all}.
 -type stopped_event() ::
     {breakpoint, pid(), mfa(), {line, pos_integer()}}
-    | {step, pid()}
-    | {paused, all | #{pid() => []}}.
+    | {step, pid()}.
 
 %% -------------------------------------------------------------------
 %% External exports

@@ -822,15 +822,6 @@ suspend_all_processes(Universe, Unsuspendable, State0) ->
         },
     AllSuspended = maps:merge(AlreadySuspended, JustSuspended),
     State1 = State0#state{suspended_procs = AllSuspended},
-    Subs = State1#state.event_subscribers,
-    case maps:size(JustSuspended) > 0 of
-        false ->
-            ok;
-        true when map_size(AlreadySuspended) =:= 0 ->
-            ok = edb_events:broadcast({stopped, {paused, all}}, Subs);
-        true ->
-            ok = edb_events:broadcast({stopped, {paused, JustSuspended}}, Subs)
-    end,
     {ok, State1}.
 
 -spec get_excluded_processes(Universe, State) -> #{pid() => [edb:exclusion_reason()]} when
