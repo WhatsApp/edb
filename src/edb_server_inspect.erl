@@ -15,7 +15,7 @@
 -module(edb_server_inspect).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -moduledoc false.

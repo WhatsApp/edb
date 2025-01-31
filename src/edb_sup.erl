@@ -20,7 +20,7 @@
 -module(edb_sup).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -behaviour(supervisor).

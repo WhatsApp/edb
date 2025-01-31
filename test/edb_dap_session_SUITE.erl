@@ -18,9 +18,9 @@
 -module(edb_dap_session_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 
-% @fb-only
+% @fb-only: 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("edb/include/edb_dap.hrl").
 

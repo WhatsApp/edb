@@ -17,7 +17,7 @@
 -compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -include_lib("common_test/include/ct.hrl").

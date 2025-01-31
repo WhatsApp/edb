@@ -15,7 +15,7 @@
 -module(edb_server_process_info).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 -compile({no_auto_import, [process_info/1]}).
 

@@ -22,7 +22,7 @@
 -module(edb_dap_utils).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -export([strip_suffix/2]).
