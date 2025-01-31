@@ -16,9 +16,9 @@
 -module(edb_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 
-% @fb-only
+% @fb-only: 
 -include_lib("stdlib/include/assert.hrl").
 
 %% Test server specific exports
@@ -85,7 +85,7 @@
 %% erlfmt:ignore
 suite() ->
     [
-        % @fb-only
+        % @fb-only: 
         {timetrap, {minutes, 10}}
     ].
 

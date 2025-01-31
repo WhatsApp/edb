@@ -20,7 +20,7 @@
 -module(factorial).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -export([fact/1]).

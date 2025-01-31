@@ -30,7 +30,7 @@
 -module(edb_dap_id_mappings).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 -behaviour(gen_server).

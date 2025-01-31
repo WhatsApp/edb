@@ -17,7 +17,7 @@
 -module(edb_dap_test_support).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 
 %% Public API
@@ -30,7 +30,7 @@
 
 -export_type([client/0, peer/0, module_spec/0]).
 
-% @fb-only
+% @fb-only: 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 

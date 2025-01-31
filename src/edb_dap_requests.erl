@@ -22,7 +22,7 @@
 -module(edb_dap_requests).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: 
 -compile(warn_missing_spec_all).
 -include("edb_dap.hrl").
 -include_lib("kernel/include/logger.hrl").
