@@ -116,10 +116,18 @@ import {themes as prismThemes} from 'prism-react-renderer';
                 label: 'GitHub',
                 href: 'https://github.com/facebook/docusaurus',
               },
+              {
+                label: 'Terms of Use',
+                href: 'https://opensource.fb.com/legal/terms',
+              },
+              {
+                label: 'Privacy Policy',
+                href: 'https://opensource.fb.com/legal/privacy',
+              },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Meta Platforms, Inc. Built with Docusaurus.`,
       },
       prism: {
         theme: prismThemes.github,
