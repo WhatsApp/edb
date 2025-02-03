@@ -574,7 +574,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
 
     % We spawn a process that will go through that line.
     % elp:ignore W0017 (undefined_function) - Module exists in test data
-    DebugeePid = erlang:spawn(fun() -> test_breakpoints:do_stuff_and_wait(Me) end),
+    DebuggeePid = erlang:spawn(fun() -> test_breakpoints:do_stuff_and_wait(Me) end),
 
     % We call edb:wait(), blocking until the bp is hit
     {ok, paused} = edb:wait(),
@@ -582,7 +582,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % Processes are now reported as paused / on a breakpoint
     ?assertMatch(
         #{
-            DebugeePid := #{
+            DebuggeePid := #{
                 status := breakpoint,
                 parent := Me,
                 current_fun := {_, _, _},
@@ -605,7 +605,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
             }
         },
         maps:with(
-            [DebugeePid, AmbientPid1, AmbientPid2, AmbientPid3],
+            [DebuggeePid, AmbientPid1, AmbientPid2, AmbientPid3],
             edb:processes()
         )
     ),
@@ -632,7 +632,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % Again, everything reported as running
     ?assertMatch(
         #{
-            DebugeePid := #{
+            DebuggeePid := #{
                 status := running,
                 parent := Me,
                 current_fun := {_, _, _}
@@ -654,7 +654,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
             }
         },
         maps:with(
-            [DebugeePid, AmbientPid1, AmbientPid2, AmbientPid3],
+            [DebuggeePid, AmbientPid1, AmbientPid2, AmbientPid3],
             edb:processes()
         )
     ),
@@ -662,7 +662,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % Check the events delivered
     ?assertEqual(
         [
-            {paused, {breakpoint, DebugeePid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
+            {paused, {breakpoint, DebuggeePid, {test_breakpoints, do_stuff_and_wait, 1}, {line, 14}}},
             {resumed, {continue, all}}
         ],
         edb_test_support:collected_events()
