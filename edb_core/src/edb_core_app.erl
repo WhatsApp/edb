@@ -11,18 +11,25 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%%-------------------------------------------------------------------
+%% @doc The edb_core application
+%% @end
+%%%-------------------------------------------------------------------
+%% % @format
+-module(edb_core_app).
+
 %% erlfmt:ignore
-{application, edb_core, [
-    {description, "The core of the edb debugger"},
-    {vsn, git},
-    {modules, []},
-    {registered, []},
-    {applications, [
-        % @fb-only: 
-        kernel,
-        stdlib
-    ]},
-    {licenses, ["Apache-2.0"]},
-    {links, []},
-    {mod, {edb_core_app, []}}
-]}.
+% @fb-only: 
+-compile(warn_missing_spec_all).
+
+-behaviour(application).
+
+-export([start/2, stop/1]).
+
+-spec start(application:start_type(), term()) -> {ok, pid()}.
+start(_StartType, _StartArgs) ->
+    {ok, _Sup} = edb_core_sup:start_link().
+
+-spec stop(term()) -> ok.
+stop(_State) ->
+    ok.

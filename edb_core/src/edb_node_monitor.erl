@@ -22,7 +22,7 @@
 -behavior(gen_server).
 
 %% Public API
--export([start/0]).
+-export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
 -export([subscribe/0, unsubscribe/1]).
 
@@ -49,9 +49,9 @@
 %% Public API
 %% -------------------------------------------------------------------
 
--spec start() -> gen_server:start_ret().
-start() ->
-    gen_server:start(
+-spec start_link() -> gen_server:start_ret().
+start_link() ->
+    gen_server:start_link(
         {local, ?MODULE},
         ?MODULE,
         [],
@@ -100,7 +100,6 @@ unsubscribe(Subscription) ->
 
 -spec call(call_request()) -> dynamic().
 call(Request) ->
-    ensure_started(),
     case gen_server:call(?MODULE, Request, infinity) of
         badarg -> error(badarg);
         not_attached -> error(not_attached);
@@ -355,18 +354,6 @@ on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}})
         {cancel_timer, TimerRef} -> erlang:cancel_timer(TimerRef)
     end,
     State2.
-
--spec ensure_started() -> ok.
-ensure_started() ->
-    case erlang:whereis(?MODULE) of
-        undefined ->
-            case start() of
-                {ok, _Pid} -> ok;
-                {error, {already_started, _Pid}} -> ok
-            end;
-        Pid when is_pid(Pid) ->
-            ok
-    end.
 
 -spec call_edb_server(Request :: edb_server:call_request(), State) -> Result when
     State :: state(),

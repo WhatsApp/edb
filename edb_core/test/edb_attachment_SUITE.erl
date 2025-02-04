@@ -24,6 +24,7 @@
 
 %% Test server callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -50,6 +51,13 @@
     test_reattaching_to_different_node_detaches_from_old_node/1
 ]).
 
+%% erlfmt:ignore
+suite() ->
+    [
+        % @fb-only: 
+        {timetrap, {seconds, 30}}
+    ].
+
 all() ->
     [
         test_raises_error_until_attached,
@@ -72,10 +80,12 @@ all() ->
     ].
 
 init_per_testcase(_TestCase, Config) ->
+    {ok, _} = application:ensure_all_started(edb_core),
     Config.
 end_per_testcase(_TestCase, _Config) ->
     ok = edb_test_support:stop_event_collector(),
     ok = edb_test_support:stop_all_peer_nodes(),
+    % ok = application:stop(edb_core),  % @oss-only
     ok.
 
 %%--------------------------------------------------------------------

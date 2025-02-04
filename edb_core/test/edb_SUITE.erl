@@ -165,6 +165,8 @@ init_per_suite(Config) ->
     erts_debug:set_internal_state(available_internal_state, true),
     erts_debug:set_internal_state(debugger_support, true),
     erts_debug:set_internal_state(available_internal_state, false),
+
+    {ok, _} = application:ensure_all_started(edb_core),
     ok = edb:attach(#{node => node()}),
     compile_dummy_apps(Config),
     Config.
