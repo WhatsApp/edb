@@ -51,10 +51,12 @@
     Reasons :: [edb:exclusion_reason()],
     Info :: edb:excluded_process_info().
 excluded_process_info(Pid, Reasons) ->
-    case maps:find(Pid, excluded_processes_info(#{Pid => Reasons})) of
-        {ok, Info} -> {ok, Info};
-        error -> undefined
-    end.
+    case excluded_processes_info(#{Pid => Reasons}) of
+       #{Pid := Info} ->
+           {ok, Info};
+       #{} ->
+           undefined
+   end.
 
 -spec excluded_processes_info(#{Pid => Reasons}) -> #{Pid => Info} when
     Pid :: pid(),
@@ -90,10 +92,12 @@ excluded_process_info(Pid, Reasons, Fields) ->
     Status :: running | paused | {breakpoint, edb:breakpoint_info()},
     Info :: edb:process_info().
 process_info(Pid, Status) ->
-    case maps:find(Pid, processes_info(#{Pid => Status})) of
-        {ok, Info} -> {ok, Info};
-        error -> undefined
-    end.
+    case processes_info(#{Pid => Status}) of
+       #{Pid := Info} ->
+           {ok, Info};
+       #{} ->
+           undefined
+   end.
 
 -spec processes_info(#{Pid => Status}) -> #{Pid => Info} when
     Pid :: pid(),

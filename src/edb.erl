@@ -505,9 +505,11 @@ parse_arg(Parser, X) ->
 take_arg(Key, Args0, Opts) ->
     case maps:take(Key, Args0) of
         error ->
-            case maps:find(default, Opts) of
-                {ok, Default} -> {Default, Args0};
-                error -> error({badarg, {missing, Key}})
+            case Opts of
+                #{default := Default} ->
+                    {Default, Args0};
+                #{} ->
+                    error({badarg, {missing, Key}})
             end;
         {RawVal, Args1} ->
             Parser = maps:get(parse, Opts),
