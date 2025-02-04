@@ -12,8 +12,8 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %% erlfmt:ignore
-{application, edb, [
-    {description, "The edb debugger"},
+{application, edb_core, [
+    {description, "The core of the edb debugger"},
     {vsn, git},
     {modules, []},
     {registered, []},
@@ -23,6 +23,5 @@
         stdlib
     ]},
     {licenses, ["Apache-2.0"]},
-    {links, []},
-    {mod, {edb_app, []}}
+    {links, []}
 ]}.
