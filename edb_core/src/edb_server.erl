@@ -120,8 +120,8 @@ find() ->
     {subscribe_to_events, pid()}
     | {remove_event_subscription, edb:event_subscription()}
     | {send_sync_event, edb:event_subscription()}
-    | {add_breakpoint, module(), Line :: line()}
-    | {clear_breakpoint, module(), Line :: line()}
+    | {add_breakpoint, module(), line()}
+    | {clear_breakpoint, module(), line()}
     | {clear_breakpoints, module()}
     | get_breakpoints
     | get_breakpoints_hit

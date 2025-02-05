@@ -29,7 +29,9 @@
 
 -export([pause/0, continue/0, wait/0]).
 
--export([add_breakpoint/2, clear_breakpoint/2, clear_breakpoints/1, get_breakpoints/0]).
+-export([add_breakpoint/2]).
+-export([clear_breakpoint/2, clear_breakpoints/1]).
+-export([get_breakpoints/0]).
 -export([get_breakpoints_hit/0]).
 
 -export([step_over/1, step_out/1]).
@@ -131,7 +133,7 @@
     yregs => [value()]
 }.
 -type value() :: {value, term()} | {too_large, Size :: pos_integer(), Max :: pos_integer()}.
--type catch_handler() :: {'catch', {mfa(), {line, pos_integer() | undefined}}}.
+-type catch_handler() :: {'catch', {mfa(), {line, line() | undefined}}}.
 
 -export_type([event_envelope/1, event_subscription/0]).
 -export_type([event/0, resumed_event/0, paused_event/0]).
@@ -149,7 +151,7 @@
     | {excluded, #{pid() => []}}
     | {termination, all}.
 -type paused_event() ::
-    {breakpoint, pid(), mfa(), {line, pos_integer()}}
+    {breakpoint, pid(), mfa(), {line, line()}}
     | pause
     | {step, pid()}.
 
@@ -251,7 +253,7 @@ send_sync_event(Subscription) ->
 %% @doc Set a breakpoint on the line of a loaded module on the remote node.
 -spec add_breakpoint(Module, Line) -> ok | {error, Reason} when
     Module :: module(),
-    Line :: pos_integer(),
+    Line :: line(),
     Reason :: edb:add_breakpoint_error().
 add_breakpoint(Module, Line) ->
     call_server({add_breakpoint, Module, Line}).
@@ -265,7 +267,7 @@ clear_breakpoints(Module) ->
 %% @doc Clear a previously set breakpoint on the remote node.
 -spec clear_breakpoint(Module, Line) -> ok | {error, Reason} when
     Module :: module(),
-    Line :: pos_integer(),
+    Line :: line(),
     Reason :: {unsupported, Module | Line} | {badkey, Module | Line}.
 clear_breakpoint(Module, Line) ->
     call_server({clear_breakpoint, Module, Line}).
