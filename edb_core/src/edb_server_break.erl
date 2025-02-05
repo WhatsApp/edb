@@ -98,11 +98,11 @@ get_explicits_hit(#breakpoints{explicits_hit = ExplicitsHit}) ->
     {ok, #{module := module(), line := line()}} | no_breakpoint_hit.
 get_explicit_hit(Pid, #breakpoints{explicits_hit = ExplicitsHit}) ->
     case ExplicitsHit of
-       #{Pid := {Module, Line}} ->
-           {ok, #{module => Module, line => Line}};
-       #{} ->
-           no_breakpoint_hit
-   end.
+        #{Pid := {Module, Line}} ->
+            {ok, #{module => Module, line => Line}};
+        #{} ->
+            no_breakpoint_hit
+    end.
 
 -spec register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints) ->
     {suspend, explicit | step, breakpoints()} | resume

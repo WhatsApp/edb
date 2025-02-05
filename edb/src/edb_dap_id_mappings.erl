@@ -214,11 +214,11 @@ id_mapping_get_id(A, M0) when is_map(M0) ->
 id_mapping_from_id(Id, M) ->
     #{back := Back} = M,
     case Back of
-       #{Id := A} ->
-           {ok, A};
-       #{} ->
-           {error, not_found}
-   end.
+        #{Id := A} ->
+            {ok, A};
+        #{} ->
+            {error, not_found}
+    end.
 
 -spec id_mapping_reset(id_mapping(A)) -> id_mapping(A).
 id_mapping_reset(M) ->

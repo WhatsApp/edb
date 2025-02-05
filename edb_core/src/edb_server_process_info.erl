@@ -52,11 +52,11 @@
     Info :: edb:excluded_process_info().
 excluded_process_info(Pid, Reasons) ->
     case excluded_processes_info(#{Pid => Reasons}) of
-       #{Pid := Info} ->
-           {ok, Info};
-       #{} ->
-           undefined
-   end.
+        #{Pid := Info} ->
+            {ok, Info};
+        #{} ->
+            undefined
+    end.
 
 -spec excluded_processes_info(#{Pid => Reasons}) -> #{Pid => Info} when
     Pid :: pid(),
@@ -93,11 +93,11 @@ excluded_process_info(Pid, Reasons, Fields) ->
     Info :: edb:process_info().
 process_info(Pid, Status) ->
     case processes_info(#{Pid => Status}) of
-       #{Pid := Info} ->
-           {ok, Info};
-       #{} ->
-           undefined
-   end.
+        #{Pid := Info} ->
+            {ok, Info};
+        #{} ->
+            undefined
+    end.
 
 -spec processes_info(#{Pid => Status}) -> #{Pid => Info} when
     Pid :: pid(),
