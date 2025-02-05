@@ -16,9 +16,9 @@
 -module(edb_dap_utils_SUITE).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 
-% @fb-only: 
+% @fb-only
 -include_lib("stdlib/include/assert.hrl").
 
 %% Test server callbacks
@@ -42,7 +42,7 @@ all() ->
 %% erlfmt:ignore fb-only needs to be on same line
 suite() ->
     [
-        % @fb-only: 
+        % @fb-only
     ].
 
 init_per_testcase(_TestCase, Config) ->

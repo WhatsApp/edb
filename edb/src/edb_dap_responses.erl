@@ -22,7 +22,7 @@
 -module(edb_dap_responses).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -export([run_in_terminal/2]).

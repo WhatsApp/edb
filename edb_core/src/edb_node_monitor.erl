@@ -16,7 +16,7 @@
 -module(edb_node_monitor).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -behavior(gen_server).

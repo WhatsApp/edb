@@ -17,7 +17,7 @@
 -export([step_over_impl/2]).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -moduledoc false.
@@ -31,9 +31,9 @@
 
 -export_type([call_request/0]).
 
-% @fb-only: 
-% @fb-only: 
-% @fb-only: 
+% @fb-only
+% @fb-only
+% @fb-only
 
 %%--------------------------------------------------------------------
 %% Types
@@ -894,7 +894,7 @@ process_status(Pid, State) ->
 -spec try_suspend_process(Pid :: pid()) -> boolean().
 try_suspend_process(Pid) ->
     try
-        % @fb-only: 
+        % @fb-only
         erlang:suspend_process(Pid, [pause_proc_timer]) % @oss-only
     catch
         error:badarg:ST ->
@@ -907,7 +907,7 @@ try_suspend_process(Pid) ->
 -spec try_resume_process(Pid :: pid()) -> boolean().
 try_resume_process(Pid) ->
     try
-        % @fb-only: 
+        % @fb-only
         true = erlang:resume_process(Pid, [resume_proc_timer]) % @oss-only
     catch
         error:bardarg:ST ->
@@ -922,8 +922,8 @@ try_resume_process(Pid) ->
 is_relevant_pid(Pid) ->
     ?is_internal_pid(Pid) andalso is_process_alive(Pid).
 
-% @fb-only: 
-% @fb-only: 
-% @fb-only: 
-% @fb-only: 
-% @fb-only: 
+% @fb-only
+% @fb-only
+% @fb-only
+% @fb-only
+% @fb-only

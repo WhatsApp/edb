@@ -16,9 +16,9 @@
 -module(edb_main_SUITE).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 
-% @fb-only: 
+% @fb-only
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").

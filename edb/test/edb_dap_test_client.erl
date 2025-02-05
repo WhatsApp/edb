@@ -22,7 +22,7 @@
 -module(edb_dap_test_client).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -behaviour(gen_server).

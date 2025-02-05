@@ -19,7 +19,7 @@
 % @fb-only
 -oncall("whatsapp_server_devx").
 
-% @fb-only: 
+% @fb-only
 -include_lib("stdlib/include/assert.hrl").
 
 %% CT callbacks
