@@ -20,7 +20,7 @@
 -module(edb_dap_launch_config).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -export([parse/1]).

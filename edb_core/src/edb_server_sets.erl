@@ -17,7 +17,7 @@
 -compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 
 %% Public API
 -export([

@@ -17,9 +17,9 @@
 -module(edb_server_call_proc_SUITE).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 
-% @fb-only: 
+% @fb-only
 -include_lib("stdlib/include/assert.hrl").
 
 %% Test server callbacks

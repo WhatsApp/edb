@@ -20,7 +20,7 @@
 -module(edb_dap_state).
 
 %% erlfmt:ignore
-% @fb-only: 
+% @fb-only
 -compile(warn_missing_spec_all).
 
 -type status() :: started | initialized | {attached, edb:event_subscription()} | cannot_attach.
