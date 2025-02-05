@@ -180,30 +180,36 @@ init_per_group(Group, Config0) ->
 
     CompileOpts = [{outdir, PrivDir}, debug_info, beam_debug_info],
 
-    TestSupportModule = Group,
-    SrcFileName = filename:join(DataDir, atom_to_list(TestSupportModule) ++ ".erl"),
-    Config1 =
-        case filelib:is_file(SrcFileName) of
-            false ->
-                Config0;
-            true ->
-                {ok, _} = compile:file(SrcFileName, CompileOpts),
-                BinFileName = filename:join(PrivDir, atom_to_list(TestSupportModule)),
-                {module, TestSupportModule} = code:load_abs(BinFileName),
-                [{erl_source, SrcFileName} | Config0]
+    % Compile and load all the `$GROUP*.erl` files in the data dir
+
+    SrcFilePattern = filename:join(DataDir, atom_to_list(Group) ++ "*.erl"),
+    SrcFileNames = filelib:wildcard(SrcFilePattern),
+
+    Config1 = lists:foldl(
+        fun(SrcFileName, AccConfig) ->
+            TestSupportModule = list_to_atom(filename:basename(SrcFileName, ".erl")),
+            {ok, _} = compile:file(SrcFileName, CompileOpts),
+            BinFileName = filename:join(PrivDir, atom_to_list(TestSupportModule)),
+            {module, TestSupportModule} = code:load_abs(BinFileName),
+            [{erl_source, SrcFileName} | AccConfig]
         end,
+        Config0,
+        SrcFileNames
+    ),
 
     Config1.
 
 end_per_group(Group, _Config) ->
-    TestSupportModule = Group,
-    case code:is_loaded(TestSupportModule) of
-        false ->
-            ok;
-        {file, _} ->
+    % Delete and purge all the $GROUP* loaded test support modules
+    [
+        begin
             true = code:delete(TestSupportModule),
             code:purge(TestSupportModule)
-    end,
+        end
+     || {TestSupportModule, _Filename} <- code:all_loaded(),
+        lists:prefix(atom_to_list(Group), atom_to_list(TestSupportModule))
+    ],
+
     ok.
 
 init_per_testcase(_Case, Config) ->
