@@ -14,8 +14,6 @@
 %% % @format
 -module(edb_server).
 
--export([step_over_impl/2]).
-
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
