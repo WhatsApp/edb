@@ -57,7 +57,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_next_works(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = erlang:iolist_to_binary([
         ~"-module(foo).             %L01\n",
@@ -107,7 +107,7 @@ test_next_works(Config) ->
     ok.
 
 test_step_out_works(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = erlang:iolist_to_binary([
         ~"-module(foo).             %L01\n",
@@ -149,7 +149,7 @@ test_step_out_works(Config) ->
     ok.
 
 test_stepping_errors_if_process_not_paused(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = erlang:iolist_to_binary([
         ~"-module(foo).             %L01\n",

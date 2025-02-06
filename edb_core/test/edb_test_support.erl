@@ -23,7 +23,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
--export_type([peer/0]).
+-export_type([peer/0, start_peer_node_opts/0]).
 -export([start_peer_node/2, stop_peer_node/1, stop_all_peer_nodes/0]).
 -export([compile_and_load_file_in_peer/1]).
 -export([random_node/1]).
@@ -50,13 +50,18 @@ random_node_name(Prefix) when is_binary(Prefix) ->
 random_node_name(Prefix) ->
     list_to_atom(peer:random_name(Prefix)).
 
--spec start_peer_node(CtConfig, NamePrefix | {exact, node()}) -> {ok, Peer, Node, Cookie} when
+-type start_peer_node_opts() ::
+    #{
+        node => node() | {prefix, binary() | string()}
+    }.
+
+-spec start_peer_node(CtConfig, Opts) -> {ok, Peer, Node, Cookie} when
     CtConfig :: ct_suite:ct_config(),
-    NamePrefix :: binary() | string(),
+    Opts :: start_peer_node_opts(),
     Peer :: peer(),
     Node :: node(),
     Cookie :: atom() | nocookie.
-start_peer_node(CtConfig, {exact, Node}) ->
+start_peer_node(CtConfig, #{node := Node}) when is_atom(Node) ->
     ok = ensure_distributed(),
     Cookie = erlang:get_cookie(),
     [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
@@ -78,9 +83,14 @@ start_peer_node(CtConfig, {exact, Node}) ->
     PrivDir = ?config(priv_dir, CtConfig),
     ok = peer:call(Peer, code, add_pathsa, [PrivDir]),
     {ok, Peer, Node, Cookie};
-start_peer_node(CtConfig, NamePrefix) ->
+start_peer_node(CtConfig, Opts0) ->
+    {NamePrefix, Opts2} =
+        case maps:take(node, Opts0) of
+            error -> {~"debuggee", Opts0};
+            {{prefix, GivenPrefix}, Opts1} -> {GivenPrefix, Opts1}
+        end,
     Node = random_node(NamePrefix),
-    start_peer_node(CtConfig, {exact, Node}).
+    start_peer_node(CtConfig, Opts2#{node => Node}).
 
 -spec stop_peer_node(Peer) -> ok when
     Peer :: peer().

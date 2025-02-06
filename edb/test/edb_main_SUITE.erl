@@ -59,7 +59,7 @@ escript_executable(Config) ->
     ?assertEqual(8#111, FileInfo#file_info.mode band 8#111, "Escript should be executable").
 
 escript_dap(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
 
     Response3 = edb_dap_test_client:threads(Client, #{}),

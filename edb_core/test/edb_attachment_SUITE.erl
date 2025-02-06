@@ -96,7 +96,7 @@ test_raises_error_until_attached(Config) ->
     ?assertError(not_attached, edb:attached_node()),
     ?assertError(not_attached, edb:processes()),
 
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
 
     % After attaching, we no longer error
     ok = edb:attach(#{node => Node}),
@@ -128,7 +128,7 @@ test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) ->
         receive
         after NodeStartupDelayInMs -> ok
         end,
-        {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, {exact, Node}),
+        {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{node => Node}),
 
         % Keep node alive
         receive
@@ -166,7 +166,7 @@ test_attach_validates_args(_Config) ->
     ok.
 
 test_querying_on_a_vanished_node_detaches(Config) ->
-    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
     ok = edb:attach(#{node => Node}),
     ok = edb_test_support:start_event_collector(),
 
@@ -185,7 +185,7 @@ test_querying_on_a_vanished_node_detaches(Config) ->
     ok.
 
 test_terminating_detaches(Config) ->
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
 
     % Sanity check: no errors while attached
     edb:attach(#{node => Node}),
@@ -202,7 +202,7 @@ test_terminating_detaches(Config) ->
     ok.
 
 test_terminating_on_a_vanished_node_detaches(Config) ->
-    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
     edb:attach(#{node => Node}),
 
     % Sanity check: no errors while attached
@@ -217,7 +217,7 @@ test_terminating_on_a_vanished_node_detaches(Config) ->
     ok.
 
 test_detaching_unsubscribes(Config) ->
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
     edb:attach(#{node => Node}),
     ok = edb_test_support:start_event_collector(),
 
@@ -232,7 +232,7 @@ test_detaching_unsubscribes(Config) ->
     ok.
 
 test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
 
     ok = edb:attach(#{node => Node}),
     ok = edb_test_support:start_event_collector(),
@@ -266,7 +266,7 @@ test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
     ok.
 
 test_reattaching_to_same_node_doesnt_detach(Config) ->
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
 
     ok = edb:attach(#{node => Node}),
     ?assertEqual(edb:attached_node(), Node),
@@ -298,8 +298,8 @@ test_reattaching_to_same_node_doesnt_detach(Config) ->
     ok.
 
 test_reattaching_to_different_node_detaches_from_old_node(Config) ->
-    {ok, _Peer1, Node1, Cookie} = edb_test_support:start_peer_node(Config, "debuggee_1"),
-    {ok, _Peer2, Node2, Cookie} = edb_test_support:start_peer_node(Config, "debuggee_2"),
+    {ok, _Peer1, Node1, Cookie} = edb_test_support:start_peer_node(Config, #{node => {prefix, "debuggee_1"}}),
+    {ok, _Peer2, Node2, Cookie} = edb_test_support:start_peer_node(Config, #{node => {prefix, "debuggee_2"}}),
 
     ok = edb:attach(#{node => Node1}),
     ?assertEqual(edb:attached_node(), Node1),

@@ -133,7 +133,7 @@ test_fails_if_invalid_launch_config(Config) ->
 %%--------------------------------------------------------------------
 
 test_handles_disconnect_request(Config) ->
-    {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
 
     DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
@@ -145,7 +145,7 @@ test_handles_disconnect_request(Config) ->
     ok.
 
 test_terminates_when_node_goes_down(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
 
     edb_test_support:stop_peer_node(Peer),

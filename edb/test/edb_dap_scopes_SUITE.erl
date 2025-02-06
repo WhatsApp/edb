@@ -55,7 +55,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_reports_locals_scope(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = iolist_to_binary([
         ~"-module(foo).     %L01\n",
@@ -94,7 +94,7 @@ test_reports_locals_scope(Config) ->
     ok.
 
 test_reports_registers_scope_when_locals_not_available(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = iolist_to_binary([
         ~"-module(foo).     %L01\n",
@@ -135,7 +135,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
     ok.
 
 test_reports_messages_scope(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, "debuggee"),
+    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
     ModuleSource = iolist_to_binary([
         ~"-module(foo).      %L01\n",
