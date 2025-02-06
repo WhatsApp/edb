@@ -52,7 +52,8 @@ random_node_name(Prefix) ->
 
 -type start_peer_node_opts() ::
     #{
-        node => node() | {prefix, binary() | string()}
+        node => node() | {prefix, binary() | string()},
+        copy_code_path => boolean()
     }.
 
 -spec start_peer_node(CtConfig, Opts) -> {ok, Peer, Node, Cookie} when
@@ -61,7 +62,7 @@ random_node_name(Prefix) ->
     Peer :: peer(),
     Node :: node(),
     Cookie :: atom() | nocookie.
-start_peer_node(CtConfig, #{node := Node}) when is_atom(Node) ->
+start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
     ok = ensure_distributed(),
     Cookie = erlang:get_cookie(),
     [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
@@ -79,7 +80,12 @@ start_peer_node(CtConfig, #{node := Node}) when is_atom(Node) ->
             Peers when is_map(Peers) -> Peers
         end,
     erlang:put(?PROC_DICT_PEERS_KEY, StartedPeers#{Peer => Node}),
-    ok = peer:call(Peer, code, add_pathsa, [code:get_path()]),
+    case maps:get(copy_code_path, Opts, true) of
+        true ->
+            ok = peer:call(Peer, code, add_pathsa, [code:get_path()]);
+        false ->
+            ok
+    end,
     PrivDir = ?config(priv_dir, CtConfig),
     ok = peer:call(Peer, code, add_pathsa, [PrivDir]),
     {ok, Peer, Node, Cookie};
