@@ -86,7 +86,7 @@ start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
             Peers when is_map(Peers) -> Peers
         end,
     erlang:put(?PROC_DICT_PEERS_KEY, StartedPeers#{Peer => Node}),
-    case maps:get(copy_code_path, Opts, true) of
+    case maps:get(copy_code_path, Opts, false) of
         true ->
             ok = peer:call(Peer, code, add_pathsa, [code:get_path()]);
         false ->

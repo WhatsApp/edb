@@ -61,7 +61,7 @@ start_link() ->
 -spec attach(node(), timeout()) -> ok | {error, Reason} when
     Reason ::
         nodedown
-        | edb:start_error()
+        | edb:boot_failure()
         | term().
 attach(Node, AttachTimeout) when is_atom(Node), AttachTimeout =:= infinity orelse AttachTimeout >= 0 ->
     call({attach, Node, AttachTimeout}).
@@ -192,7 +192,7 @@ handle_info(_Info, State) ->
     Reason ::
         attachment_in_progress
         | nodedown
-        | edb:start_error()
+        | edb:boot_failure()
         | term(),
     State :: state().
 attach_impl(_, _, _, State = #{attached_node := {attaching, _, _, _}}) ->
@@ -311,6 +311,21 @@ nodedown_impl(Node, Reason, State0) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
+-spec boot_edb(Node) -> ok | {error, edb:boot_failure()} when
+    Node :: node().
+boot_edb(Node) ->
+    {Module, Binary, Filename} = code:get_object_code(edb_boot),
+    % elp:ignore W0014 - Debugging tool, expected.
+    case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
+        {module, edb_boot} ->
+            % elp:ignore W0014 - Debugging tool, expected.
+            Result = erpc:call(Node, edb_boot, debuggee_boot, [node()]),
+            % eqwalizer:fixme -- eqwalizer should infer the type from the callee
+            Result;
+        {error, badfile} ->
+            {error, {module_injection_failed, edb_boot, incompatible_beam}}
+    end.
+
 -spec schedule_try_attach(node()) -> ok.
 schedule_try_attach(Node) ->
     ok = gen_server:cast(?MODULE, {try_attach, Node}).
@@ -327,8 +342,7 @@ schedule_try_attach_after(Delay, Node) ->
 -spec on_node_connected(state()) -> state().
 on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}}) ->
     {TimerAction, State2} =
-        % elp:ignore W0014 (cross_node_eval) - Debugging tool, expected.
-        try erpc:call(Node, edb_server, ensure_started, []) of
+        try boot_edb(Node) of
             Error = {error, _} ->
                 State1 = State0#{attached_node := not_attached},
                 gen_server:reply(Caller, Error),
@@ -341,10 +355,6 @@ on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}})
         catch
             error:{erpc, _} ->
                 % rpc may not be available yet, so we try again later
-                schedule_try_attach(Node),
-                {leave_timer, State0};
-            error:{exception, undef, [{edb_server, ensure_started, [], []}]} ->
-                % edb_server module not yet available, so we try again later
                 schedule_try_attach(Node),
                 {leave_timer, State0}
         end,

@@ -55,8 +55,10 @@
 -type fun_name() :: atom().
 -export_type([fun_name/0]).
 
--export_type([start_error/0]).
--type start_error() :: unsupported | failed_to_register.
+-export_type([boot_failure/0]).
+-type boot_failure() ::
+    {no_debugger_support, {missing, erl_debugger} | not_enabled}
+    | {module_injection_failed, module(), Reason :: term()}.
 
 -export_type([breakpoint_info/0]).
 -type breakpoint_info() :: #{
@@ -173,7 +175,7 @@
     Reason ::
         attachment_in_progress
         | nodedown
-        | start_error()
+        | boot_failure()
         | term().
 attach(AttachOpts0) ->
     {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{

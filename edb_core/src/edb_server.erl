@@ -22,7 +22,7 @@
 -behaviour(gen_server).
 
 %% External exports
--export([start/0, ensure_started/0, stop/0, find/0]).
+-export([start/0, stop/0, find/0]).
 
 %% gen_server callbacks
 -export([init/1, terminate/2, handle_call/3, handle_cast/2, handle_info/2]).
@@ -42,6 +42,9 @@
 -type line() :: edb:line().
 
 -type start_opts() :: [].
+
+-export_type([start_error/0]).
+-type start_error() :: unsupported | failed_to_register.
 
 -record(state, {
     debugger_session :: erl_debugger:session(),
@@ -74,7 +77,7 @@
 %% External exports
 %%--------------------------------------------------------------------
 
--spec start() -> ok | {error, edb:start_error()}.
+-spec start() -> ok | {error, start_error()}.
 start() ->
     case erl_debugger:supported() of
         false ->
@@ -95,13 +98,6 @@ start() ->
 -spec stop() -> ok.
 stop() ->
     ok = gen_server:stop(?MODULE).
-
--spec ensure_started() -> ok | {error, edb:start_error()}.
-ensure_started() ->
-    case find() of
-        undefined -> start();
-        Pid when is_pid(Pid) -> ok
-    end.
 
 -spec find() -> pid() | undefined.
 find() ->
@@ -143,7 +139,7 @@ find() ->
 %% gen_server callbacks
 %%--------------------------------------------------------------------
 
--spec init(start_opts()) -> {ok, state()} | {error, edb:start_error()}.
+-spec init(start_opts()) -> {ok, state()} | {error, start_error()}.
 init([]) ->
     case erl_debugger:register(self()) of
         {error, already_exists} ->

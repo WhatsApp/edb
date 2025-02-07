@@ -33,6 +33,7 @@
 %% Test cases
 -export([
     test_raises_error_until_attached/1,
+    test_attaching_injects_edb_server/1,
 
     test_can_attach_async_with_timeout/1,
     test_can_attach_async_with_infinity_timeout/1,
@@ -48,7 +49,9 @@
 
     test_reattaching_to_non_existent_node_doesnt_detach/1,
     test_reattaching_to_same_node_doesnt_detach/1,
-    test_reattaching_to_different_node_detaches_from_old_node/1
+    test_reattaching_to_different_node_detaches_from_old_node/1,
+
+    test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
 ]).
 
 %% erlfmt:ignore
@@ -61,6 +64,7 @@ suite() ->
 all() ->
     [
         test_raises_error_until_attached,
+        test_attaching_injects_edb_server,
 
         test_can_attach_async_with_timeout,
         test_can_attach_async_with_infinity_timeout,
@@ -76,7 +80,9 @@ all() ->
 
         test_reattaching_to_non_existent_node_doesnt_detach,
         test_reattaching_to_same_node_doesnt_detach,
-        test_reattaching_to_different_node_detaches_from_old_node
+        test_reattaching_to_different_node_detaches_from_old_node,
+
+        test_fails_to_attach_if_debuggee_not_in_debugging_mode
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -96,10 +102,17 @@ test_raises_error_until_attached(Config) ->
     ?assertError(not_attached, edb:attached_node()),
     ?assertError(not_attached, edb:processes()),
 
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
 
-    % After attaching, we no longer error
+    % Sanity-check: edb_server is not available in the peer
+    ?assertEqual(
+        non_existing,
+        peer:call(Peer, code, which, [edb_server])
+    ),
+
+    % After attaching, edb_server is now loaded and we no longer error
     ok = edb:attach(#{node => Node}),
+    ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
     ?assertMatch(Node, edb:attached_node()),
     ?assertMatch(#{}, edb:processes()),
 
@@ -108,6 +121,32 @@ test_raises_error_until_attached(Config) ->
     ?assertError(not_attached, edb:attached_node()),
     ?assertError(not_attached, edb:processes()),
 
+    ok.
+
+test_attaching_injects_edb_server(Config) ->
+    {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
+
+    % Initially edb_server is not available in the debuggee
+    ?assertEqual(
+        non_existing,
+        peer:call(Peer, code, which, [edb_server])
+    ),
+
+    % After attaching, edb_server is now loaded and running
+    ok = edb:attach(#{node => Node}),
+    ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
+    EdbServerPid = peer:call(Peer, edb_server, find, []),
+    ?assert(is_pid(EdbServerPid)),
+
+    % After detaching, edb_server is still running
+    ok = edb:detach(),
+
+    % Reattaching with a running edb_server doesn't change the server
+    ok = edb:attach(#{node => Node}),
+    ?assertEqual(
+        EdbServerPid,
+        peer:call(Peer, edb_server, find, [])
+    ),
     ok.
 
 test_can_attach_async_with_timeout(Config) ->
@@ -316,6 +355,16 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
     ?assertEqual(
         [{sync, SyncRef}, unsubscribed],
         edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{enable_debugging_mode => false}),
+
+    ?assertEqual(
+        {error, {no_debugger_support, not_enabled}},
+        edb:attach(#{node => Node})
     ),
 
     ok.
