@@ -118,6 +118,7 @@ find() ->
     | {clear_breakpoint, module(), line()}
     | {clear_breakpoints, module()}
     | get_breakpoints
+    | {get_breakpoints, module()}
     | get_breakpoints_hit
     | pause
     | continue
@@ -200,6 +201,8 @@ handle_call({clear_breakpoint, Module, Line}, _From, State0) ->
     clear_breakpoint_impl(Module, Line, State0);
 handle_call(get_breakpoints, _From, State0) ->
     get_breakpoints_impl(State0);
+handle_call({get_breakpoints, Module}, _From, State0) ->
+    get_breakpoints_impl(Module, State0);
 handle_call(get_breakpoints_hit, _From, State) ->
     get_breakpoints_hit_impl(State);
 handle_call(pause, _From, State0) ->
@@ -394,8 +397,15 @@ clear_breakpoint_impl(Module, Line, State0) ->
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->
     BPSet = get_breakpoints(State0),
-    Result = #{Module => [#{module => Module, line => Line} || Line := _ <- Lines] || Module := Lines <- BPSet},
+    Result = #{Module => [#{module => Module, line => Line} || Line := [] <- Lines] || Module := Lines <- BPSet},
     {reply, Result, State0}.
+
+-spec get_breakpoints_impl(module(), state()) -> {reply, [edb:breakpoint_info()], state()}.
+get_breakpoints_impl(Module, State0) ->
+    BPSet = get_breakpoints(State0),
+    Lines = maps:get(Module, BPSet, #{}),
+    BPInfoList = [#{module => Module, line => Line} || Line := [] <- Lines],
+    {reply, BPInfoList, State0}.
 
 -spec get_breakpoints_hit_impl(State0 :: state()) -> {reply, BreakpointsHit, State1 :: state()} when
     BreakpointsHit :: #{pid() => #{module := module(), line := line()}}.

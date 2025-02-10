@@ -49,6 +49,7 @@
 -export([test_clear_breakpoint_clears_breakpoints/1]).
 -export([test_clear_breakpoints_clears_all_breakpoints/1]).
 -export([test_get_breakpoints_reports_current_set_breakpoints/1]).
+-export([test_get_breakpoints_works_per_module/1]).
 
 %% Test cases for the test_step_over group
 -export([test_step_over_goes_to_next_line/1]).
@@ -112,7 +113,8 @@ groups() ->
             test_including_a_process_can_suspend_it_immediately,
             test_clear_breakpoint_clears_breakpoints,
             test_clear_breakpoints_clears_all_breakpoints,
-            test_get_breakpoints_reports_current_set_breakpoints
+            test_get_breakpoints_reports_current_set_breakpoints,
+            test_get_breakpoints_works_per_module
         ]},
         {test_step_over, [], [
             test_step_over_goes_to_next_line,
@@ -1199,6 +1201,81 @@ test_get_breakpoints_reports_current_set_breakpoints(_Config) ->
     ?assertEqual(
         #{},
         edb:get_breakpoints()
+    ),
+
+    % Check the events delivered
+    ?assertEqual(
+        [],
+        edb_test_support:collected_events()
+    ),
+    ok.
+
+test_get_breakpoints_works_per_module(_Config) ->
+    % We set breakpoints on several lines on test_breakpoints and test_breakpoints_2 modules
+    % We don't set them in order
+    ok = edb:add_breakpoint(test_breakpoints, 7),
+    ok = edb:add_breakpoint(test_breakpoints_2, 6),
+    ok = edb:add_breakpoint(test_breakpoints, 6),
+    ok = edb:add_breakpoint(test_breakpoints, 8),
+    ok = edb:add_breakpoint(test_breakpoints_2, 8),
+    ok = edb:add_breakpoint(test_breakpoints_2, 9),
+
+    % We can see them with get_breakpoints(), theys show up in order
+    ?assertEqual(
+        #{
+            test_breakpoints => [
+                #{line => 6, module => test_breakpoints},
+                #{line => 7, module => test_breakpoints},
+                #{line => 8, module => test_breakpoints}
+            ],
+            test_breakpoints_2 => [
+                #{line => 6, module => test_breakpoints_2},
+                #{line => 8, module => test_breakpoints_2},
+                #{line => 9, module => test_breakpoints_2}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    % We can retrieve them per module
+    ?assertEqual(
+        [
+            #{line => 6, module => test_breakpoints},
+            #{line => 7, module => test_breakpoints},
+            #{line => 8, module => test_breakpoints}
+        ],
+        edb:get_breakpoints(test_breakpoints)
+    ),
+
+    ?assertEqual(
+        [
+            #{line => 6, module => test_breakpoints_2},
+            #{line => 8, module => test_breakpoints_2},
+            #{line => 9, module => test_breakpoints_2}
+        ],
+        edb:get_breakpoints(test_breakpoints_2)
+    ),
+
+    % We remove one of the breakpoints
+    ok = edb:clear_breakpoint(test_breakpoints, 8),
+
+    % We no longer see it
+    ?assertEqual(
+        [
+            #{line => 6, module => test_breakpoints},
+            #{line => 7, module => test_breakpoints}
+        ],
+        edb:get_breakpoints(test_breakpoints)
+    ),
+
+    % The other module is not affected
+    ?assertEqual(
+        [
+            #{line => 6, module => test_breakpoints_2},
+            #{line => 8, module => test_breakpoints_2},
+            #{line => 9, module => test_breakpoints_2}
+        ],
+        edb:get_breakpoints(test_breakpoints_2)
     ),
 
     % Check the events delivered

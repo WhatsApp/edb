@@ -31,7 +31,7 @@
 
 -export([add_breakpoint/2]).
 -export([clear_breakpoint/2, clear_breakpoints/1]).
--export([get_breakpoints/0]).
+-export([get_breakpoints/0, get_breakpoints/1]).
 -export([get_breakpoints_hit/0]).
 
 -export([step_over/1, step_out/1]).
@@ -278,6 +278,12 @@ clear_breakpoint(Module, Line) ->
 -spec get_breakpoints() -> #{module() => [breakpoint_info()]}.
 get_breakpoints() ->
     call_server(get_breakpoints).
+
+%% @doc Get currently set breakpoints for a given module on the remote node.
+-spec get_breakpoints(Module) -> [breakpoint_info()] when
+    Module :: module().
+get_breakpoints(Module) ->
+    call_server({get_breakpoints, Module}).
 
 %% @doc Pause the execution of the remote node.
 -spec pause() -> ok.
