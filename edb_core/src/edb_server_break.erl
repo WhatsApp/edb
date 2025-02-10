@@ -300,7 +300,7 @@ add_explicit(Module, Line, Breakpoints0) ->
     end.
 
 -spec clear_explicit(module(), line(), breakpoints()) ->
-    {ok, removed | vanished, breakpoints()} | {error, not_found | {invariant_violation, term()}}.
+    {ok, removed | vanished, breakpoints()} | {error, not_found}.
 clear_explicit(Module, Line, Breakpoints0) ->
     case unregister_explicit(Module, Line, Breakpoints0) of
         {found, Breakpoints1} ->
@@ -311,7 +311,7 @@ clear_explicit(Module, Line, Breakpoints0) ->
                 {error, unknown_vm_breakpoint} ->
                     % Breakpoint was registered as explicit but not as a reason?
                     % This should never happen, if it does we have a bug.
-                    {error, {invariant_violation, inconsistent_explicit_breakpoint}}
+                    edb_server:invariant_violation(inconsistent_explicit_breakpoint)
             end;
         not_found ->
             %% We didn't know about this breakpoint, trying to clear it is a user error.

@@ -24,8 +24,14 @@
 %% External exports
 -export([start/0, stop/0, find/0]).
 
+%% gen_server call wrappers that will throw on invariant violations
+-export([call/2, call/3]).
+
 %% gen_server callbacks
 -export([init/1, terminate/2, handle_call/3, handle_cast/2, handle_info/2]).
+
+%% Invariant management
+-export([invariant_violation/1]).
 
 -export_type([call_request/0]).
 
@@ -183,51 +189,82 @@ terminate(Reason, State0) ->
 handle_cast(_, _State) ->
     error(not_implemented).
 
+-spec call(Node :: node(), Request :: call_request()) -> term().
+call(Node, Request) ->
+    case gen_server:call({?MODULE, Node}, Request) of
+        {invariant_violation, Term} -> throw({invariant_violation, Term});
+        Reply -> Reply
+    end.
+
+-spec call(Node :: node(), Request :: call_request(), Timeout :: pos_integer() | infinity) -> term().
+call(Node, Request, Timeout) ->
+    case gen_server:call({?MODULE, Node}, Request, Timeout) of
+        {invariant_violation, Term} -> throw({invariant_violation, Term});
+        Reply -> Reply
+    end.
+
+%% @doc Signal an invariant violation. The server will catch the error and return it as a term.
+-spec invariant_violation(term()) -> no_return().
+invariant_violation(Term) ->
+    throw({invariant_violation, Term}).
+
 -spec handle_call(Request, From, state()) -> Result when
     Request :: call_request(),
     From :: gen_server:from(),
     Result :: {reply, Reply :: term(), NewState :: state()} | {noreply, NewState :: state()}.
-handle_call({subscribe_to_events, Pid}, _From, State0) ->
+handle_call(Request, From, State) ->
+    try
+        dispatch_call(Request, From, State)
+    catch
+        throw:{invariant_violation, Term}:ST ->
+            {reply, {invariant_violation, #{error => Term, stacktrace => ST}}, State}
+    end.
+
+-spec dispatch_call(Request, From, state()) -> Result when
+    Request :: call_request(),
+    From :: gen_server:from(),
+    Result :: {reply, Reply :: term(), NewState :: state()} | {noreply, NewState :: state()}.
+dispatch_call({subscribe_to_events, Pid}, _From, State0) ->
     subscribe_to_events_impl(Pid, State0);
-handle_call({remove_event_subscription, Subscription}, _From, State0) ->
+dispatch_call({remove_event_subscription, Subscription}, _From, State0) ->
     remove_event_subscription_impl(Subscription, State0);
-handle_call({send_sync_event, Subscription}, _From, State0) ->
+dispatch_call({send_sync_event, Subscription}, _From, State0) ->
     send_sync_event_impl(Subscription, State0);
-handle_call({add_breakpoint, Module, Line}, _From, State0) ->
+dispatch_call({add_breakpoint, Module, Line}, _From, State0) ->
     add_breakpoint_impl(Module, Line, State0);
-handle_call({clear_breakpoints, Module}, _From, State0) ->
+dispatch_call({clear_breakpoints, Module}, _From, State0) ->
     clear_breakpoints_impl(Module, State0);
-handle_call({clear_breakpoint, Module, Line}, _From, State0) ->
+dispatch_call({clear_breakpoint, Module, Line}, _From, State0) ->
     clear_breakpoint_impl(Module, Line, State0);
-handle_call(get_breakpoints, _From, State0) ->
+dispatch_call(get_breakpoints, _From, State0) ->
     get_breakpoints_impl(State0);
-handle_call({get_breakpoints, Module}, _From, State0) ->
+dispatch_call({get_breakpoints, Module}, _From, State0) ->
     get_breakpoints_impl(Module, State0);
-handle_call(get_breakpoints_hit, _From, State) ->
+dispatch_call(get_breakpoints_hit, _From, State) ->
     get_breakpoints_hit_impl(State);
-handle_call(pause, _From, State0) ->
+dispatch_call(pause, _From, State0) ->
     pause_impl(State0);
-handle_call(continue, _From, State0) ->
+dispatch_call(continue, _From, State0) ->
     continue_impl(State0);
-handle_call({process_info, Pid}, _From, State0) ->
+dispatch_call({process_info, Pid}, _From, State0) ->
     process_info_impl(Pid, State0);
-handle_call(processes, _From, State0) ->
+dispatch_call(processes, _From, State0) ->
     processes_impl(State0);
-handle_call(excluded_processes, _From, State0) ->
+dispatch_call(excluded_processes, _From, State0) ->
     excluded_processes_impl(State0);
-handle_call({exclude_processes, Specs}, _From, State0) ->
+dispatch_call({exclude_processes, Specs}, _From, State0) ->
     exclude_processes_impl(Specs, State0);
-handle_call(is_paused, _From, State0) ->
+dispatch_call(is_paused, _From, State0) ->
     is_paused_impl(State0);
-handle_call({unexclude_processes, Specs}, _From, State0) ->
+dispatch_call({unexclude_processes, Specs}, _From, State0) ->
     unexclude_processes_impl(Specs, State0);
-handle_call({stack_frames, Pid}, _From, State0) ->
+dispatch_call({stack_frames, Pid}, _From, State0) ->
     stack_frames_impl(Pid, State0);
-handle_call({stack_frame_vars, Pid, FrameId, MaxTermSize}, _From, State0) ->
+dispatch_call({stack_frame_vars, Pid, FrameId, MaxTermSize}, _From, State0) ->
     stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0);
-handle_call({step_over, Pid}, _From, State0) ->
+dispatch_call({step_over, Pid}, _From, State0) ->
     step_over_impl(Pid, State0);
-handle_call({step_out, Pid}, _From, State0) ->
+dispatch_call({step_out, Pid}, _From, State0) ->
     step_out_impl(Pid, State0).
 
 -spec handle_info(Info, State :: state()) -> {noreply, state()} when
@@ -382,7 +419,7 @@ clear_breakpoints_impl(Module, State0) ->
     Line :: line(),
     State0 :: state(),
     State1 :: state(),
-    Error :: not_found | {invariant_violation, term()}.
+    Error :: not_found.
 clear_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     case edb_server_break:clear_explicit(Module, Line, Breakpoints0) of

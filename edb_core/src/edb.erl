@@ -462,7 +462,7 @@ format(Format, Args) when is_list(Args) ->
 call_server(Request) ->
     Node = attached_node(),
     try
-        gen_server:call({edb_server, Node}, Request)
+        edb_server:call(Node, Request)
     catch
         exit:{{nodedown, Node}, {gen_server, call, Args}} when is_list(Args) ->
             edb_node_monitor:detach(),

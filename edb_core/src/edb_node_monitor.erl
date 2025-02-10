@@ -372,7 +372,7 @@ call_edb_server(Request, State0) ->
     case State0 of
         #{attached_node := {up, Node}} ->
             try
-                {reply, gen_server:call({edb_server, Node}, Request), State0}
+                {reply, edb_server:call(Node, Request), State0}
             catch
                 exit:{noproc, {gen_server, call, Args}} when is_list(Args) ->
                     % The edb_server on the debuggee crashed or was stopped
