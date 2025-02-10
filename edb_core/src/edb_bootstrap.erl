@@ -15,20 +15,20 @@
 %%
 %% @doc Code needed to initialize a debuggee node on attach.
 
--module(edb_boot).
+-module(edb_bootstrap).
 
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
 
--export([debuggee_boot/1]).
+-export([bootstrap_debuggee/1]).
 
--define(BOOT_FAILURE_MARKER, '__edb_boot_failure__').
+-define(BOOTSTRAP_FAILURE_MARKER, '__edb_bootstrap_failure__').
 
--spec debuggee_boot(Debugger) -> ok | {error, Reason} when
+-spec bootstrap_debuggee(Debugger) -> ok | {error, Reason} when
     Debugger :: node(),
-    Reason :: edb:boot_failure().
-debuggee_boot(Debugger) ->
+    Reason :: edb:bootstrap_failure().
+bootstrap_debuggee(Debugger) ->
     case is_edb_server_running() of
         true ->
             ok;
@@ -39,8 +39,8 @@ debuggee_boot(Debugger) ->
                 start_edb_server(),
                 ok
             catch
-                throw:Failure = {?BOOT_FAILURE_MARKER, _} ->
-                    {error, boot_failure_reason(Failure)}
+                throw:Failure = {?BOOTSTRAP_FAILURE_MARKER, _} ->
+                    {error, bootstrap_failure_reason(Failure)}
             end
     end.
 
@@ -50,10 +50,10 @@ check_vm_support() ->
         true ->
             ok;
         false ->
-            boot_failure({no_debugger_support, not_enabled})
+            bootstrap_failure({no_debugger_support, not_enabled})
     catch
         error:undef ->
-            boot_failure({no_debugger_support, {missing, erl_debugger}})
+            bootstrap_failure({no_debugger_support, {missing, erl_debugger}})
     end.
 
 %% --------------------------------------------------------------------
@@ -87,7 +87,7 @@ get_object_code(Debugger) ->
 load_module(Module, Binary, Filename) ->
     case code:load_binary(Module, Filename, Binary) of
         {module, Module} -> ok;
-        {error, Reason} -> boot_failure({module_injection_failed, Module, Reason})
+        {error, Reason} -> bootstrap_failure({module_injection_failed, Module, Reason})
     end.
 
 %% --------------------------------------------------------------------
@@ -113,21 +113,21 @@ start_edb_server() ->
             % Likely started concurrently
             ok;
         {error, unsupported} ->
-            boot_failure({no_debugger_support, not_enabled})
+            bootstrap_failure({no_debugger_support, not_enabled})
     end.
 
 %% --------------------------------------------------------------------
 %% Error handling
 %% --------------------------------------------------------------------
--spec boot_failure(Reason) -> none() when
-    Reason :: edb:boot_failure().
-boot_failure(Reason) ->
-    throw({?BOOT_FAILURE_MARKER, Reason}).
+-spec bootstrap_failure(Reason) -> none() when
+    Reason :: edb:bootstrap_failure().
+bootstrap_failure(Reason) ->
+    throw({?BOOTSTRAP_FAILURE_MARKER, Reason}).
 
--spec boot_failure_reason({?BOOT_FAILURE_MARKER, term()}) -> Reason when
-    Reason :: edb:boot_failure().
-boot_failure_reason({?BOOT_FAILURE_MARKER, Reason}) ->
-    % eqwalizer:ignore -- term will only be produced using boot_failure/0
+-spec bootstrap_failure_reason({?BOOTSTRAP_FAILURE_MARKER, term()}) -> Reason when
+    Reason :: edb:bootstrap_failure().
+bootstrap_failure_reason({?BOOTSTRAP_FAILURE_MARKER, Reason}) ->
+    % eqwalizer:ignore -- term will only be produced using bootstrap_failure/0
     Reason.
 
 %% --------------------------------------------------------------------

@@ -55,8 +55,8 @@
 -type fun_name() :: atom().
 -export_type([fun_name/0]).
 
--export_type([boot_failure/0]).
--type boot_failure() ::
+-export_type([bootstrap_failure/0]).
+-type bootstrap_failure() ::
     {no_debugger_support, {missing, erl_debugger} | not_enabled}
     | {module_injection_failed, module(), Reason :: term()}.
 
@@ -175,7 +175,7 @@
     Reason ::
         attachment_in_progress
         | nodedown
-        | boot_failure()
+        | bootstrap_failure()
         | term().
 attach(AttachOpts0) ->
     {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{

@@ -61,7 +61,7 @@ start_link() ->
 -spec attach(node(), timeout()) -> ok | {error, Reason} when
     Reason ::
         nodedown
-        | edb:boot_failure()
+        | edb:bootstrap_failure()
         | term().
 attach(Node, AttachTimeout) when is_atom(Node), AttachTimeout =:= infinity orelse AttachTimeout >= 0 ->
     call({attach, Node, AttachTimeout}).
@@ -192,7 +192,7 @@ handle_info(_Info, State) ->
     Reason ::
         attachment_in_progress
         | nodedown
-        | edb:boot_failure()
+        | edb:bootstrap_failure()
         | term(),
     State :: state().
 attach_impl(_, _, _, State = #{attached_node := {attaching, _, _, _}}) ->
@@ -311,19 +311,19 @@ nodedown_impl(Node, Reason, State0) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
--spec boot_edb(Node) -> ok | {error, edb:boot_failure()} when
+-spec bootstrap_edb(Node) -> ok | {error, edb:bootstrap_failure()} when
     Node :: node().
-boot_edb(Node) ->
-    {Module, Binary, Filename} = code:get_object_code(edb_boot),
+bootstrap_edb(Node) ->
+    {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
     % elp:ignore W0014 - Debugging tool, expected.
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
-        {module, edb_boot} ->
+        {module, edb_bootstrap} ->
             % elp:ignore W0014 - Debugging tool, expected.
-            Result = erpc:call(Node, edb_boot, debuggee_boot, [node()]),
+            Result = erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node()]),
             % eqwalizer:fixme -- eqwalizer should infer the type from the callee
             Result;
         {error, badfile} ->
-            {error, {module_injection_failed, edb_boot, incompatible_beam}}
+            {error, {module_injection_failed, edb_bootstrap, incompatible_beam}}
     end.
 
 -spec schedule_try_attach(node()) -> ok.
@@ -342,7 +342,7 @@ schedule_try_attach_after(Delay, Node) ->
 -spec on_node_connected(state()) -> state().
 on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}}) ->
     {TimerAction, State2} =
-        try boot_edb(Node) of
+        try bootstrap_edb(Node) of
             Error = {error, _} ->
                 State1 = State0#{attached_node := not_attached},
                 gen_server:reply(Caller, Error),
