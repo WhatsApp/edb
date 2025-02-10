@@ -414,12 +414,11 @@ clear_breakpoints_impl(Module, State0) ->
     ),
     {reply, ok, State1}.
 
--spec clear_breakpoint_impl(Module, Line, State0) -> {reply, ok | {error, Error}, State1} when
+-spec clear_breakpoint_impl(Module, Line, State0) -> {reply, ok | {error, not_found}, State1} when
     Module :: module(),
     Line :: line(),
     State0 :: state(),
-    State1 :: state(),
-    Error :: not_found.
+    State1 :: state().
 clear_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     case edb_server_break:clear_explicit(Module, Line, Breakpoints0) of

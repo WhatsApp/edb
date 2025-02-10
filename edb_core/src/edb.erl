@@ -267,10 +267,9 @@ clear_breakpoints(Module) ->
     call_server({clear_breakpoints, Module}).
 
 %% @doc Clear a previously set breakpoint on the remote node.
--spec clear_breakpoint(Module, Line) -> ok | {error, Reason} when
+-spec clear_breakpoint(Module, Line) -> ok | {error, not_found} when
     Module :: module(),
-    Line :: line(),
-    Reason :: {unsupported, Module | Line} | {badkey, Module | Line}.
+    Line :: line().
 clear_breakpoint(Module, Line) ->
     call_server({clear_breakpoint, Module, Line}).
 
