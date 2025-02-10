@@ -403,15 +403,9 @@ add_breakpoint_impl(Module, Line, State0) ->
     State0 :: state(),
     State1 :: state().
 clear_breakpoints_impl(Module, State0) ->
-    BPSet = get_breakpoints(Module, State0),
-    State1 = edb_server_sets:fold(
-        fun(Line, StateN) ->
-            {reply, _, StateN_plus_1} = clear_breakpoint_impl(Module, Line, StateN),
-            StateN_plus_1
-        end,
-        State0,
-        BPSet
-    ),
+    #state{breakpoints = Breakpoints0} = State0,
+    {ok, Breakpoints1} = edb_server_break:clear_explicits(Module, Breakpoints0),
+    State1 = State0#state{breakpoints = Breakpoints1},
     {reply, ok, State1}.
 
 -spec clear_breakpoint_impl(Module, Line, State0) -> {reply, ok | {error, not_found}, State1} when
@@ -814,13 +808,6 @@ is_paused(State) ->
 get_breakpoints(State0) ->
     #state{breakpoints = Breakpoints} = State0,
     edb_server_break:get_explicits(Breakpoints).
-
--spec get_breakpoints(Module, State0) -> #{line() => []} when
-    Module :: module(),
-    State0 :: state().
-get_breakpoints(Module, State0) ->
-    #state{breakpoints = Breakpoints} = State0,
-    edb_server_break:get_explicits(Module, Breakpoints).
 
 -spec resume_processes(Targets, Reason, State0) -> {ok, ActuallyResumed, State1} when
     Targets :: set(pid()) | all,

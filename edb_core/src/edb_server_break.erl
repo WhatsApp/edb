@@ -24,6 +24,7 @@
     register_breakpoint_event/5,
     is_process_trapped/2,
     add_explicit/3,
+    clear_explicits/2,
     clear_explicit/3,
     resume_processes/2,
     add_steps_on_stack_frames/3
@@ -298,6 +299,22 @@ add_explicit(Module, Line, Breakpoints0) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+-spec clear_explicits(module(), breakpoints()) -> {ok, breakpoints()}.
+clear_explicits(Module, Breakpoints0) ->
+    Lines = maps:keys(get_explicits(Module, Breakpoints0)),
+    Breakpoints1 = lists:foldl(
+        fun(Line, AccBreakpointsIn) ->
+            case clear_explicit(Module, Line, AccBreakpointsIn) of
+                {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
+                % A breakpoint line taken from the list cannot be not_found
+                {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
+            end
+        end,
+        Breakpoints0,
+        Lines
+    ),
+    {ok, Breakpoints1}.
 
 -spec clear_explicit(module(), line(), breakpoints()) ->
     {ok, removed | vanished, breakpoints()} | {error, not_found}.
