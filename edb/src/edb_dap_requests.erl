@@ -100,11 +100,14 @@ set_breakpoints(State, #{source := #{path := Path}} = Args) ->
     % elp:ignore W0014 (cross_node_eval)
     erpc:call(Node, code, ensure_loaded, [Module]),
 
-    edb:clear_breakpoints(Module),
     SourceBreakpoints = maps:get(breakpoints, Args, []),
+    SourceBreakpointLines = [Line || #{line := Line} <- SourceBreakpoints],
+
+    LineResults = edb:set_breakpoints(Module, SourceBreakpointLines),
+
     Breakpoints = lists:map(
-        fun(#{line := Line}) ->
-            case edb:add_breakpoint(Module, Line) of
+        fun({Line, Result}) ->
+            case Result of
                 ok ->
                     #{line => Line, verified => true};
                 {error, Reason} ->
@@ -113,7 +116,7 @@ set_breakpoints(State, #{source := #{path := Path}} = Args) ->
                     #{line => Line, verified => false, message => Message, reason => <<"failed">>}
             end
         end,
-        SourceBreakpoints
+        LineResults
     ),
     Body = #{breakpoints => Breakpoints},
     #{response => #{success => true, body => Body}}.
