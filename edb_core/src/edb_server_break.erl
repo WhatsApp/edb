@@ -24,6 +24,7 @@
     register_breakpoint_event/5,
     is_process_trapped/2,
     add_explicit/3,
+    add_explicits/3,
     clear_explicits/2,
     clear_explicit/3,
     resume_processes/2,
@@ -287,6 +288,21 @@ add_step(Pid, Module, Line, Breakpoints0) ->
             % This is not a line where we can set a breakpoint, do nothing.
             Breakpoints0
     end.
+
+-spec add_explicits(module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when
+    LineResults :: [{line(), Result}],
+    Result :: ok | {error, edb:add_breakpoint_error()}.
+add_explicits(Module, Lines, Breakpoints0) ->
+    lists:mapfoldl(
+        fun(Line, AccBreakpointsIn) ->
+            case add_explicit(Module, Line, AccBreakpointsIn) of
+                {ok, AccBreakpointsOut} -> {{Line, ok}, AccBreakpointsOut};
+                {error, Error} -> {{Line, {error, Error}}, AccBreakpointsIn}
+            end
+        end,
+        Breakpoints0,
+        Lines
+    ).
 
 -spec add_explicit(module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
 add_explicit(Module, Line, Breakpoints0) ->

@@ -125,6 +125,7 @@ find() ->
     | {clear_breakpoints, module()}
     | get_breakpoints
     | {get_breakpoints, module()}
+    | {set_breakpoints, module(), [line()]}
     | get_breakpoints_hit
     | pause
     | continue
@@ -236,6 +237,8 @@ dispatch_call({clear_breakpoints, Module}, _From, State0) ->
     clear_breakpoints_impl(Module, State0);
 dispatch_call({clear_breakpoint, Module, Line}, _From, State0) ->
     clear_breakpoint_impl(Module, Line, State0);
+dispatch_call({set_breakpoints, Module, Lines}, _From, State0) ->
+    set_breakpoints_impl(Module, Lines, State0);
 dispatch_call(get_breakpoints, _From, State0) ->
     get_breakpoints_impl(State0);
 dispatch_call({get_breakpoints, Module}, _From, State0) ->
@@ -423,6 +426,19 @@ clear_breakpoint_impl(Module, Line, State0) ->
         {error, Reason} ->
             {reply, {error, Reason}, State0}
     end.
+
+-spec set_breakpoints_impl(Module, Lines, State0) -> {reply, Result, State1} when
+    Module :: module(),
+    Lines :: [line()],
+    State0 :: state(),
+    State1 :: state(),
+    Result :: edb:set_breakpoints_result().
+set_breakpoints_impl(Module, Lines, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    {ok, Breakpoints1} = edb_server_break:clear_explicits(Module, Breakpoints0),
+    {LineResults, Breakpoints2} = edb_server_break:add_explicits(Module, Lines, Breakpoints1),
+    State2 = State0#state{breakpoints = Breakpoints2},
+    {reply, LineResults, State2}.
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->
