@@ -28,8 +28,7 @@
     subtract/2,
     to_map/2,
     map_subtract_keys/2,
-    is_empty/1,
-    fold/3
+    is_empty/1
 ]).
 
 -export_type([set/1]).
@@ -77,11 +76,3 @@ to_map(S, V) ->
 -spec map_subtract_keys(Map :: #{K => V}, KeysToRemove :: set(K)) -> #{K => V}.
 map_subtract_keys(Map, KeysToRemove) ->
     #{A => B || A := B <- Map, not is_element(A, KeysToRemove)}.
-
--spec fold(Function, Acc0, Set) -> Acc1 when
-    Function :: fun((A, Acc) -> Acc),
-    Set :: set(A),
-    Acc0 :: Acc,
-    Acc1 :: Acc.
-fold(Function, Acc0, Set) ->
-    maps:fold(fun(Key, _Value, Acc) -> Function(Key, Acc) end, Acc0, Set).
