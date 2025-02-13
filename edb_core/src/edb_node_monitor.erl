@@ -43,8 +43,7 @@
     | #{
         state := attaching,
         node := node(),
-        caller := gen_statem:from(),
-        timer := undefined | reference()
+        caller := gen_statem:from()
     }
     | #{
         state := up,
@@ -62,12 +61,22 @@
 -type no_reply() ::
     keep_state_and_data
     | {keep_state, data()}
-    | {next_state, state(), data()}.
+    | {next_state, state(), data()}
+    | {next_state, state(), data(), action()}.
 
 -type reply(A) ::
-    {keep_state_and_data, {reply, gen_statem:from(), A}}
+    {keep_state_and_data, actions(A)}
     | {keep_state, data(), {reply, gen_statem:from(), A}}
-    | {next_state, state(), data(), {reply, gen_statem:from(), A}}.
+    | {next_state, state(), data(), actions(A)}.
+
+-type action() ::
+    {state_timeout, timeout(), Content :: term()}.
+
+-type action(A) ::
+    {reply, gen_statem:from(), A}.
+
+-type actions(A) ::
+    action(A) | [action() | action(A)].
 
 %% -------------------------------------------------------------------
 %% Public API
@@ -172,7 +181,7 @@ handle_event(info, {nodedown, Node, #{node_type := _, nodedown_reason := Reason}
 handle_event(info, {nodeup, Node, _}, State0 = #{state := attaching, node := Node}, Data0) ->
     State1 = on_node_connected(State0),
     {next_state, State1, Data0};
-handle_event(info, {timeout, TimerRef, attaching}, #{state := attaching, caller := Caller, timer := TimerRef}, Data0) ->
+handle_event(state_timeout, waiting_for_node, #{state := attaching, caller := Caller}, Data0) ->
     State1 = #{state => not_attached},
     {next_state, State1, Data0, {reply, Caller, {error, nodedown}}};
 handle_event(info, {'DOWN', MonitorRef, process, _Pid, _Info}, _, Data0) ->
@@ -220,20 +229,14 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
         false when AttachTimeout =:= 0 ->
             {keep_state_and_data, {reply, From, {error, nodedown}}};
         false ->
-            Timer =
-                case AttachTimeout of
-                    infinity -> undefined;
-                    TimeoutInMs -> erlang:start_timer(TimeoutInMs, self(), attaching)
-                end,
             State1 =
                 #{
                     state => attaching,
                     node => Node,
-                    caller => From,
-                    timer => Timer
+                    caller => From
                 },
             schedule_try_attach(Node),
-            {next_state, State1, Data0};
+            {next_state, State1, Data0, {state_timeout, AttachTimeout, waiting_for_node}};
         _ ->
             case State0 of
                 #{state := up, node := Node} ->
@@ -245,8 +248,7 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
                         #{
                             state => attaching,
                             node => Node,
-                            caller => From,
-                            timer => undefined
+                            caller => From
                         },
                     State3 = on_node_connected(State2),
                     {next_state, State3, Data1}
@@ -380,29 +382,24 @@ schedule_try_attach_after(Delay, Node) ->
     ok.
 
 -spec on_node_connected(state()) -> state().
-on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller, timer := Timer}) ->
-    {TimerAction, State2} =
+on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller}) ->
+    State2 =
         try bootstrap_edb(Node) of
             Error = {error, _} ->
                 State1 = #{state => not_attached},
                 gen_statem:reply(Caller, Error),
-                {cancel_timer, State1};
+                State1;
             ok ->
                 State1 = #{state => up, node => Node},
                 persistent_term:put({?MODULE, attached_node}, Node),
                 gen_statem:reply(Caller, ok),
-                {cancel_timer, State1}
+                State1
         catch
             error:{erpc, _} ->
                 % rpc may not be available yet, so we try again later
                 schedule_try_attach(Node),
-                {leave_timer, State0}
+                State0
         end,
-    case {TimerAction, Timer} of
-        {leave_timer, _} -> ok;
-        {cancel_timer, undefined} -> ok;
-        {cancel_timer, TimerRef} -> erlang:cancel_timer(TimerRef)
-    end,
     State2.
 
 -spec call_edb_server(Request :: edb_server:call_request(), state(), data()) -> Result when
