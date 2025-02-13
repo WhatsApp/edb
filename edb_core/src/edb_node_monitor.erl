@@ -19,15 +19,15 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--behavior(gen_server).
+-behavior(gen_statem).
 
 %% Public API
 -export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
 -export([subscribe/0, unsubscribe/1]).
 
-%% gen_server callbacks
--export([init/1, terminate/2, handle_call/3, handle_cast/2, handle_info/2]).
+%% gen_statem callbacks
+-export([init/1, callback_mode/0, handle_event/4]).
 
 %% -------------------------------------------------------------------
 %% Types
@@ -44,7 +44,7 @@
     | #{
         state := attaching,
         node := node(),
-        caller := gen_server:from(),
+        caller := gen_statem:from(),
         timer := undefined | reference(),
         event_subscribers := edb_events:subscribers()
     }
@@ -59,13 +59,23 @@
         event_subscribers := edb_events:subscribers()
     }.
 
+-type data() :: none.
+
+-type no_reply() ::
+    keep_state_and_data
+    | {next_state, state(), data()}.
+
+-type reply(A) ::
+    {keep_state_and_data, {reply, gen_statem:from(), A}}
+    | {next_state, state(), data(), {reply, gen_statem:from(), A}}.
+
 %% -------------------------------------------------------------------
 %% Public API
 %% -------------------------------------------------------------------
 
--spec start_link() -> gen_server:start_ret().
+-spec start_link() -> gen_statem:start_ret().
 start_link() ->
-    gen_server:start_link(
+    gen_statem:start_link(
         {local, ?MODULE},
         ?MODULE,
         [],
@@ -114,7 +124,7 @@ unsubscribe(Subscription) ->
 
 -spec call(call_request()) -> dynamic().
 call(Request) ->
-    case gen_server:call(?MODULE, Request, infinity) of
+    case gen_statem:call(?MODULE, Request, infinity) of
         badarg -> error(badarg);
         not_attached -> error(not_attached);
         Result -> Result
@@ -123,97 +133,92 @@ call(Request) ->
 -type cast_request() ::
     {try_attach, node()}.
 
+-type info_message() ::
+    {nodedown, node(), #{node_type := hidden | visible, nodedown_reason := term()}}
+    | {nodeup, node(), #{node_type := hidden | visible}}
+    | {timeout, TimeRef :: reference(), attaching}
+    | {'DOWN', MonitorRef :: reference(), process, pid(), Info :: term()}.
+
 %% -------------------------------------------------------------------
-%% gen_server callbacks
+%% gen_statem callbacks
 %% -------------------------------------------------------------------
 
--spec init(start_opts()) -> {ok, state()}.
+-spec init(start_opts()) -> {ok, state(), data()}.
 init([]) ->
     State = #{state => not_attached, event_subscribers => edb_events:no_subscribers()},
     ok = net_kernel:monitor_nodes(true, #{node_type => all, nodedown_reason => true}),
-    {ok, State}.
+    {ok, State, none}.
 
--spec terminate(Reason :: term(), State :: state()) -> ok.
-terminate(_Reason, _State) ->
-    ok.
+-spec callback_mode() -> handle_event_function.
+callback_mode() -> handle_event_function.
 
--spec handle_cast(Request, state()) -> Result when
-    Request :: cast_request(),
-    Result :: {noreply, state()}.
-handle_cast({try_attach, Node}, State0) ->
+-spec handle_event
+    (cast, cast_request(), state(), data()) -> gen_statem:event_handler_result(state(), data());
+    ({call, gen_statem:from()}, call_request(), state(), data()) -> gen_statem:event_handler_result(state(), data());
+    (info, info_message(), state(), data()) -> gen_statem:event_handler_result(state(), data()).
+handle_event(cast, {try_attach, Node}, State0, Data0) ->
+    try_attach_impl(Node, State0, Data0);
+handle_event({call, From}, {attach, Node, AttachTimeout}, State, Data) ->
+    attach_impl(Node, AttachTimeout, From, State, Data);
+handle_event({call, From}, detach, State, Data) ->
+    detach_impl(From, State, Data);
+handle_event({call, From}, {subscribe_to_events, Pid}, State, Data) ->
+    subscribe_to_events_impl(Pid, From, State, Data);
+handle_event({call, From}, {remove_event_subscription, Subscription}, State, Data) ->
+    remove_event_subscription_impl(Subscription, From, State, Data);
+handle_event(info, {nodedown, Node, #{node_type := _, nodedown_reason := Reason}}, State, Data) ->
+    nodedown_impl(Node, Reason, State, Data);
+handle_event(info, {nodeup, Node, _}, State0 = #{state := attaching, node := Node}, Data0) ->
+    State1 = on_node_connected(State0),
+    {next_state, State1, Data0};
+handle_event(
+    info, {timeout, TimerRef, attaching}, State0 = #{state := attaching, caller := Caller, timer := TimerRef}, Data0
+) ->
+    State1 = #{state => not_attached, event_subscribers => event_subscribers(State0)},
+    {next_state, State1, Data0, {reply, Caller, {error, nodedown}}};
+handle_event(info, {'DOWN', MonitorRef, process, _Pid, _Info}, State0, Data0) ->
+    Subs1 = edb_events:process_down(MonitorRef, event_subscribers(State0)),
+    State1 = set_event_subscribers(State0, Subs1),
+    {next_state, State1, Data0};
+handle_event(info, _, _State, _Data) ->
+    keep_state_and_data.
+
+%% -------------------------------------------------------------------
+%% Event handling implementations
+%% -------------------------------------------------------------------
+
+-spec try_attach_impl(Node, state(), data()) -> no_reply() when
+    Node :: node().
+try_attach_impl(Node, State0, Data0) ->
     case State0 of
         #{state := attaching, node := Node} ->
             case net_kernel:connect_node(Node) of
                 false ->
                     schedule_try_attach_after(50, Node),
-                    {noreply, State0};
+                    keep_state_and_data;
                 _ ->
                     State1 = on_node_connected(State0),
-                    {noreply, State1}
+                    {next_state, State1, Data0}
             end;
         _ ->
-            {noreply, State0}
+            keep_state_and_data
     end.
 
--spec handle_call(Request, From, state()) -> Result when
-    Request :: call_request(),
-    From :: gen_server:from(),
-    Result :: {reply, Reply :: term(), NewState :: state()} | {noreply, NewState :: state()}.
-handle_call({attach, Node, AttachTimeout}, From, State) ->
-    attach_impl(Node, AttachTimeout, From, State);
-handle_call(detach, _From, State) ->
-    detach_impl(State);
-handle_call({subscribe_to_events, Pid}, _From, State0) ->
-    subscribe_to_events_impl(Pid, State0);
-handle_call({remove_event_subscription, Subscription}, _From, State0) ->
-    remove_event_subscription_impl(Subscription, State0);
-handle_call(UnknownRequest, _From, State) ->
-    {reply, {error, {undef, UnknownRequest}}, State}.
-
--spec handle_info(Info, State :: state()) -> {noreply, state()} when
-    Info ::
-        {nodedown, node(), #{node_type := hidden | visible, nodedown_reason := term()}}
-        | {nodeup, node(), #{node_type := hidden | visible}}
-        | {timeout, TimeRef :: reference(), attaching}
-        | {'DOWN', MonitorRef :: reference(), process, pid(), Info :: term()}.
-handle_info({nodedown, Node, #{node_type := _, nodedown_reason := Reason}}, State) ->
-    nodedown_impl(Node, Reason, State);
-handle_info({nodeup, Node, _}, State0 = #{state := attaching, node := Node}) ->
-    State1 = on_node_connected(State0),
-    {noreply, State1};
-handle_info(
-    {timeout, TimerRef, attaching}, State0 = #{state := attaching, caller := Caller, timer := TimerRef}
-) ->
-    gen_server:reply(Caller, {error, nodedown}),
-    State1 = #{state => not_attached, event_subscribers => event_subscribers(State0)},
-    {noreply, State1};
-handle_info({'DOWN', MonitorRef, process, _Pid, _Info}, State0) ->
-    Subs1 = edb_events:process_down(MonitorRef, event_subscribers(State0)),
-    State1 = set_event_subscribers(State0, Subs1),
-    {noreply, State1};
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%% -------------------------------------------------------------------
-%% handle_call and handle_info implementations
-%% -------------------------------------------------------------------
--spec attach_impl(Node, AttachTimeout, From, State) -> {reply, Reply, State} | {noreply, State} when
+-spec attach_impl(Node, AttachTimeout, From, state(), data()) -> no_reply() | reply(ok | {error, Reason}) when
     Node :: node(),
     AttachTimeout :: timeout(),
-    From :: gen_server:from(),
-    Reply :: ok | {error, Reason},
+    From :: gen_statem:from(),
     Reason ::
         attachment_in_progress
         | nodedown
         | edb:bootstrap_failure()
-        | term(),
-    State :: state().
-attach_impl(_, _, _, State = #{state := attaching}) ->
-    {reply, {error, attachment_in_progress}, State};
-attach_impl(Node, AttachTimeout, From, State0) ->
+        | term().
+attach_impl(_, _, From, #{state := attaching}, _) ->
+    {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
+attach_impl(Node, AttachTimeout, From, State0, Data0) ->
     case net_kernel:connect_node(Node) of
         false when AttachTimeout =:= 0 ->
-            {reply, {error, nodedown}, State0};
+            {keep_state_and_data, {reply, From, {error, nodedown}}};
         false ->
             Timer =
                 case AttachTimeout of
@@ -229,14 +234,14 @@ attach_impl(Node, AttachTimeout, From, State0) ->
                     event_subscribers => event_subscribers(State0)
                 },
             schedule_try_attach(Node),
-            {noreply, State1};
+            {next_state, State1, Data0};
         _ ->
             case State0 of
                 #{state := up, node := Node} ->
                     % Attaching to the same node is a no-op
-                    {reply, ok, State0};
+                    {keep_state_and_data, {reply, From, ok}};
                 _ ->
-                    {reply, _, State1} = detach_impl(State0),
+                    {_, State1} = detach_impl_1(State0),
                     State2 =
                         #{
                             state => attaching,
@@ -246,18 +251,23 @@ attach_impl(Node, AttachTimeout, From, State0) ->
                             event_subscribers => event_subscribers(State1)
                         },
                     State3 = on_node_connected(State2),
-                    {noreply, State3}
+                    {next_state, State3, Data0}
             end
     end.
 
--spec detach_impl(State) -> {reply, ok | not_attached, State} when
-    State :: state().
-detach_impl(State0) ->
+-spec detach_impl(From, state(), data()) -> reply(ok | not_attached) when
+    From :: gen_statem:from().
+detach_impl(From, State0, Data0) ->
+    {Reply, State1} = detach_impl_1(State0),
+    {next_state, State1, Data0, {reply, From, Reply}}.
+
+-spec detach_impl_1(state()) -> {ok | not_attached, state()}.
+detach_impl_1(State0) ->
     case State0 of
         #{state := up, event_subscribers := Subs} ->
             State1 = lists:foldl(
                 fun(Subscription, StateK) ->
-                    {reply, _, StateKplus1} = remove_event_subscription_impl(Subscription, StateK),
+                    {_, StateKplus1} = remove_event_subscription_impl_1(Subscription, StateK),
                     StateKplus1
                 end,
                 State0,
@@ -265,41 +275,45 @@ detach_impl(State0) ->
             ),
             State2 = #{state => not_attached, event_subscribers => event_subscribers(State1)},
             persistent_term:erase({?MODULE, attached_node}),
-            {reply, ok, State2};
+            {ok, State2};
         #{state := down, node := Node, event_subscribers := Subs} ->
             % Previous node may have gone down, if we have any subscribers is because
             % we failed to detect it in time, so let's notify now
             ok = edb_events:broadcast({nodedown, Node, unknown}, Subs),
             State1 = #{state => not_attached, event_subscribers => edb_events:no_subscribers()},
-            {reply, not_attached, State1};
+            {not_attached, State1};
         #{state := not_attached} ->
-            {reply, not_attached, State0}
+            {not_attached, State0}
     end.
 
--spec subscribe_to_events_impl(Pid, State0) -> {reply, {ok, Subscription} | not_attached, State1} when
+-spec subscribe_to_events_impl(Pid, From, state(), data()) -> reply({ok, Subscription} | not_attached) when
     Pid :: pid(),
-    State0 :: state(),
-    Subscription :: edb_events:subscription(),
-    State1 :: state().
-subscribe_to_events_impl(Pid, State0) ->
+    From :: gen_statem:from(),
+    Subscription :: edb_events:subscription().
+subscribe_to_events_impl(Pid, From, State0, Data0) ->
     % We let edb_server create a subscription; and we will save it too, so we can reuse
     % it later for "disconnected" events created from here
     case call_edb_server({subscribe_to_events, Pid}, State0) of
         {not_attached, State1} ->
-            {reply, not_attached, State1};
+            {next_state, State1, Data0, {reply, From, not_attached}};
         {reply, {ok, Subscription}, State1} ->
             Subs0 = event_subscribers(State1),
             MonitorRef = erlang:monitor(process, Pid),
             {ok, Subs1} = edb_events:subscribe(Subscription, Pid, MonitorRef, Subs0),
             State2 = set_event_subscribers(State1, Subs1),
-            {reply, {ok, Subscription}, State2}
+            {next_state, State2, Data0, {reply, From, {ok, Subscription}}}
     end.
 
--spec remove_event_subscription_impl(Subscription, State0) -> {reply, ok | not_attached, State1} when
+-spec remove_event_subscription_impl(Subscription, From, state(), data()) -> reply(ok | not_attached) when
     Subscription :: edb_events:subscription(),
-    State0 :: state(),
-    State1 :: state().
-remove_event_subscription_impl(Subscription, State0) ->
+    From :: gen_statem:from().
+remove_event_subscription_impl(Subscription, From, State0, Data0) ->
+    {Result, State1} = remove_event_subscription_impl_1(Subscription, State0),
+    {next_state, State1, Data0, {reply, From, Result}}.
+
+-spec remove_event_subscription_impl_1(Subscription, state()) -> {ok | not_attached, state()} when
+    Subscription :: edb_events:subscription().
+remove_event_subscription_impl_1(Subscription, State0) ->
     {Result, State2} =
         case call_edb_server({remove_event_subscription, Subscription}, State0) of
             {not_attached, State1} ->
@@ -316,22 +330,21 @@ remove_event_subscription_impl(Subscription, State0) ->
                 true = erlang:demonitor(MonitorRef),
                 set_event_subscribers(State2, Subs1)
         end,
-    {reply, Result, State3}.
+    {Result, State3}.
 
--spec nodedown_impl(Node, Reason, State) -> {noreply, State} when
+-spec nodedown_impl(Node, Reason, state(), data()) -> no_reply() when
     Node :: node(),
-    Reason :: term(),
-    State :: state().
-nodedown_impl(Node, Reason, State0) ->
+    Reason :: term().
+nodedown_impl(Node, Reason, State0, Data0) ->
     case State0 of
         #{state := Attachment, node := Node} when Attachment =:= up; Attachment =:= down ->
             Subs = event_subscribers(State0),
             ok = edb_events:broadcast({nodedown, Node, Reason}, Subs),
             State1 = #{state => not_attached, event_subscribers => Subs},
             persistent_term:erase({?MODULE, attached_node}),
-            {noreply, State1};
+            {next_state, State1, Data0};
         _ ->
-            {noreply, State0}
+            keep_state_and_data
     end.
 
 %% -------------------------------------------------------------------
@@ -355,7 +368,7 @@ bootstrap_edb(Node) ->
 
 -spec schedule_try_attach(node()) -> ok.
 schedule_try_attach(Node) ->
-    ok = gen_server:cast(?MODULE, {try_attach, Node}).
+    ok = gen_statem:cast(?MODULE, {try_attach, Node}).
 
 -spec schedule_try_attach_after(Delay :: non_neg_integer(), node()) -> ok.
 schedule_try_attach_after(Delay, Node) ->
@@ -373,12 +386,12 @@ on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller,
         try bootstrap_edb(Node) of
             Error = {error, _} ->
                 State1 = #{state => not_attached, event_subscribers => Subs},
-                gen_server:reply(Caller, Error),
+                gen_statem:reply(Caller, Error),
                 {cancel_timer, State1};
             ok ->
                 State1 = #{state => up, node => Node, event_subscribers => Subs},
                 persistent_term:put({?MODULE, attached_node}, Node),
-                gen_server:reply(Caller, ok),
+                gen_statem:reply(Caller, ok),
                 {cancel_timer, State1}
         catch
             error:{erpc, _} ->
