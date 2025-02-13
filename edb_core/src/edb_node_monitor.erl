@@ -35,15 +35,29 @@
 
 -type start_opts() :: [].
 
--type state() :: #{
-    % Cached in a persistent-term while `up`
-    attached_node :=
-        not_attached
-        | {attaching, node(), Caller :: gen_server:from(), TimerRef :: undefined | reference()}
-        | {up, node()}
-        | {down, node()},
-    event_subscribers := edb_events:subscribers()
-}.
+-type state() ::
+    % NB. node is in a persistent-term while in the `up` state
+    #{
+        state := not_attached,
+        event_subscribers := edb_events:subscribers()
+    }
+    | #{
+        state := attaching,
+        node := node(),
+        caller := gen_server:from(),
+        timer := undefined | reference(),
+        event_subscribers := edb_events:subscribers()
+    }
+    | #{
+        state := up,
+        node := node(),
+        event_subscribers := edb_events:subscribers()
+    }
+    | #{
+        state := down,
+        node := node(),
+        event_subscribers := edb_events:subscribers()
+    }.
 
 %% -------------------------------------------------------------------
 %% Public API
@@ -115,10 +129,7 @@ call(Request) ->
 
 -spec init(start_opts()) -> {ok, state()}.
 init([]) ->
-    State = #{
-        attached_node => not_attached,
-        event_subscribers => edb_events:no_subscribers()
-    },
+    State = #{state => not_attached, event_subscribers => edb_events:no_subscribers()},
     ok = net_kernel:monitor_nodes(true, #{node_type => all, nodedown_reason => true}),
     {ok, State}.
 
@@ -131,7 +142,7 @@ terminate(_Reason, _State) ->
     Result :: {noreply, state()}.
 handle_cast({try_attach, Node}, State0) ->
     case State0 of
-        #{attached_node := {attaching, Node, _, _}} ->
+        #{state := attaching, node := Node} ->
             case net_kernel:connect_node(Node) of
                 false ->
                     schedule_try_attach_after(50, Node),
@@ -167,16 +178,18 @@ handle_call(UnknownRequest, _From, State) ->
         | {'DOWN', MonitorRef :: reference(), process, pid(), Info :: term()}.
 handle_info({nodedown, Node, #{node_type := _, nodedown_reason := Reason}}, State) ->
     nodedown_impl(Node, Reason, State);
-handle_info({nodeup, Node, _}, State0 = #{attached_node := {attaching, Node, _, _}}) ->
+handle_info({nodeup, Node, _}, State0 = #{state := attaching, node := Node}) ->
     State1 = on_node_connected(State0),
     {noreply, State1};
-handle_info({timeout, TimerRef, attaching}, State0 = #{attached_node := {attaching, _Node, Caller, TimerRef}}) ->
+handle_info(
+    {timeout, TimerRef, attaching}, State0 = #{state := attaching, caller := Caller, timer := TimerRef}
+) ->
     gen_server:reply(Caller, {error, nodedown}),
-    State1 = State0#{attached_node := not_attached},
+    State1 = #{state => not_attached, event_subscribers => event_subscribers(State0)},
     {noreply, State1};
-handle_info({'DOWN', MonitorRef, process, _Pid, _Info}, State0 = #{event_subscribers := Subs0}) ->
-    Subs1 = edb_events:process_down(MonitorRef, Subs0),
-    State1 = State0#{event_subscribers := Subs1},
+handle_info({'DOWN', MonitorRef, process, _Pid, _Info}, State0) ->
+    Subs1 = edb_events:process_down(MonitorRef, event_subscribers(State0)),
+    State1 = set_event_subscribers(State0, Subs1),
     {noreply, State1};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -195,7 +208,7 @@ handle_info(_Info, State) ->
         | edb:bootstrap_failure()
         | term(),
     State :: state().
-attach_impl(_, _, _, State = #{attached_node := {attaching, _, _, _}}) ->
+attach_impl(_, _, _, State = #{state := attaching}) ->
     {reply, {error, attachment_in_progress}, State};
 attach_impl(Node, AttachTimeout, From, State0) ->
     case net_kernel:connect_node(Node) of
@@ -207,17 +220,31 @@ attach_impl(Node, AttachTimeout, From, State0) ->
                     infinity -> undefined;
                     TimeoutInMs -> erlang:start_timer(TimeoutInMs, self(), attaching)
                 end,
-            State1 = State0#{attached_node := {attaching, Node, From, Timer}},
+            State1 =
+                #{
+                    state => attaching,
+                    node => Node,
+                    caller => From,
+                    timer => Timer,
+                    event_subscribers => event_subscribers(State0)
+                },
             schedule_try_attach(Node),
             {noreply, State1};
         _ ->
             case State0 of
-                #{attached_node := {up, Node}} ->
+                #{state := up, node := Node} ->
                     % Attaching to the same node is a no-op
                     {reply, ok, State0};
                 _ ->
                     {reply, _, State1} = detach_impl(State0),
-                    State2 = State1#{attached_node := {attaching, Node, From, undefined}},
+                    State2 =
+                        #{
+                            state => attaching,
+                            node => Node,
+                            caller => From,
+                            timer => undefined,
+                            event_subscribers => event_subscribers(State1)
+                        },
                     State3 = on_node_connected(State2),
                     {noreply, State3}
             end
@@ -227,7 +254,7 @@ attach_impl(Node, AttachTimeout, From, State0) ->
     State :: state().
 detach_impl(State0) ->
     case State0 of
-        #{attached_node := {up, _Node}, event_subscribers := Subs} ->
+        #{state := up, event_subscribers := Subs} ->
             State1 = lists:foldl(
                 fun(Subscription, StateK) ->
                     {reply, _, StateKplus1} = remove_event_subscription_impl(Subscription, StateK),
@@ -236,16 +263,16 @@ detach_impl(State0) ->
                 State0,
                 edb_events:subscriptions(Subs)
             ),
-            State2 = State1#{attached_node := not_attached},
+            State2 = #{state => not_attached, event_subscribers => event_subscribers(State1)},
             persistent_term:erase({?MODULE, attached_node}),
             {reply, ok, State2};
-        #{attached_node := {down, Node}, event_subscribers := Subs} ->
+        #{state := down, node := Node, event_subscribers := Subs} ->
             % Previous node may have gone down, if we have any subscribers is because
             % we failed to detect it in time, so let's notify now
             ok = edb_events:broadcast({nodedown, Node, unknown}, Subs),
-            State1 = #{attached_node => not_attached, event_subscribers => edb_events:no_subscribers()},
+            State1 = #{state => not_attached, event_subscribers => edb_events:no_subscribers()},
             {reply, not_attached, State1};
-        #{attached_node := not_attached} ->
+        #{state := not_attached} ->
             {reply, not_attached, State0}
     end.
 
@@ -261,10 +288,10 @@ subscribe_to_events_impl(Pid, State0) ->
         {not_attached, State1} ->
             {reply, not_attached, State1};
         {reply, {ok, Subscription}, State1} ->
-            #{event_subscribers := Subs0} = State1,
+            Subs0 = event_subscribers(State1),
             MonitorRef = erlang:monitor(process, Pid),
             {ok, Subs1} = edb_events:subscribe(Subscription, Pid, MonitorRef, Subs0),
-            State2 = State1#{event_subscribers := Subs1},
+            State2 = set_event_subscribers(State1, Subs1),
             {reply, {ok, Subscription}, State2}
     end.
 
@@ -280,14 +307,14 @@ remove_event_subscription_impl(Subscription, State0) ->
             {reply, ok, State1} ->
                 {ok, State1}
         end,
-    #{event_subscribers := Subs0} = State2,
+    Subs0 = event_subscribers(State2),
     State3 =
         case edb_events:unsubscribe(Subscription, Subs0) of
             not_subscribed ->
                 State2;
             {ok, {MonitorRef, Subs1}} ->
                 true = erlang:demonitor(MonitorRef),
-                State2#{event_subscribers := Subs1}
+                set_event_subscribers(State2, Subs1)
         end,
     {reply, Result, State3}.
 
@@ -297,10 +324,10 @@ remove_event_subscription_impl(Subscription, State0) ->
     State :: state().
 nodedown_impl(Node, Reason, State0) ->
     case State0 of
-        #{attached_node := {Attachment, Node}} when Attachment =:= up; Attachment =:= down ->
-            #{event_subscribers := Subs} = State0,
+        #{state := Attachment, node := Node} when Attachment =:= up; Attachment =:= down ->
+            Subs = event_subscribers(State0),
             ok = edb_events:broadcast({nodedown, Node, Reason}, Subs),
-            State1 = State0#{attached_node := not_attached},
+            State1 = #{state => not_attached, event_subscribers => Subs},
             persistent_term:erase({?MODULE, attached_node}),
             {noreply, State1};
         _ ->
@@ -340,15 +367,16 @@ schedule_try_attach_after(Delay, Node) ->
     ok.
 
 -spec on_node_connected(state()) -> state().
-on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}}) ->
+on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller, timer := Timer}) ->
+    Subs = event_subscribers(State0),
     {TimerAction, State2} =
         try bootstrap_edb(Node) of
             Error = {error, _} ->
-                State1 = State0#{attached_node := not_attached},
+                State1 = #{state => not_attached, event_subscribers => Subs},
                 gen_server:reply(Caller, Error),
                 {cancel_timer, State1};
             ok ->
-                State1 = State0#{attached_node := {up, Node}},
+                State1 = #{state => up, node => Node, event_subscribers => Subs},
                 persistent_term:put({?MODULE, attached_node}, Node),
                 gen_server:reply(Caller, ok),
                 {cancel_timer, State1}
@@ -370,20 +398,28 @@ on_node_connected(State0 = #{attached_node := {attaching, Node, Caller, Timer}})
     Result :: {reply, dynamic(), State} | {not_attached, State}.
 call_edb_server(Request, State0) ->
     case State0 of
-        #{attached_node := {up, Node}} ->
+        #{state := up, node := Node} ->
             try
                 {reply, edb_server:call(Node, Request), State0}
             catch
                 exit:{noproc, {gen_server, call, Args}} when is_list(Args) ->
                     % The edb_server on the debuggee crashed or was stopped
-                    State1 = State0#{attached_node := not_attached, event_subscribers := edb_events:no_subscribers()},
+                    State1 = #{state => not_attached, event_subscribers => edb_events:no_subscribers()},
                     persistent_term:erase({?MODULE, attached_node}),
                     {not_attached, State1};
                 exit:{{nodedown, Node}, {gen_server, call, Args}} when is_list(Args) ->
-                    State1 = State0#{attached_node := {down, Node}},
+                    State1 = #{state => down, node => Node, event_subscribers => event_subscribers(State0)},
                     persistent_term:erase({?MODULE, attached_node}),
                     {not_attached, State1}
             end;
         _ ->
             {not_attached, State0}
     end.
+
+-spec event_subscribers(state()) -> edb_events:subscribers().
+event_subscribers(#{event_subscribers := Subs}) ->
+    Subs.
+
+-spec set_event_subscribers(state(), edb_events:subscribers()) -> state().
+set_event_subscribers(State0, Subs) ->
+    State0#{event_subscribers := Subs}.
