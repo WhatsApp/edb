@@ -54,7 +54,8 @@ random_node_name(Prefix) ->
     #{
         node => node() | {prefix, binary() | string()},
         copy_code_path => boolean(),
-        enable_debugging_mode => boolean()
+        enable_debugging_mode => boolean(),
+        extra_args => [binary() | string()]
     }.
 
 -spec start_peer_node(CtConfig, Opts) -> {ok, Peer, Node, Cookie} when
@@ -67,18 +68,24 @@ start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
     ok = ensure_distributed(),
     Cookie = erlang:get_cookie(),
     [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
-    ExtraArgs =
+    ExtraArgs0 = [
+        case is_binary(Arg) of
+            true -> binary_to_list(Arg);
+            false -> Arg
+        end
+     || Arg <- maps:get(extra_args, Opts, [])
+    ],
+    ExtraArgs1 =
         case maps:get(enable_debugging_mode, Opts, true) of
-            true -> ["+D"];
-            false -> []
+            true -> ["+D" | ExtraArgs0];
+            false -> ExtraArgs0
         end,
     {ok, Peer, Node} = ?CT_PEER(#{
         name => NodeName,
         host => NodeHost,
         % TCP port, 0 stands for "automatic selection"
         connection => 0,
-        % +D is necessary to enable debugger support
-        args => ["-connect_all", "false", "-setcookie", atom_to_list(Cookie)] ++ ExtraArgs
+        args => ["-connect_all", "false", "-setcookie", atom_to_list(Cookie)] ++ ExtraArgs1
     }),
     StartedPeers =
         case erlang:get(?PROC_DICT_PEERS_KEY) of
