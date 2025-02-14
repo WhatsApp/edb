@@ -145,7 +145,6 @@ call(Request) ->
 -type info_message() ::
     {nodedown, node(), #{node_type := hidden | visible, nodedown_reason := term()}}
     | {nodeup, node(), #{node_type := hidden | visible}}
-    | {timeout, TimeRef :: reference(), attaching}
     | {'DOWN', MonitorRef :: reference(), process, pid(), Info :: term()}.
 
 %% -------------------------------------------------------------------
