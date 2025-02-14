@@ -26,11 +26,12 @@
 -export([
     suite/0,
     all/0,
+    groups/0,
     init_per_testcase/2,
     end_per_testcase/2
 ]).
 
-%% Test cases
+%% Attach test-cases
 -export([
     test_raises_error_until_attached/1,
     test_attaching_injects_edb_server/1,
@@ -39,7 +40,11 @@
     test_can_attach_async_with_infinity_timeout/1,
     test_fails_to_attach_after_timeout/1,
     test_attach_validates_args/1,
+    test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
+]).
 
+%% Detach test-cases
+-export([
     test_querying_on_a_vanished_node_detaches/1,
 
     test_terminating_detaches/1,
@@ -49,9 +54,7 @@
 
     test_reattaching_to_non_existent_node_doesnt_detach/1,
     test_reattaching_to_same_node_doesnt_detach/1,
-    test_reattaching_to_different_node_detaches_from_old_node/1,
-
-    test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
+    test_reattaching_to_different_node_detaches_from_old_node/1
 ]).
 
 %% erlfmt:ignore
@@ -63,26 +66,36 @@ suite() ->
 
 all() ->
     [
-        test_raises_error_until_attached,
-        test_attaching_injects_edb_server,
+        {group, test_attach},
+        {group, test_detach}
+    ].
 
-        test_can_attach_async_with_timeout,
-        test_can_attach_async_with_infinity_timeout,
-        test_fails_to_attach_after_timeout,
-        test_attach_validates_args,
+groups() ->
+    [
+        {test_attach, [
+            test_raises_error_until_attached,
+            test_attaching_injects_edb_server,
 
-        test_querying_on_a_vanished_node_detaches,
+            test_can_attach_async_with_timeout,
+            test_can_attach_async_with_infinity_timeout,
+            test_fails_to_attach_after_timeout,
+            test_attach_validates_args,
 
-        test_terminating_detaches,
-        test_terminating_on_a_vanished_node_detaches,
+            test_fails_to_attach_if_debuggee_not_in_debugging_mode
+        ]},
 
-        test_detaching_unsubscribes,
+        {test_detach, [
+            test_querying_on_a_vanished_node_detaches,
 
-        test_reattaching_to_non_existent_node_doesnt_detach,
-        test_reattaching_to_same_node_doesnt_detach,
-        test_reattaching_to_different_node_detaches_from_old_node,
+            test_terminating_detaches,
+            test_terminating_on_a_vanished_node_detaches,
 
-        test_fails_to_attach_if_debuggee_not_in_debugging_mode
+            test_detaching_unsubscribes,
+
+            test_reattaching_to_non_existent_node_doesnt_detach,
+            test_reattaching_to_same_node_doesnt_detach,
+            test_reattaching_to_different_node_detaches_from_old_node
+        ]}
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -93,9 +106,6 @@ end_per_testcase(_TestCase, _Config) ->
     ok = edb_test_support:stop_all_peer_nodes(),
     % ok = application:stop(edb_core),  % @oss-only
     ok.
-
-%%--------------------------------------------------------------------
-%% TEST CASES
 
 test_raises_error_until_attached(Config) ->
     % Initially, we are not attached to any node, so error on operations
@@ -203,6 +213,20 @@ test_attach_validates_args(_Config) ->
     ?assertError({badarg, {unknown, [foo]}}, edb:attach(Args#{foo => bar})),
     ?assertError({badarg, {unknown, [foo, hey]}}, edb:attach(Args#{foo => bar, hey => ho})),
     ok.
+
+test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
+    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{enable_debugging_mode => false}),
+
+    ?assertEqual(
+        {error, {no_debugger_support, not_enabled}},
+        edb:attach(#{node => Node})
+    ),
+
+    ok.
+
+%%--------------------------------------------------------------------
+%% DETACH TEST CASES
+%%--------------------------------------------------------------------
 
 test_querying_on_a_vanished_node_detaches(Config) ->
     {ok, Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{}),
@@ -355,16 +379,6 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
     ?assertEqual(
         [{sync, SyncRef}, unsubscribed],
         edb_test_support:collected_events()
-    ),
-
-    ok.
-
-test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
-    {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{enable_debugging_mode => false}),
-
-    ?assertEqual(
-        {error, {no_debugger_support, not_enabled}},
-        edb:attach(#{node => Node})
     ),
 
     ok.
