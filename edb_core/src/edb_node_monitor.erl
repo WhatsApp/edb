@@ -93,9 +93,9 @@ start_link() ->
 
 -spec attach(node(), timeout()) -> ok | {error, Reason} when
     Reason ::
-        nodedown
-        | edb:bootstrap_failure()
-        | term().
+        attachment_in_progress
+        | nodedown
+        | edb:bootstrap_failure().
 attach(Node, AttachTimeout) when is_atom(Node), AttachTimeout =:= infinity orelse AttachTimeout >= 0 ->
     call({attach, Node, AttachTimeout}).
 
@@ -219,8 +219,7 @@ try_attach_impl(Node, State0, Data0) ->
     Reason ::
         attachment_in_progress
         | nodedown
-        | edb:bootstrap_failure()
-        | term().
+        | edb:bootstrap_failure().
 attach_impl(_, _, From, #{state := attaching}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
 attach_impl(Node, AttachTimeout, From, State0, Data0) ->
