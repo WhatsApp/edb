@@ -272,17 +272,10 @@ event_collector_send_sync() ->
 %% Helpers
 %% --------------------------------------------------------------------
 
--spec ensure_epmd() -> ok.
-ensure_epmd() ->
-    (erl_epmd:names("localhost") =:= {error, address}) andalso
-        ([] = os:cmd("epmd -daemon")),
-    ok.
-
 -spec ensure_distributed() -> ok.
 ensure_distributed() ->
     case erlang:node() of
         'nonode@nohost' ->
-            ensure_epmd(),
             Prefix = atom_to_list(?MODULE),
             Name = random_node_name(Prefix),
             {ok, _Pid} = net_kernel:start([Name, shortnames]),
