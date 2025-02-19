@@ -174,30 +174,29 @@
 %% Arguments:
 %%
 %% * `node' - the node to attach to
-%% * `timeout' - how long to wait for the node to be up; defaults to 0
--spec attach(#{node := node(), timeout => timeout()}) -> ok | {error, Reason} when
+%% * `timeout' - how long to wait for the node to be up; defaults to 0,
+%% * 'cookie' - cookie to use for connecting to the node
+-spec attach(#{
+    node := node(),
+    timeout => timeout(),
+    cookie => atom()
+}) -> ok | {error, Reason} when
     Reason ::
         attachment_in_progress
         | nodedown
         | bootstrap_failure()
         | term().
 attach(AttachOpts0) ->
-    {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{
-        parse => fun(Node) when is_atom(Node) -> Node end
-    }),
+    {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{parse => fun parse_atom/1}),
+    {AttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{default => 0, parse => fun parse_timeout/1}),
+    {Cookie, AttachOpts3} = take_arg(cookie, AttachOpts2, #{default => {default}, parse => fun parse_atom/1}),
+    ok = no_more_args(AttachOpts3),
 
-    {AttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{
-        default => 0,
-        parse => fun
-            (infinity) -> infinity;
-            (Timeout) when is_integer(Timeout), Timeout >= 0 -> Timeout
-        end
-    }),
-
-    case maps:size(AttachOpts2) of
-        0 -> ok;
-        _ -> error({badarg, {unknown, maps:keys(AttachOpts2)}})
+    case Cookie of
+        {default} -> ok;
+        _ -> true = erlang:set_cookie(NodeToDebug, Cookie)
     end,
+
     edb_node_monitor:attach(NodeToDebug, AttachTimeout).
 
 %% @doc Detach from the currently attached node.
@@ -553,3 +552,17 @@ validate_procs_spec([Spec | MoreSpecs]) ->
         _ -> error({badarg, Spec})
     end,
     validate_procs_spec(MoreSpecs).
+
+-spec parse_atom(term()) -> atom().
+parse_atom(Atom) when is_atom(Atom) -> Atom.
+
+-spec parse_timeout(term()) -> timeout().
+parse_timeout(infinity) -> infinity;
+parse_timeout(Timeout) when is_integer(Timeout), Timeout >= 0 -> Timeout.
+
+-spec no_more_args(map()) -> ok.
+no_more_args(Opts) ->
+    case maps:size(Opts) of
+        0 -> ok;
+        _ -> error({badarg, {unknown, maps:keys(Opts)}})
+    end.

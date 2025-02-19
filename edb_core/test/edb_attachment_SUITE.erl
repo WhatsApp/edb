@@ -39,6 +39,7 @@
     test_can_attach_async_with_timeout/1,
     test_can_attach_async_with_infinity_timeout/1,
     test_fails_to_attach_after_timeout/1,
+    test_can_attach_with_specific_cookie/1,
     test_attach_validates_args/1,
     test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
 ]).
@@ -79,6 +80,7 @@ groups() ->
             test_can_attach_async_with_timeout,
             test_can_attach_async_with_infinity_timeout,
             test_fails_to_attach_after_timeout,
+            test_can_attach_with_specific_cookie,
             test_attach_validates_args,
 
             test_fails_to_attach_if_debuggee_not_in_debugging_mode
@@ -203,12 +205,31 @@ test_fails_to_attach_after_timeout(_Config) ->
     {error, nodedown} = edb:attach(#{node => Node, timeout => 100}),
     ok.
 
+test_can_attach_with_specific_cookie(Config) ->
+    CustomCookie1 = 'customcookie1',
+    CustomCookie2 = 'customcookie2',
+
+    % Start two nodes, one with each cookie
+    {ok, _Peer1, Node1, CustomCookie1} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie1}),
+    {ok, _Peer2, Node2, CustomCookie2} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie2}),
+
+    % We can't attach to a node with the wrong cookie
+    {error, nodedown} = edb:attach(#{node => Node1, cookie => CustomCookie2}),
+    {error, nodedown} = edb:attach(#{node => Node2, cookie => CustomCookie1}),
+
+    % We can attach to each node with the correct cookie
+    ok = edb:attach(#{node => Node1, cookie => CustomCookie1}),
+    ok = edb:attach(#{node => Node2, cookie => CustomCookie2}),
+
+    ok.
+
 test_attach_validates_args(_Config) ->
     ?assertError({badarg, {missing, node}}, edb:attach(#{})),
     ?assertError({badarg, #{node := ~"not a node"}}, edb:attach(#{node => ~"not a node"})),
 
     Args = #{node => edb_test_support:random_node("debuggee")},
     ?assertError({badarg, #{timeout := nan}}, edb:attach(Args#{timeout => nan})),
+    ?assertError({badarg, #{cookie := ~"blah"}}, edb:attach(Args#{cookie => ~"blah"})),
 
     ?assertError({badarg, {unknown, [foo]}}, edb:attach(Args#{foo => bar})),
     ?assertError({badarg, {unknown, [foo, hey]}}, edb:attach(Args#{foo => bar, hey => ho})),

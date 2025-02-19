@@ -20,6 +20,7 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
+-include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
@@ -54,6 +55,7 @@ random_node_name(Prefix) ->
 -type start_peer_node_opts() ::
     #{
         node => node() | {prefix, binary() | string()},
+        cookie => atom(),
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
         extra_args => [binary() | string()]
@@ -67,7 +69,8 @@ random_node_name(Prefix) ->
     Cookie :: atom() | nocookie.
 start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
     ok = ensure_distributed(),
-    Cookie = erlang:get_cookie(),
+    Cookie = maps:get(cookie, Opts, erlang:get_cookie()),
+    ?assertNotEqual(Cookie, nocookie, "A cookie needs to be given if dist is not enabled"),
     [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
     ExtraArgs0 = [
         case is_binary(Arg) of

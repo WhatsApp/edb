@@ -51,9 +51,7 @@ run_in_terminal(State, _Body) ->
         dist_listen => true,
         hidden => true
     }),
-    ?LOG_DEBUG("Setting cookie for node ~p (~p)", [NodeName, Cookie]),
-    true = erlang:set_cookie(NodeName, Cookie),
-    case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000}) of
+    case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
             {ok, Subscription} = edb:subscribe(),
             NewState = edb_dap_state:set_status(State, {attached, Subscription}),
