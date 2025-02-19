@@ -25,6 +25,7 @@
 -export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
 -export([subscribe/0, unsubscribe/1]).
+-export([safe_sname_hostname/0]).
 
 %% gen_statem callbacks
 -export([init/1, callback_mode/0, handle_event/4]).
@@ -120,6 +121,47 @@ subscribe() ->
     Subscription :: edb:event_subscription().
 unsubscribe(Subscription) ->
     call({remove_event_subscription, Subscription}).
+
+%% @doc Returns a host that is safe to use as a node shortname.
+%%
+%% Normally, net_kernel uses `inet:gethostname/0' to get the hostname, when
+%% building an sname. This is problematic in cases where you have a fleet
+%% of hosts and the naming convention is `nnn.my.fleet.net' where `nnn' is
+%% an integer. In this case, `inet:gethostname/0' will return `nnn', so you
+%% get a node name like `foo@nnn', but if you then try to connect to this
+%% node, inet_tcp_dist will end up calling `inet:getaddr/2' on `nnn', which
+%% will incorrectly interpret `nnn' as an IP address and the connection will
+%% of course fail.
+%%
+%% So let's try a couple of options and validate that they can be resolved
+%% properly.
+-spec safe_sname_hostname() -> atom().
+safe_sname_hostname() ->
+    Candidates = [
+        case inet:gethostname() of
+            {ok, H} -> list_to_atom(H)
+        end,
+
+        'localhost',
+
+        % This is 127.0.0.1 seen as a base-256 integer:
+        % 127*256^3 + 0*256^2 + 0*256^1 + 1*256^0 = 2130706433
+        '2130706433'
+    ],
+
+    InetFamily = inet_tcp:family(),
+    {ok, IfAddrs} = inet:getifaddrs(),
+    Ips = [Ip || {_IfName, IfOpts} <- IfAddrs, {addr, Ip} <- IfOpts],
+    ResolvesCorrectly = fun(Hostname) ->
+        case inet:getaddr(Hostname, InetFamily) of
+            {error, _} -> false;
+            {ok, Ip} -> lists:member(Ip, Ips)
+        end
+    end,
+    case lists:search(ResolvesCorrectly, Candidates) of
+        {value, Hostname} -> Hostname;
+        false -> error("no suitable hostname for sname!")
+    end.
 
 %% -------------------------------------------------------------------
 %% Requests

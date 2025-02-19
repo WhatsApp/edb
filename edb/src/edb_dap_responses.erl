@@ -44,9 +44,13 @@ run_in_terminal(State, _Body) ->
         target_node := #{name := NodeName, cookie := Cookie, type := Type},
         attach_timeout := AttachTimeoutInSecs
     } = edb_dap_state:get_context(State),
-    DebuggerNodeName = debugger_node_name(),
+    DebuggerNodeName = debugger_node(Type),
     ?LOG_DEBUG("Starting distribution (~p)", [DebuggerNodeName]),
-    {ok, _} = net_kernel:start([DebuggerNodeName, Type]),
+    {ok, _} = net_kernel:start(DebuggerNodeName, #{
+        name_domain => Type,
+        dist_listen => true,
+        hidden => true
+    }),
     ?LOG_DEBUG("Setting cookie for node ~p (~p)", [NodeName, Cookie]),
     true = erlang:set_cookie(NodeName, Cookie),
     case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000}) of
@@ -60,7 +64,16 @@ run_in_terminal(State, _Body) ->
             #{actions => [{event, <<"terminated">>, #{}}], state => NewState}
     end.
 
--spec debugger_node_name() -> atom().
-debugger_node_name() ->
+-spec debugger_node(NameDomain) -> node() when
+    NameDomain :: longnames | shortnames.
+debugger_node(NameDomain) ->
+    Host =
+        case NameDomain of
+            longnames ->
+                {ok, FQHostname} = net:gethostname(),
+                FQHostname;
+            shortnames ->
+                edb_node_monitor:safe_sname_hostname()
+        end,
     Hash = erlang:phash2(erlang:timestamp()),
-    list_to_atom(lists:flatten(io_lib:format("~s_~p@localhost", [?DEBUGGER_NAME_PREFIX, Hash]))).
+    list_to_atom(lists:flatten(io_lib:format("~s_~p@~s", [?DEBUGGER_NAME_PREFIX, Hash, Host]))).

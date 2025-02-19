@@ -42,7 +42,8 @@
 -spec random_node(Prefix :: string() | binary()) -> node().
 random_node(Prefix) ->
     Name = random_node_name(Prefix),
-    list_to_atom(lists:flatten(io_lib:format("~s@localhost", [Name]))).
+    Host = edb_node_monitor:safe_sname_hostname(),
+    list_to_atom(io_lib:format("~s@~s", [Name, Host])).
 
 -spec random_node_name(Prefix :: string() | binary()) -> atom().
 random_node_name(Prefix) when is_binary(Prefix) ->
@@ -274,6 +275,8 @@ event_collector_send_sync() ->
 
 -spec ensure_epmd() -> ok.
 ensure_epmd() ->
+    % epmd is started automatically only if `-name` nor `-sname` where
+    % given as arguments
     (erl_epmd:names("localhost") =:= {error, address}) andalso
         ([] = os:cmd("epmd -daemon")),
     ok.
@@ -284,8 +287,12 @@ ensure_distributed() ->
         'nonode@nohost' ->
             ensure_epmd(),
             Prefix = atom_to_list(?MODULE),
-            Name = random_node_name(Prefix),
-            {ok, _Pid} = net_kernel:start([Name, shortnames]),
+            Node = random_node(Prefix),
+            {ok, _Pid} = net_kernel:start(Node, #{
+                name_domain => shortnames,
+                dist_listen => true,
+                hidden => true
+            }),
             ok;
         _ ->
             ok
