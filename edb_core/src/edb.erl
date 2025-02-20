@@ -184,8 +184,7 @@
     Reason ::
         attachment_in_progress
         | nodedown
-        | bootstrap_failure()
-        | term().
+        | bootstrap_failure().
 attach(AttachOpts0) ->
     {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{parse => fun parse_atom/1}),
     {AttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{default => 0, parse => fun parse_timeout/1}),
