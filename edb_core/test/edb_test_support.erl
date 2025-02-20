@@ -20,7 +20,6 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
@@ -66,11 +65,20 @@ random_node_name(Prefix) ->
     Opts :: start_peer_node_opts(),
     Peer :: peer(),
     Node :: node(),
-    Cookie :: atom() | nocookie.
+    Cookie :: atom().
 start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
-    ok = ensure_distributed(),
-    Cookie = maps:get(cookie, Opts, erlang:get_cookie()),
-    ?assertNotEqual(Cookie, nocookie, "A cookie needs to be given if dist is not enabled"),
+    Cookie =
+        case Opts of
+            #{cookie := C} ->
+                C;
+            _ ->
+                case erlang:get_cookie() of
+                    nocookie ->
+                        list_to_atom(integer_to_list(erlang:unique_integer([positive])));
+                    DefaultCookie ->
+                        DefaultCookie
+                end
+        end,
     [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
     ExtraArgs0 = [
         case is_binary(Arg) of
@@ -270,33 +278,4 @@ event_collector_send_sync() ->
     receive
         {Ref, SyncRef} -> {ok, SyncRef}
     after 2_000 -> error(timeout_sync_event_collector)
-    end.
-
-%% --------------------------------------------------------------------
-%% Helpers
-%% --------------------------------------------------------------------
-
--spec ensure_epmd() -> ok.
-ensure_epmd() ->
-    % epmd is started automatically only if `-name` nor `-sname` where
-    % given as arguments
-    (erl_epmd:names("localhost") =:= {error, address}) andalso
-        ([] = os:cmd("epmd -daemon")),
-    ok.
-
--spec ensure_distributed() -> ok.
-ensure_distributed() ->
-    case erlang:node() of
-        'nonode@nohost' ->
-            ensure_epmd(),
-            Prefix = atom_to_list(?MODULE),
-            Node = random_node(Prefix),
-            {ok, _Pid} = net_kernel:start(Node, #{
-                name_domain => shortnames,
-                dist_listen => true,
-                hidden => true
-            }),
-            ok;
-        _ ->
-            ok
     end.

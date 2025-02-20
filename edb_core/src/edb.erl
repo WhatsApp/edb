@@ -171,6 +171,8 @@
 %% The attached node may already have a debugging session in progress,
 %% in this case, edb joins it.
 %%
+%% This call may start distribution and set the node name.
+%%
 %% Arguments:
 %%
 %% * `node' - the node to attach to
@@ -190,6 +192,16 @@ attach(AttachOpts0) ->
     {AttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{default => 0, parse => fun parse_timeout/1}),
     {Cookie, AttachOpts3} = take_arg(cookie, AttachOpts2, #{default => {default}, parse => fun parse_atom/1}),
     ok = no_more_args(AttachOpts3),
+
+    case NodeToDebug of
+        nonode@nohost when NodeToDebug /= node() ->
+            error({invalid_node, NodeToDebug});
+        nonode@nohost ->
+            ok;
+        _ ->
+            NameDomain = infer_name_domain(NodeToDebug),
+            ok = maybe_start_distribution(NameDomain)
+    end,
 
     case Cookie of
         {default} -> ok;
@@ -502,6 +514,80 @@ release_subscription(Subscription) ->
         end
     end,
     Go().
+
+%% -------------------------------------------------------------------
+%% Distribution
+%% -------------------------------------------------------------------
+-spec maybe_start_epmd() -> ok.
+maybe_start_epmd() ->
+    case init:get_argument(start_epmd) of
+        {ok, [["false"]]} ->
+            % we were told not to start epmd, hopefully the user knows what they are doing
+            ok;
+        _ ->
+            case erl_epmd:names("localhost") of
+                {error, address} ->
+                    % not running, let's start it ourselves
+                    EpmdPath = filename:join([code:root_dir(), "bin", "epmd"]),
+                    Cmd = lists:flatten(io_lib:format("~s -daemon", [EpmdPath])),
+                    [] = os:cmd(Cmd),
+                    ok;
+                _ ->
+                    ok
+            end
+    end.
+
+-spec debugger_node(NameDomain) -> node() when
+    NameDomain :: longnames | shortnames.
+debugger_node(NameDomain) ->
+    Host =
+        case NameDomain of
+            longnames ->
+                {ok, FQHostname} = net:gethostname(),
+                FQHostname;
+            shortnames ->
+                edb_node_monitor:safe_sname_hostname()
+        end,
+    NodeName = lists:flatten(
+        io_lib:format("edb-~s-~p@~s", [
+            os:getpid(),
+            erlang:unique_integer([positive]),
+            Host
+        ])
+    ),
+    list_to_atom(NodeName).
+
+-spec maybe_start_distribution(NameDomain) -> ok when
+    NameDomain :: longnames | shortnames.
+maybe_start_distribution(NameDomain) ->
+    case erlang:node() of
+        'nonode@nohost' ->
+            maybe_start_epmd(),
+            Node = debugger_node(NameDomain),
+            {ok, _Pid} = net_kernel:start(Node, #{
+                name_domain => NameDomain,
+                dist_listen => true,
+                hidden => true
+            }),
+            ok;
+        _ ->
+            ok
+    end.
+
+-spec infer_name_domain(Node) -> NameDomain when
+    Node :: node(),
+    NameDomain :: longnames | shortnames.
+infer_name_domain(Node) ->
+    case string:split(atom_to_list(Node), "@") of
+        [_Name, Host] ->
+            IsFqdn = lists:member($., Host),
+            case IsFqdn of
+                true -> longnames;
+                false -> shortnames
+            end;
+        _ ->
+            error({badarg, Node})
+    end.
 
 %% -------------------------------------------------------------------
 %% Argument handling

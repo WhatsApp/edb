@@ -35,22 +35,13 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(DEBUGGER_NAME_PREFIX, "edb_dap").
-
 -spec run_in_terminal(edb_dap_state:t(), edb_dap:run_in_terminal_response()) ->
     reaction().
 run_in_terminal(State, _Body) ->
     #{
-        target_node := #{name := NodeName, cookie := Cookie, type := Type},
+        target_node := #{name := NodeName, cookie := Cookie},
         attach_timeout := AttachTimeoutInSecs
     } = edb_dap_state:get_context(State),
-    DebuggerNodeName = debugger_node(Type),
-    ?LOG_DEBUG("Starting distribution (~p)", [DebuggerNodeName]),
-    {ok, _} = net_kernel:start(DebuggerNodeName, #{
-        name_domain => Type,
-        dist_listen => true,
-        hidden => true
-    }),
     case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
             {ok, Subscription} = edb:subscribe(),
@@ -61,17 +52,3 @@ run_in_terminal(State, _Body) ->
             NewState = edb_dap_state:set_status(State, cannot_attach),
             #{actions => [{event, <<"terminated">>, #{}}], state => NewState}
     end.
-
--spec debugger_node(NameDomain) -> node() when
-    NameDomain :: longnames | shortnames.
-debugger_node(NameDomain) ->
-    Host =
-        case NameDomain of
-            longnames ->
-                {ok, FQHostname} = net:gethostname(),
-                FQHostname;
-            shortnames ->
-                edb_node_monitor:safe_sname_hostname()
-        end,
-    Hash = erlang:phash2(erlang:timestamp()),
-    list_to_atom(lists:flatten(io_lib:format("~s_~p@~s", [?DEBUGGER_NAME_PREFIX, Hash, Host]))).
