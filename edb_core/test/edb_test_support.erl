@@ -14,11 +14,11 @@
 %%% % @format
 
 -module(edb_test_support).
--compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
+-typing([eqwalizer]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -37,13 +37,13 @@
 
 -define(PROC_DICT_PEERS_KEY, {?MODULE, peers}).
 
--type peer() :: gen_statem:ref().
+-type peer() :: peer:server_ref().
 
 -spec random_node(Prefix :: string() | binary()) -> node().
 random_node(Prefix) ->
     Name = random_node_name(Prefix),
     Host = edb_node_monitor:safe_sname_hostname(),
-    list_to_atom(io_lib:format("~s@~s", [Name, Host])).
+    list_to_atom(lists:flatten(io_lib:format("~s@~s", [Name, Host]))).
 
 -spec random_node_name(Prefix :: string() | binary()) -> atom().
 random_node_name(Prefix) when is_binary(Prefix) ->
@@ -157,8 +157,8 @@ stop_all_peer_nodes() ->
     end.
 
 -spec compile_and_load_file_in_peer(#{source := File, peer := Peer, ebin => Ebin}) -> {ok, Module} when
-    File :: file:name_all(),
-    Ebin :: file:name_all(),
+    File :: string(),
+    Ebin :: string(),
     Peer :: peer(),
     Module :: module().
 compile_and_load_file_in_peer(Opts = #{source := File, peer := Peer}) ->
