@@ -105,7 +105,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 end_per_testcase(_TestCase, _Config) ->
     ok = edb_test_support:stop_event_collector(),
-    ok = edb_test_support:stop_all_peer_nodes(),
+    ok = edb_test_support:stop_all_peers(),
     % ok = application:stop(edb_core),  % @oss-only
     ok.
 
@@ -260,7 +260,7 @@ test_querying_on_a_vanished_node_detaches(Config) ->
     ?assertMatch(#{}, edb:processes()),
 
     % Kill the node, we will be detached
-    ok = edb_test_support:stop_peer_node(Peer),
+    ok = edb_test_support:stop_peer(Peer),
     ?assertError(not_attached, edb:processes()),
 
     % Verify we get a nodedown event
@@ -296,7 +296,7 @@ test_terminating_on_a_vanished_node_detaches(Config) ->
     ?assertEqual(Node, edb:attached_node()),
 
     % Kill the peer node, we now fail to stop
-    ok = edb_test_support:stop_peer_node(Peer),
+    ok = edb_test_support:stop_peer(Peer),
 
     ?assertError(not_attached, edb:terminate()),
     ?assertError(not_attached, edb:attached_node()),

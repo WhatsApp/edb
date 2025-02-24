@@ -23,8 +23,8 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
--export_type([peer/0, start_peer_node_opts/0]).
--export([start_peer_node/2, stop_peer_node/1, stop_all_peer_nodes/0]).
+-export_type([peer/0, start_peer_node_opts/0, start_peer_no_dist_opts/0]).
+-export([start_peer_node/2, start_peer_no_dist/2, stop_peer/1, stop_all_peers/0]).
 -export([compile_and_load_file_in_peer/1]).
 -export([random_node/1]).
 
@@ -60,6 +60,13 @@ random_node_name(Prefix) ->
         extra_args => [binary() | string()]
     }.
 
+-type start_peer_no_dist_opts() ::
+    #{
+        copy_code_path => boolean(),
+        enable_debugging_mode => boolean(),
+        extra_args => [binary() | string()]
+    }.
+
 -spec start_peer_node(CtConfig, Opts) -> {ok, Peer, Node, Cookie} when
     CtConfig :: ct_suite:ct_config(),
     Opts :: start_peer_node_opts(),
@@ -79,40 +86,7 @@ start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
                         DefaultCookie
                 end
         end,
-    [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
-    ExtraArgs0 = [
-        case is_binary(Arg) of
-            true -> binary_to_list(Arg);
-            false -> Arg
-        end
-     || Arg <- maps:get(extra_args, Opts, [])
-    ],
-    ExtraArgs1 =
-        case maps:get(enable_debugging_mode, Opts, true) of
-            true -> ["+D" | ExtraArgs0];
-            false -> ExtraArgs0
-        end,
-    {ok, Peer, Node} = ?CT_PEER(#{
-        name => NodeName,
-        host => NodeHost,
-        % TCP port, 0 stands for "automatic selection"
-        connection => 0,
-        args => ["-connect_all", "false", "-setcookie", atom_to_list(Cookie)] ++ ExtraArgs1
-    }),
-    StartedPeers =
-        case erlang:get(?PROC_DICT_PEERS_KEY) of
-            undefined -> #{};
-            Peers when is_map(Peers) -> Peers
-        end,
-    erlang:put(?PROC_DICT_PEERS_KEY, StartedPeers#{Peer => Node}),
-    case maps:get(copy_code_path, Opts, false) of
-        true ->
-            ok = peer:call(Peer, code, add_pathsa, [code:get_path()]);
-        false ->
-            ok
-    end,
-    PrivDir = ?config(priv_dir, CtConfig),
-    ok = peer:call(Peer, code, add_pathsa, [PrivDir]),
+    {ok, Peer} = gen_start_peer(CtConfig, #{node => Node, cookie => Cookie}, maps:without([node, cookie], Opts)),
     {ok, Peer, Node, Cookie};
 start_peer_node(CtConfig, Opts0) ->
     {NamePrefix, Opts2} =
@@ -123,9 +97,88 @@ start_peer_node(CtConfig, Opts0) ->
     Node = random_node(NamePrefix),
     start_peer_node(CtConfig, Opts2#{node => Node}).
 
--spec stop_peer_node(Peer) -> ok when
+-spec start_peer_no_dist(CtConfig, Opts) -> {ok, Peer} when
+    CtConfig :: ct_suite:ct_config(),
+    Opts :: start_peer_no_dist_opts(),
     Peer :: peer().
-stop_peer_node(Peer) ->
+start_peer_no_dist(CtConfig, Opts) ->
+    {ok, Peer} = gen_start_peer(CtConfig, no_dist, Opts),
+    % Sanity-check
+    nonode@nohost = peer:call(Peer, erlang, node, []),
+    {ok, Peer}.
+
+-spec gen_start_peer(CtConfig, NodeInfo, Opts) -> {ok, Peer} when
+    CtConfig :: ct_suite:ct_config(),
+    NodeInfo :: no_dist | #{node := node(), cookie := atom()},
+    Opts :: start_peer_no_dist_opts(),
+    Peer :: peer().
+gen_start_peer(CtConfig, NodeInfo, Opts) ->
+    CommonArgs = ["-connect_all", "false"],
+    CookieArgs =
+        case NodeInfo of
+            no_dist -> [];
+            #{cookie := C} -> ["-setcookie", atom_to_list(C)]
+        end,
+    DebuggingArgs =
+        case maps:get(enable_debugging_mode, Opts, true) of
+            true -> ["+D"];
+            false -> []
+        end,
+    ExtraArgs = [
+        case Arg of
+            BinArg when is_binary(BinArg) -> binary_to_list(BinArg);
+            StrArg -> StrArg
+        end
+     || Arg <- maps:get(extra_args, Opts, [])
+    ],
+    PeerOpts0 = #{
+        % TCP port, 0 stands for "automatic selection"
+        connection => 0,
+        args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args]
+    },
+    PeerOpts1 =
+        case NodeInfo of
+            no_dist ->
+                PeerOpts0;
+            #{node := Node} ->
+                [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
+                PeerOpts0#{
+                    name => NodeName,
+                    host => NodeHost
+                }
+        end,
+    {ok, Peer, _Node} = ?CT_PEER(PeerOpts1),
+
+    case NodeInfo of
+        no_dist ->
+            % ?CT_PEER() always gives the node a name, so it starts distribution. So let's
+            % manually kill the net supervisor
+            ok = peer:call(Peer, supervisor, terminate_child, [kernel_sup, net_sup]),
+            ok = peer:call(Peer, supervisor, delete_child, [kernel_sup, net_sup]);
+        _ ->
+            ok
+    end,
+
+    StartedPeers =
+        case erlang:get(?PROC_DICT_PEERS_KEY) of
+            undefined -> #{};
+            Peers when is_map(Peers) -> Peers
+        end,
+    erlang:put(?PROC_DICT_PEERS_KEY, StartedPeers#{Peer => NodeInfo}),
+    case maps:get(copy_code_path, Opts, false) of
+        true ->
+            ok = peer:call(Peer, code, add_pathsa, [code:get_path()]);
+        false ->
+            ok
+    end,
+    PrivDir = ?config(priv_dir, CtConfig),
+    ok = peer:call(Peer, code, add_pathsa, [PrivDir]),
+
+    {ok, Peer}.
+
+-spec stop_peer(Peer) -> ok when
+    Peer :: peer().
+stop_peer(Peer) ->
     try peer:stop(Peer) of
         ok ->
             ok
@@ -134,23 +187,28 @@ stop_peer_node(Peer) ->
             ok
     end.
 
--spec stop_all_peer_nodes() -> ok.
-stop_all_peer_nodes() ->
+-spec stop_all_peers() -> ok.
+stop_all_peers() ->
     case erlang:get(?PROC_DICT_PEERS_KEY) of
         undefined ->
             ok;
         Peers when is_map(Peers) ->
             [
                 begin
-                    % If the node is paused by edb, peer:stop() would silently timeout
-                    % (init:stop() gets blocked, etc) so it will end up just "disconnecting"
-                    % the peer node. The actual node keeps up, though, so we leak
-                    % a OS process on each invocation of the test. So let's ensure the debugger
-                    % is stopped (which resumes every process) to avoid leaking resources
-                    catch erpc:call(Node, edb_server, stop, [], 30_000),
-                    ok = stop_peer_node(Peer)
+                    case NodeInfo of
+                        no_dist ->
+                            ok;
+                        #{node := Node} ->
+                            % If the node is paused by edb, peer:stop() would silently timeout
+                            % (init:stop() gets blocked, etc) so it will end up just "disconnecting"
+                            % the peer node. The actual node keeps up, though, so we leak
+                            % a OS process on each invocation of the test. So let's ensure the debugger
+                            % is stopped (which resumes every process) to avoid leaking resources
+                            catch erpc:call(Node, edb_server, stop, [], 30_000)
+                    end,
+                    ok = stop_peer(Peer)
                 end
-             || Peer := Node <- Peers
+             || Peer := NodeInfo <- Peers
             ],
             erlang:erase(?PROC_DICT_PEERS_KEY),
             ok

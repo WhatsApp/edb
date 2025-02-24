@@ -67,7 +67,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    edb_test_support:stop_all_peer_nodes(),
+    edb_test_support:stop_all_peers(),
     ok.
 
 %%--------------------------------------------------------------------
@@ -148,7 +148,7 @@ test_terminates_when_node_goes_down(Config) ->
     {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
 
-    edb_test_support:stop_peer_node(Peer),
+    edb_test_support:stop_peer(Peer),
 
     {ok, ExitedEvent} = edb_dap_test_client:wait_for_event(~"exited", Client),
     ?assertMatch([#{event := ~"exited", body := #{exitCode := 0}}], ExitedEvent),

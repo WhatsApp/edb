@@ -44,7 +44,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    edb_test_support:stop_all_peer_nodes(),
+    edb_test_support:stop_all_peers(),
     ok.
 
 %%--------------------------------------------------------------------
