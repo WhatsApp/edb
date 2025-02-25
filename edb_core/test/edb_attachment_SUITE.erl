@@ -41,6 +41,9 @@
     test_can_attach_async_with_infinity_timeout/1,
     test_fails_to_attach_after_timeout/1,
     test_can_attach_with_specific_cookie/1,
+    test_can_attach_when_distribution_is_already_started/1,
+    test_attaching_to_nonode_at_nohost/1,
+
     test_attach_validates_args/1,
     test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
 ]).
@@ -82,6 +85,9 @@ groups() ->
             test_can_attach_async_with_infinity_timeout,
             test_fails_to_attach_after_timeout,
             test_can_attach_with_specific_cookie,
+            test_can_attach_when_distribution_is_already_started,
+            test_attaching_to_nonode_at_nohost,
+
             test_attach_validates_args,
 
             test_fails_to_attach_if_debuggee_not_in_debugging_mode
@@ -231,6 +237,53 @@ test_can_attach_with_specific_cookie(Config) ->
         % We can attach to each node with the correct cookie
         ok = edb:attach(#{node => Node1, cookie => CustomCookie1}),
         ok = edb:attach(#{node => Node2, cookie => CustomCookie2}),
+
+        ok
+    end).
+
+test_can_attach_when_distribution_is_already_started(Config) ->
+    on_debugger_node(Config, fun() ->
+        % Sanity-check distribution is not started
+        ?assertEqual(#{started => no}, net_kernel:get_state()),
+
+        % Start distribution
+        ok = start_distribution(),
+        Cookie = erlang:get_cookie(),
+        % Sanity-check: distribution is started
+        ?assertMatch(#{started := dynamic}, net_kernel:get_state()),
+
+        % Start a debuggee with same cookie as debugger
+        {ok, _Peer, DebuggeeNode, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+
+        % We can attach to the DebuggeeNode, we don't need to specify a cookie
+        ok = edb:attach(#{node => DebuggeeNode})
+    end).
+
+test_attaching_to_nonode_at_nohost(Config) ->
+    on_debugger_node(Config, fun() ->
+        % Sanity-check: no distribution, so node is nonode@nohost
+        ?assertEqual(#{started => no}, net_kernel:get_state()),
+        ?assertEqual(nonode@nohost, node()),
+
+        % It is ok to attach to the current node without distribution
+        ok = edb:attach(#{node => nonode@nohost}),
+
+        % Distribution is not started when attaching to the local node
+        ?assertEqual(#{started => no}, net_kernel:get_state()),
+        ?assertEqual(nonode@nohost, node()),
+
+        ok = edb:detach(),
+
+        % Now let's start distribution
+        ok = start_distribution(),
+        ?assertMatch(#{started := dynamic}, net_kernel:get_state()),
+        ?assertNotEqual(nonode@nohost, node()),
+
+        % It is no longer ok to connect to nonode@nohost
+        ?assertError(
+            {invalid_node, nonode@nohost},
+            edb:attach(#{node => nonode@nohost})
+        ),
 
         ok
     end).
@@ -464,3 +517,10 @@ on_debugger_node(Config, Fun) ->
 
 -spec debugger_peer_key() -> debugger_peer.
 debugger_peer_key() -> debugger_peer.
+
+-spec start_distribution() -> ok.
+start_distribution() ->
+    DebuggerNode = edb_test_support:random_node("debugger"),
+    {ok, _} = net_kernel:start(DebuggerNode, #{name_domain => shortnames}),
+    erlang:set_cookie('234in20fmksdlkfsdfs'),
+    ok.
