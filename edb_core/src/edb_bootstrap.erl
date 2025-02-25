@@ -21,14 +21,15 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--export([bootstrap_debuggee/1]).
+-export([bootstrap_debuggee/2]).
 
 -define(BOOTSTRAP_FAILURE_MARKER, '__edb_bootstrap_failure__').
 
--spec bootstrap_debuggee(Debugger) -> ok | {error, Reason} when
+-spec bootstrap_debuggee(Debugger, PauseAction) -> ok | {error, Reason} when
     Debugger :: node(),
+    PauseAction :: pause | keep_running,
     Reason :: edb:bootstrap_failure().
-bootstrap_debuggee(Debugger) ->
+bootstrap_debuggee(Debugger, PauseAction) ->
     case is_edb_server_running() of
         true ->
             ok;
@@ -37,7 +38,13 @@ bootstrap_debuggee(Debugger) ->
                 check_vm_support(),
                 inject_edb_modules(Debugger),
                 start_edb_server(),
-                ok
+                case PauseAction of
+                    keep_running ->
+                        ok;
+                    pause ->
+                        ok = edb_server:call(node(), {exclude_processes, [{proc, self()}]}),
+                        ok = edb_server:call(node(), pause)
+                end
             catch
                 throw:Failure = {?BOOTSTRAP_FAILURE_MARKER, _} ->
                     {error, bootstrap_failure_reason(Failure)}

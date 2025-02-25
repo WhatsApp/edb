@@ -393,15 +393,16 @@ nodedown_impl(Node, Reason, State0, Data0) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
--spec bootstrap_edb(Node) -> ok | {error, edb:bootstrap_failure()} when
-    Node :: node().
-bootstrap_edb(Node) ->
+-spec bootstrap_edb(Node, PauseAction) -> ok | {error, edb:bootstrap_failure()} when
+    Node :: node(),
+    PauseAction :: pause | keep_running.
+bootstrap_edb(Node, PauseAction) ->
     {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
     % elp:ignore W0014 - Debugging tool, expected.
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
             % elp:ignore W0014 - Debugging tool, expected.
-            Result = erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node()]),
+            Result = erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), PauseAction]),
             % eqwalizer:fixme -- eqwalizer should infer the type from the callee
             Result;
         {error, badfile} ->
@@ -424,7 +425,7 @@ schedule_try_attach_after(Delay, Node) ->
 -spec on_node_connected(state()) -> state().
 on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller}) ->
     State2 =
-        try bootstrap_edb(Node) of
+        try bootstrap_edb(Node, keep_running) of
             Error = {error, _} ->
                 State1 = #{state => not_attached},
                 gen_statem:reply(Caller, Error),
