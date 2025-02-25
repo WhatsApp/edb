@@ -149,17 +149,24 @@ handle_info(Unexpected, State) ->
 handle_port_event({IO, {data, Data}}, State0 = #{io := IO, buffer := Buffer}) ->
     ?LOG_DEBUG("Received data: ~p (buffer: ~p)", [Data, Buffer]),
     {Frames, NewBuffer} = edb_dap:decode_frames(<<Buffer/binary, Data/binary>>),
-    [edb_dap_server:handle_message(edb_dap:unframe(Frame)) || Frame <- Frames],
+    [forward_incoming(edb_dap:unframe(Frame)) || Frame <- Frames],
     State1 = State0#{buffer => NewBuffer},
     {noreply, State1};
 handle_port_event({IO, eof}, State0 = #{io := IO}) ->
     ?LOG_INFO("Connection closed, exiting..."),
     {stop, normal, State0}.
 
+-spec forward_incoming(Message) -> ok when
+    Message :: edb_dap:request() | edb_dap:response().
+forward_incoming(Message) ->
+    ?LOG_INFO("==> ~p", [Message]),
+    edb_dap_server:handle_message(Message).
+
 -spec send(Payload, State) -> State when
     Payload :: map(),
     State :: state().
 send(Payload, State0 = #{io := IO, seq := Seq}) ->
+    ?LOG_INFO("<== ~p", [Payload]),
     Data = edb_dap:encode_frame(edb_dap:frame(Payload#{seq => Seq})),
     ?LOG_DEBUG("Sending data: ~p", [Data]),
     IO ! {self(), {command, [Data]}},
