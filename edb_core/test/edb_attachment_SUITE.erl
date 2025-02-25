@@ -50,6 +50,20 @@
     test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
 ]).
 
+%% Reverse-attach test-cases
+-export([
+    test_raises_error_until_reverse_attached/1,
+
+    test_reverse_attaching_picks_the_right_node/1,
+    test_injectable_code_can_be_composed/1,
+    test_reverse_attaching_blocks_further_attachs/1,
+    test_reverse_attach_fails_after_timeout/1,
+    test_reverse_attach_fails_if_debuggee_not_in_debugging_mode/1,
+    test_reverse_attach_detects_domain_mismatch/1,
+
+    test_reverse_attach_validates_args/1
+]).
+
 %% Detach test-cases
 -export([
     test_querying_on_a_vanished_node_detaches/1,
@@ -61,7 +75,8 @@
 
     test_reattaching_to_non_existent_node_doesnt_detach/1,
     test_reattaching_to_same_node_doesnt_detach/1,
-    test_reattaching_to_different_node_detaches_from_old_node/1
+    test_reattaching_to_different_node_detaches_from_old_node/1,
+    test_reverse_attaching_to_a_node_detaches_from_old_node/1
 ]).
 
 %% erlfmt:ignore
@@ -74,6 +89,7 @@ suite() ->
 all() ->
     [
         {group, test_attach},
+        {group, test_reverse_attach},
         {group, test_detach}
     ].
 
@@ -96,6 +112,19 @@ groups() ->
             test_fails_to_attach_if_debuggee_not_in_debugging_mode
         ]},
 
+        {test_reverse_attach, [
+            test_raises_error_until_reverse_attached,
+
+            test_reverse_attaching_picks_the_right_node,
+            test_injectable_code_can_be_composed,
+            test_reverse_attaching_blocks_further_attachs,
+            test_reverse_attach_fails_after_timeout,
+            test_reverse_attach_detects_domain_mismatch,
+
+            test_reverse_attach_validates_args,
+            test_reverse_attach_fails_if_debuggee_not_in_debugging_mode
+        ]},
+
         {test_detach, [
             test_querying_on_a_vanished_node_detaches,
 
@@ -106,7 +135,8 @@ groups() ->
 
             test_reattaching_to_non_existent_node_doesnt_detach,
             test_reattaching_to_same_node_doesnt_detach,
-            test_reattaching_to_different_node_detaches_from_old_node
+            test_reattaching_to_different_node_detaches_from_old_node,
+            test_reverse_attaching_to_a_node_detaches_from_old_node
         ]}
     ].
 
@@ -345,6 +375,170 @@ test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
     end).
 
 %%--------------------------------------------------------------------
+%% REVERSE ATTACH TEST CASES
+%%--------------------------------------------------------------------
+test_raises_error_until_reverse_attached(Config) ->
+    on_debugger_node(Config, fun() ->
+        % Initially, we are not attached to any node, so error on operations
+        ?assertError(not_attached, edb:attached_node()),
+        ?assertError(not_attached, edb:processes()),
+
+        % We are now waiting for a new node to attach
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % Launch new node, injecting special code to inject
+        {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode]
+        }),
+
+        % We eventually attach, and no longer error
+        ok = wait_reverse_attach_notification(Ref),
+        ?assertEqual(Node, edb:attached_node()),
+        ?assertMatch(#{}, edb:processes()),
+
+        % After detaching, we error again
+        ok = edb:detach(),
+        ?assertError(not_attached, edb:attached_node()),
+        ?assertError(not_attached, edb:processes()),
+
+        ok
+    end).
+
+test_reverse_attaching_picks_the_right_node(Config) ->
+    on_debugger_node(Config, fun() ->
+        % We are waiting for a node to attach
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % Launch two nodes, only of the them contains the injected code
+        {ok, _, NodeWithInjectedCode, _} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode]
+        }),
+        {ok, _, _TheOtherNode, _} = edb_test_support:start_peer_node(Config, #{}),
+
+        % We eventually attach to the node with injected code
+        ok = wait_reverse_attach_notification(Ref),
+        ?assertEqual(NodeWithInjectedCode, edb:attached_node()),
+        ok
+    end).
+
+test_injectable_code_can_be_composed(Config) ->
+    on_debugger_node(Config, fun() ->
+        % We are waiting for a node to attach
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % We create more complex code
+        ComplexInjectedCode = list_to_binary(
+            io_lib:format("~s, register(foo, self()), timer:sleep(infinity)", [InjectedCode])
+        ),
+
+        % Launch a node with the complex code
+        {ok, Peer, Node, _} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", ComplexInjectedCode]
+        }),
+
+        % We eventually attach
+        ok = wait_reverse_attach_notification(Ref),
+        ?assertEqual(Node, edb:attached_node()),
+
+        % The rest of the code was also executed
+        {ok, resumed} = edb:continue(),
+        ?assertMatch(
+            Pid when is_pid(Pid),
+            peer:call(Peer, erlang, whereis, [foo])
+        ),
+
+        ok
+    end).
+
+test_reverse_attaching_blocks_further_attachs(Config) ->
+    on_debugger_node(Config, fun() ->
+        % Start a reverse-attach that will never succeed
+        {ok, _} = edb:reverse_attach(#{name_domain => shortnames}),
+
+        % Attaching fails
+        {error, attachment_in_progress} = edb:attach(#{node => node()}),
+
+        % Reverse attaching fails
+        {error, attachment_in_progress} = edb:reverse_attach(#{name_domain => shortnames}),
+
+        ok
+    end).
+
+test_reverse_attach_fails_after_timeout(Config) ->
+    on_debugger_node(Config, fun() ->
+        {ok, #{notification_ref := Ref, erl_code_to_inject := _}} = edb:reverse_attach(#{
+            name_domain => shortnames,
+            timeout => 500
+        }),
+
+        % No node is started, so waiting fails after 0.5s
+        timeout = wait_reverse_attach_notification(Ref),
+
+        ok
+    end).
+
+test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
+    on_debugger_node(Config, fun() ->
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % start a node with debugging mode off
+        {ok, _Peer, _Node, _Cookie} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode],
+            enable_debugging_mode => false
+        }),
+
+        ?assertEqual(
+            {error, {no_debugger_support, not_enabled}},
+            wait_reverse_attach_notification(Ref)
+        ),
+
+        ok
+    end).
+
+test_reverse_attach_detects_domain_mismatch(Config) ->
+    on_debugger_node(Config, fun() ->
+        % When using shortnames, trying to reverse-attach using longnames should fail
+        ok = start_distribution(shortnames),
+        ?assertError(
+            {invalid_name_domain, longnames},
+            edb:reverse_attach(#{name_domain => longnames})
+        ),
+
+        ok = stop_distribution(),
+
+        % Conversely, when using longnames, trying to reverse-attach using shortnames should fail
+        ok = start_distribution(longnames),
+        ?assertError(
+            {invalid_name_domain, shortnames},
+            edb:reverse_attach(#{name_domain => shortnames})
+        ),
+
+        ok
+    end).
+
+test_reverse_attach_validates_args(Config) ->
+    on_debugger_node(Config, fun() ->
+        ?assertError({badarg, {missing, name_domain}}, edb:reverse_attach(#{})),
+        ?assertError({badarg, #{name_domain := mediumnames}}, edb:reverse_attach(#{name_domain => mediumnames})),
+
+        Args = #{name_domain => shortnames},
+        ?assertError({badarg, #{timeout := nan}}, edb:reverse_attach(Args#{timeout => nan})),
+
+        ?assertError({badarg, {unknown, [foo]}}, edb:reverse_attach(Args#{foo => bar})),
+        ?assertError({badarg, {unknown, [foo, hey]}}, edb:reverse_attach(Args#{foo => bar, hey => ho})),
+
+        ok
+    end).
+
+%%--------------------------------------------------------------------
 %% DETACH TEST CASES
 %%--------------------------------------------------------------------
 
@@ -524,6 +718,35 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
         ok
     end).
 
+test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
+    on_debugger_node(Config, fun() ->
+        {ok, _Peer1, Node1, Cookie} = edb_test_support:start_peer_node(Config, #{node => {prefix, "debuggee_1"}}),
+
+        ok = edb:attach(#{node => Node1, cookie => Cookie}),
+        ?assertEqual(edb:attached_node(), Node1),
+
+        ok = edb_test_support:start_event_collector(),
+
+        % Let the event collector get an event
+        {ok, SyncRef} = edb_test_support:event_collector_send_sync(),
+
+        % Reverse-attach to a different node
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+        {ok, _Peer2, Node2, _Cookie2} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode]
+        }),
+        ok = wait_reverse_attach_notification(Ref),
+        ?assertEqual(edb:attached_node(), Node2),
+
+        ?assertEqual(
+            [{sync, SyncRef}, unsubscribed],
+            edb_test_support:collected_events()
+        ),
+        ok
+    end).
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
@@ -563,3 +786,13 @@ start_distribution(NameDomain) ->
 -spec stop_distribution() -> ok.
 stop_distribution() ->
     ok = net_kernel:stop().
+
+-spec wait_reverse_attach_notification(NotificationRef :: reference()) -> ok | timeout | {error, edb:bootstrap_error()}.
+wait_reverse_attach_notification(NotificationRef) ->
+    receive
+        {NotificationRef, ok} -> ok;
+        {NotificationRef, timeout} -> timeout;
+        {NotificationRef, {error, Reason}} -> {error, Reason};
+        {NotificationRef, Unexpected} -> error(unexpected_notification, Unexpected)
+    after 2_000 -> error(timeout_waiting_for_notification)
+    end.

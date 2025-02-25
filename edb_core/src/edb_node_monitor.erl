@@ -24,6 +24,8 @@
 %% Public API
 -export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
+-export([expect_reverse_attach/3, reverse_attach_notification/2]).
+
 -export([subscribe/0, unsubscribe/1]).
 -export([safe_sname_hostname/0]).
 
@@ -42,9 +44,17 @@
         state := not_attached
     }
     | #{
-        state := attaching,
+        state := attachment_in_progress,
+        type := attach,
         node := node(),
         caller := gen_statem:from()
+    }
+    | #{
+        state := attachment_in_progress,
+        type := reverse_attach,
+        gatekeeper := edb_gatekeeper:id(),
+        notification_ref => reference(),
+        caller_pid := pid()
     }
     | #{
         state := up,
@@ -92,7 +102,9 @@ start_link() ->
         []
     ).
 
--spec attach(node(), timeout()) -> ok | {error, Reason} when
+-spec attach(Node, Timeout) -> ok | {error, Reason} when
+    Node :: node(),
+    Timeout :: timeout(),
     Reason ::
         attachment_in_progress
         | nodedown
@@ -112,6 +124,20 @@ attached_node() ->
         error:badarg ->
             error(not_attached)
     end.
+
+-spec expect_reverse_attach(Id, NotificationRef, Timeout) -> ok | {error, Reason} when
+    Id :: edb_gatekeeper:id(),
+    NotificationRef :: reference(),
+    Timeout :: timeout(),
+    Reason :: attachment_in_progress.
+expect_reverse_attach(Id, NotificationRef, Timeout) ->
+    call({expect_reverse_attach, Id, NotificationRef, Timeout}).
+
+-spec reverse_attach_notification(Id, Node) -> ok | {error, edb:bootstrap_failure()} when
+    Id :: edb_gatekeeper:id(),
+    Node :: node().
+reverse_attach_notification(Id, Node) ->
+    gen_statem:cast(?MODULE, {reverse_attach_notification, Id, Node}).
 
 -spec subscribe() -> {ok, edb:event_subscription()}.
 subscribe() ->
@@ -169,6 +195,8 @@ safe_sname_hostname() ->
 
 -type call_request() ::
     {attach, node(), timeout()}
+    | {expect_reverse_attach, edb_gatekeeper:id(), reference(), timeout()}
+    | {reverse_attach_notification, edb_gatekeeper:id(), node()}
     | detach
     | {subscribe_to_events, pid()}
     | {remove_event_subscription, edb:event_subscription()}.
@@ -211,6 +239,10 @@ handle_event(cast, {try_attach, Node}, State0, Data0) ->
     try_attach_impl(Node, State0, Data0);
 handle_event({call, From}, {attach, Node, AttachTimeout}, State, Data) ->
     attach_impl(Node, AttachTimeout, From, State, Data);
+handle_event({call, From}, {expect_reverse_attach, GatekeeperId, NotificationRef, ReverseAttachTimeout}, State, Data) ->
+    expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, State, Data);
+handle_event(cast, {reverse_attach_notification, GatekeeperId, Node}, State, Data) ->
+    reverse_attach_notification_impl(GatekeeperId, Node, State, Data);
 handle_event({call, From}, detach, State, Data) ->
     detach_impl(From, State, Data);
 handle_event({call, From}, {subscribe_to_events, Pid}, State, Data) ->
@@ -219,17 +251,28 @@ handle_event({call, From}, {remove_event_subscription, Subscription}, State, Dat
     remove_event_subscription_impl(Subscription, From, State, Data);
 handle_event(info, {nodedown, Node, #{node_type := _, nodedown_reason := Reason}}, State, Data) ->
     nodedown_impl(Node, Reason, State, Data);
-handle_event(info, {nodeup, Node, _}, State0 = #{state := attaching, node := Node}, Data0) ->
+handle_event(info, {nodeup, Node, _}, State0 = #{state := attachment_in_progress, type := attach, node := Node}, Data0) ->
     State1 = on_node_connected(State0),
     {next_state, State1, Data0};
-handle_event(state_timeout, waiting_for_node, #{state := attaching, caller := Caller}, Data0) ->
+handle_event(state_timeout, waiting_for_node, State0 = #{state := attachment_in_progress, type := attach}, Data0) ->
     State1 = #{state => not_attached},
+    Caller = maps:get(caller, State0),
     {next_state, State1, Data0, {reply, Caller, {error, nodedown}}};
 handle_event(info, {'DOWN', MonitorRef, process, _Pid, _Info}, _, Data0) ->
     Subs0 = maps:get(event_subscribers, Data0),
     Subs1 = edb_events:process_down(MonitorRef, Subs0),
     Data1 = Data0#{event_subscribers := Subs1},
     {keep_state, Data1};
+handle_event(
+    state_timeout,
+    waiting_for_reverse_attach,
+    State0 = #{state := attachment_in_progress, type := reverse_attach},
+    Data0
+) ->
+    #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
+    CallerPid ! {NotificationRef, timeout},
+    State1 = #{state => not_attached},
+    {next_state, State1, Data0};
 handle_event(info, _, _State, _Data) ->
     keep_state_and_data.
 
@@ -241,7 +284,7 @@ handle_event(info, _, _State, _Data) ->
     Node :: node().
 try_attach_impl(Node, State0, Data0) ->
     case State0 of
-        #{state := attaching, node := Node} ->
+        #{state := attachment_in_progress, type := attach, node := Node} ->
             case net_kernel:connect_node(Node) of
                 false ->
                     schedule_try_attach_after(50, Node),
@@ -262,7 +305,7 @@ try_attach_impl(Node, State0, Data0) ->
         attachment_in_progress
         | nodedown
         | edb:bootstrap_failure().
-attach_impl(_, _, From, #{state := attaching}, _) ->
+attach_impl(_, _, From, #{state := attachment_in_progress}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
 attach_impl(Node, AttachTimeout, From, State0, Data0) ->
     case net_kernel:connect_node(Node) of
@@ -271,7 +314,8 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
         false ->
             State1 =
                 #{
-                    state => attaching,
+                    state => attachment_in_progress,
+                    type => attach,
                     node => Node,
                     caller => From
                 },
@@ -286,7 +330,8 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
                     {_, _, Data1} = detach_impl_1(State0, Data0),
                     State2 =
                         #{
-                            state => attaching,
+                            state => attachment_in_progress,
+                            type => attach,
                             node => Node,
                             caller => From
                         },
@@ -294,6 +339,55 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
                     {next_state, State3, Data1}
             end
     end.
+
+-spec expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, state(), data()) ->
+    reply(ok | {error, Reason})
+when
+    GatekeeperId :: edb_gatekeeper:id(),
+    NotificationRef :: reference(),
+    ReverseAttachTimeout :: timeout(),
+    From :: gen_statem:from(),
+    Reason :: attachment_in_progress.
+expect_reverse_attach_impl(_, _, _, From, #{state := attachment_in_progress}, _) ->
+    {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
+expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, State0, Data0) ->
+    {_, _, Data1} = detach_impl_1(State0, Data0),
+    {CallerPid, _Tag} = From,
+    State1 = #{
+        state => attachment_in_progress,
+        type => reverse_attach,
+        gatekeeper => GatekeeperId,
+        notification_ref => NotificationRef,
+        caller_pid => CallerPid
+    },
+    {next_state, State1, Data1, [
+        {reply, From, ok},
+        {state_timeout, ReverseAttachTimeout, waiting_for_reverse_attach}
+    ]}.
+
+-spec reverse_attach_notification_impl(GatekeeperId, Node, state(), data()) -> no_reply() when
+    GatekeeperId :: edb_gatekeeper:id(),
+    Node :: node().
+reverse_attach_notification_impl(
+    GatekeeperId,
+    Node,
+    State0 = #{state := attachment_in_progress, type := reverse_attach, gatekeeper := GatekeeperId},
+    Data0
+) ->
+    #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
+    case bootstrap_edb(Node, pause) of
+        Error = {error, _} ->
+            State1 = #{state => not_attached},
+            CallerPid ! {NotificationRef, Error},
+            {next_state, State1, Data0};
+        ok ->
+            State1 = #{state => up, node => Node},
+            persistent_term:put({?MODULE, attached_node}, Node),
+            CallerPid ! {NotificationRef, ok},
+            {next_state, State1, Data0}
+    end;
+reverse_attach_notification_impl(_, _, _, _) ->
+    keep_state_and_data.
 
 -spec detach_impl(From, state(), data()) -> reply(ok | not_attached) when
     From :: gen_statem:from().
@@ -423,7 +517,7 @@ schedule_try_attach_after(Delay, Node) ->
     ok.
 
 -spec on_node_connected(state()) -> state().
-on_node_connected(State0 = #{state := attaching, node := Node, caller := Caller}) ->
+on_node_connected(State0 = #{state := attachment_in_progress, type := attach, node := Node, caller := Caller}) ->
     State2 =
         try bootstrap_edb(Node, keep_running) of
             Error = {error, _} ->

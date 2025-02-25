@@ -158,6 +158,7 @@ debugger_only_modules() ->
         edb,
         edb_core_app,
         edb_core_sup,
+        edb_gatekeeper,
         edb_node_monitor
     ],
     % Sanity-check: if the module exists, getting the md5 succeeds

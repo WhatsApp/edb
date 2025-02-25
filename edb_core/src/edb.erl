@@ -22,7 +22,7 @@
 -compile({no_auto_import, [processes/0]}).
 
 %% External exports
--export([attach/1, detach/0, terminate/0]).
+-export([attach/1, reverse_attach/1, detach/0, terminate/0]).
 -export([attached_node/0]).
 
 -export([subscribe/0, unsubscribe/1, send_sync_event/1]).
@@ -207,7 +207,7 @@ attach(AttachOpts0) ->
             end;
         _ ->
             NameDomain = infer_name_domain(NodeToDebug),
-            ok = maybe_start_distribution(NameDomain)
+            ok = start_distribution(NameDomain)
     end,
 
     case Cookie of
@@ -216,6 +216,61 @@ attach(AttachOpts0) ->
     end,
 
     edb_node_monitor:attach(NodeToDebug, AttachTimeout).
+
+%% @doc Prepare for attachment by a node that doesn't exist yet.
+%%
+%% The caller is expected to start a new node, and ensure it executes the
+%% code returned by this call. The caller can then expect to receive a message tagged
+%% with the reference in `notification_ref`, containing the result of the reverse attachment.
+%%
+%% When the node executes the injected code, it will be forced to become attached, and
+%% immediately paused.
+%%
+%% As long as `timeout' is not `infinity`, the caller is guaranteed to eventually receive
+%% a message of the form:
+%%
+%% - `{NotificationRef, ok}': The reverse attachment succeeded, the node is now paused.
+%% - `{NotificationRef, timeout}': The reverse attachment timed out; it will now never happen.
+%% - `{NotificationRef, {error, BootstrapFailure}}': We tried to bootstrap edb on the node but failed
+%%
+%% This call may start distribution and set the node name.
+%%
+%% Options:
+%%
+%% - `name_domain`: whether we expect to be attached by a node using longnames or shortnames;
+%% - `timeout': how long to wait for the node to be up; defaults to infinity.
+%%
+-spec reverse_attach(Opts) -> {ok, Info} | {error, Reason} when
+    Opts :: #{name_domain := longnames | shortnames, timeout => timeout()},
+    Info :: #{erl_code_to_inject := binary(), notification_ref := reference()},
+    Reason :: attachment_in_progress.
+reverse_attach(AttachOpts0) ->
+    {NameDomain, AttachOpts1} = take_arg(name_domain, AttachOpts0, #{parse => fun parse_name_domain/1}),
+    {ReverseAttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{
+        default => infinity,
+        parse => fun parse_timeout/1
+    }),
+
+    ok = no_more_args(AttachOpts2),
+
+    case {NameDomain, net_kernel:longnames()} of
+        {longnames, true} -> ok;
+        {shortnames, false} -> ok;
+        {_, ignored} -> ok = start_distribution(NameDomain);
+        _ -> error({invalid_name_domain, NameDomain})
+    end,
+
+    {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(),
+    NotificationRef = erlang:make_ref(),
+    case edb_node_monitor:expect_reverse_attach(GatekeeperId, NotificationRef, ReverseAttachTimeout) of
+        ok ->
+            {ok, #{
+                erl_code_to_inject => ReverseAttachCode,
+                notification_ref => NotificationRef
+            }};
+        Error = {error, _} ->
+            Error
+    end.
 
 %% @doc Detach from the currently attached node.
 %%
@@ -564,22 +619,17 @@ debugger_node(NameDomain) ->
     ),
     list_to_atom(NodeName).
 
--spec maybe_start_distribution(NameDomain) -> ok when
+-spec start_distribution(NameDomain) -> ok when
     NameDomain :: longnames | shortnames.
-maybe_start_distribution(NameDomain) ->
-    case erlang:node() of
-        'nonode@nohost' ->
-            maybe_start_epmd(),
-            Node = debugger_node(NameDomain),
-            {ok, _Pid} = net_kernel:start(Node, #{
-                name_domain => NameDomain,
-                dist_listen => true,
-                hidden => true
-            }),
-            ok;
-        _ ->
-            ok
-    end.
+start_distribution(NameDomain) ->
+    maybe_start_epmd(),
+    Node = debugger_node(NameDomain),
+    {ok, _Pid} = net_kernel:start(Node, #{
+        name_domain => NameDomain,
+        dist_listen => true,
+        hidden => true
+    }),
+    ok.
 
 -spec infer_name_domain(Node) -> NameDomain when
     Node :: node(),
@@ -651,6 +701,10 @@ parse_atom(Atom) when is_atom(Atom) -> Atom.
 -spec parse_timeout(term()) -> timeout().
 parse_timeout(infinity) -> infinity;
 parse_timeout(Timeout) when is_integer(Timeout), Timeout >= 0 -> Timeout.
+
+-spec parse_name_domain(term()) -> longnames | shortnames.
+parse_name_domain(longnames) -> longnames;
+parse_name_domain(shortnames) -> shortnames.
 
 -spec no_more_args(map()) -> ok.
 no_more_args(Opts) ->
