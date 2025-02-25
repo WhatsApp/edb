@@ -42,8 +42,30 @@
 }.
 
 -spec parse(term()) -> {ok, t()} | {error, HumarReadableReason :: binary()}.
-parse(LaunchConfig) ->
-    Template = #{
+parse(RobustConfig = #{config := _}) ->
+    Template = #{config => launch_config_template()},
+    Filtered = maps:with([config], RobustConfig),
+    case parse_config(Template, Filtered) of
+        {ok, #{config := Parsed}} -> {ok, Parsed};
+        Error = {error, _} -> Error
+    end;
+parse(FlatConfig) when is_map(FlatConfig) ->
+    ConfigKeys = maps:keys(launch_config_template()),
+    case maps:with(ConfigKeys, FlatConfig) of
+        Filtered when map_size(Filtered) > 0 ->
+            Template = launch_config_template(),
+            parse_config(Template, Filtered);
+        _ ->
+            % We will fail, but suggest the user to use the new format
+            Template = #{config => launch_config_template()},
+            parse_config(Template, #{})
+    end;
+parse(Other) ->
+    {error, human_readable_error({invalid, Other})}.
+
+-spec launch_config_template() -> map_template().
+launch_config_template() ->
+    #{
         launchCommand => #{
             cwd => fun is_binary/1,
             command => fun is_binary/1,
@@ -56,20 +78,14 @@ parse(LaunchConfig) ->
             type => {optional, fun is_node_type/1}
         },
         stripSourcePrefix => {optional, fun is_binary/1},
-        timeout => {optional, fun is_non_neg_integer/1},
+        timeout => {optional, fun is_non_neg_integer/1}
+    }.
 
-        %% The following may be received but are ignored
-        %% TODO(T210035817): eventually remove these, and just ignore all top-level fields
-        name => {optional, fun is_binary/1},
-        type => {optional, fun(_) -> true end},
-        request => {optional, fun(_) -> true end},
-        presentation => {optional, fun(_) -> true end},
-        '__sessionId' => {optional, fun(_) -> true end},
-        '__configurationTarget' => {optional, fun(_) -> true end}
-    },
+-spec parse_config(map_template(), term()) ->
+    {ok, dynamic()} | {error, HumarReadableReason :: binary()}.
+parse_config(Template, LaunchConfig) ->
     try parse_map(Template, LaunchConfig) of
         ok ->
-            % eqwalizer:ignore Already parsed
             {ok, LaunchConfig}
     catch
         throw:{parse_error, Reason} ->

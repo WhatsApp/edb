@@ -67,7 +67,9 @@ start_session(Config, Node, Cookie) ->
         arguments => []
     },
     Response2 = edb_dap_test_client:launch(Client, #{
-        launchCommand => LaunchCommand, targetNode => #{name => Node, cookie => Cookie}
+        config => #{
+            launchCommand => LaunchCommand, targetNode => #{name => Node, cookie => Cookie}
+        }
     }),
     ?assertMatch(#{request_seq := 2, type := response, success := true}, Response2),
 
