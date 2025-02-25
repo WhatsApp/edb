@@ -198,6 +198,13 @@ attach(AttachOpts0) ->
             error({invalid_node, NodeToDebug});
         nonode@nohost ->
             ok;
+        _ when node() /= nonode@nohost ->
+            case infer_name_domain(NodeToDebug) =:= infer_name_domain(node()) of
+                true ->
+                    ok;
+                false ->
+                    error({invalid_node, NodeToDebug})
+            end;
         _ ->
             NameDomain = infer_name_domain(NodeToDebug),
             ok = maybe_start_distribution(NameDomain)

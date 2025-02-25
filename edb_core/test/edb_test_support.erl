@@ -26,7 +26,7 @@
 -export_type([peer/0, start_peer_node_opts/0, start_peer_no_dist_opts/0]).
 -export([start_peer_node/2, start_peer_no_dist/2, stop_peer/1, stop_all_peers/0]).
 -export([compile_and_load_file_in_peer/1]).
--export([random_node/1]).
+-export([random_node/1, random_node/2]).
 
 %% Event collection
 -export([start_event_collector/0, collected_events/0, stop_event_collector/0, event_collector_send_sync/0]).
@@ -39,10 +39,24 @@
 
 -type peer() :: peer:server_ref().
 
--spec random_node(Prefix :: string() | binary()) -> node().
+-spec random_node(Prefix) -> node() when
+    Prefix :: string() | binary().
 random_node(Prefix) ->
+    random_node(Prefix, shortnames).
+
+-spec random_node(Prefix, NameDomain) -> node() when
+    Prefix :: string() | binary(),
+    NameDomain :: shortnames | longnames.
+random_node(Prefix, NameDomain) ->
     Name = random_node_name(Prefix),
-    Host = edb_node_monitor:safe_sname_hostname(),
+    Host =
+        case NameDomain of
+            shortnames ->
+                edb_node_monitor:safe_sname_hostname();
+            longnames ->
+                {ok, FQDN} = net:gethostname(),
+                FQDN
+        end,
     list_to_atom(lists:flatten(io_lib:format("~s@~s", [Name, Host]))).
 
 -spec random_node_name(Prefix :: string() | binary()) -> atom().

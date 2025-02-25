@@ -45,6 +45,8 @@
     test_attaching_to_nonode_at_nohost/1,
 
     test_attach_validates_args/1,
+    test_attach_detects_unreachable_nodes/1,
+
     test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
 ]).
 
@@ -87,6 +89,7 @@ groups() ->
             test_can_attach_with_specific_cookie,
             test_can_attach_when_distribution_is_already_started,
             test_attaching_to_nonode_at_nohost,
+            test_attach_detects_unreachable_nodes,
 
             test_attach_validates_args,
 
@@ -284,6 +287,33 @@ test_attaching_to_nonode_at_nohost(Config) ->
             {invalid_node, nonode@nohost},
             edb:attach(#{node => nonode@nohost})
         ),
+
+        ok
+    end).
+
+test_attach_detects_unreachable_nodes(Config) ->
+    on_debugger_node(Config, fun() ->
+        % When using shortnames, trying to attach using longnames should fail
+        ok = start_distribution(shortnames),
+        ?assertError(
+            {invalid_node, 'foo@hey.ho.com'},
+            edb:attach(#{node => 'foo@hey.ho.com'})
+        ),
+
+        % Sanity-check: attaching to a non-existent node with shortnames gives a nodedown
+        {error, nodedown} = edb:attach(#{node => 'foo@heyho'}),
+
+        ok = stop_distribution(),
+
+        % Conversely, when using longnames, trying to attach using shortnames should fail
+        ok = start_distribution(longnames),
+        ?assertError(
+            {invalid_node, 'foo@heyho'},
+            edb:attach(#{node => 'foo@heyho'})
+        ),
+
+        % Sanity-check: attaching to a non-existent node with longnames gives a nodedown
+        {error, nodedown} = edb:attach(#{node => 'foo@hey.ho.com'}),
 
         ok
     end).
@@ -520,7 +550,16 @@ debugger_peer_key() -> debugger_peer.
 
 -spec start_distribution() -> ok.
 start_distribution() ->
-    DebuggerNode = edb_test_support:random_node("debugger"),
-    {ok, _} = net_kernel:start(DebuggerNode, #{name_domain => shortnames}),
+    start_distribution(shortnames).
+
+-spec start_distribution(NameDomain) -> ok when
+    NameDomain :: longnames | shortnames.
+start_distribution(NameDomain) ->
+    Node = edb_test_support:random_node("debugger", NameDomain),
+    {ok, _} = net_kernel:start(Node, #{name_domain => NameDomain}),
     erlang:set_cookie('234in20fmksdlkfsdfs'),
     ok.
+
+-spec stop_distribution() -> ok.
+stop_distribution() ->
+    ok = net_kernel:stop().
