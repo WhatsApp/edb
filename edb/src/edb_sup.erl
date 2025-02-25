@@ -69,6 +69,11 @@ init([]) ->
                 id => edb_dap_server,
                 start => {edb_dap_server, start_link, []},
                 restart => transient
+            },
+            #{
+                id => edb_dap_transport,
+                start => {edb_dap_transport, start_link, []},
+                restart => transient
             }
         ],
     {ok, {SupFlags, ChildSpecs}}.
