@@ -198,16 +198,19 @@ attach(AttachOpts0) ->
             error({invalid_node, NodeToDebug});
         nonode@nohost ->
             ok;
-        _ when node() /= nonode@nohost ->
-            case infer_name_domain(NodeToDebug) =:= infer_name_domain(node()) of
-                true ->
-                    ok;
-                false ->
-                    error({invalid_node, NodeToDebug})
-            end;
         _ ->
-            NameDomain = infer_name_domain(NodeToDebug),
-            ok = start_distribution(NameDomain)
+            case net_kernel:get_state() of
+                #{started := no} ->
+                    NameDomain = infer_name_domain(NodeToDebug),
+                    ok = start_distribution(NameDomain);
+                #{started := _, name_domain := LocalNameDomain} ->
+                    case infer_name_domain(NodeToDebug) =:= LocalNameDomain of
+                        true ->
+                            ok;
+                        false ->
+                            error({invalid_node, NodeToDebug})
+                    end
+            end
     end,
 
     case Cookie of
@@ -253,11 +256,10 @@ reverse_attach(AttachOpts0) ->
 
     ok = no_more_args(AttachOpts2),
 
-    case {NameDomain, net_kernel:longnames()} of
-        {longnames, true} -> ok;
-        {shortnames, false} -> ok;
-        {_, ignored} -> ok = start_distribution(NameDomain);
-        _ -> error({invalid_name_domain, NameDomain})
+    case net_kernel:get_state() of
+        #{started := no} -> ok = start_distribution(NameDomain);
+        #{started := _, name_domain := NameDomain} -> ok;
+        #{started := _, name_domain := _} -> error({invalid_name_domain, NameDomain})
     end,
 
     {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(),
