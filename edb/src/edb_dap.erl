@@ -55,8 +55,6 @@
     protocol_message/0,
     request/0,
     response/0,
-    run_in_terminal_request_arguments/0,
-    run_in_terminal_response/0,
     seq/0,
     source/0,
     stepping_granularity/0,
@@ -168,32 +166,6 @@ build_error_response(Id, Format) ->
         success => false,
         body => #{error => #{id => Id, format => Format}}
     }.
-
-%%%---------------------------------------------------------------------------------
-%%% Reverse Requests
-%%%---------------------------------------------------------------------------------
-
-%%% Run In Terminal
-
--type run_in_terminal_request_arguments() :: #{
-    % integrated | external
-    kind => binary(),
-    title => binary(),
-    cwd => binary(),
-    % The first argument is the command to run
-    args := [binary()],
-    env => #{binary() => binary()},
-    argsCanBeInterpretedByShell => boolean()
-}.
--type run_in_terminal_response() :: #{
-    success := boolean(),
-    message => binary(),
-    body := #{
-        % Currently not sent by VS Code. See https://github.com/microsoft/vscode/issues/61640#issuecomment-432696354
-        processId => number(),
-        shellProcessId => number()
-    }
-}.
 
 %%%---------------------------------------------------------------------------------
 %%% Events

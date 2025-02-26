@@ -69,16 +69,16 @@ handle(State, Args) ->
     StripSourcePrefix = maps:get(stripSourcePrefix, Args, <<>>),
     Arguments = maps:get(arguments, LaunchCommand, []),
     Env = maps:get(env, LaunchCommand, #{}),
-    RunInTerminalRequest = #{
+    RunInTerminalRequest = edb_dap_reverse_request_run_in_terminal:make_request(#{
         kind => ~"integrated",
         title => ~"EDB",
         cwd => Cwd,
         args => [Command | Arguments],
-        env => Env#{'ERL_FLAGS' => ?ERL_FLAGS}
-    },
+        env => Env#{~"ERL_FLAGS" => ?ERL_FLAGS}
+    }),
     #{
         response => #{success => true},
-        actions => [{reverse_request, ~"runInTerminal", RunInTerminalRequest}],
+        actions => [{reverse_request, RunInTerminalRequest}],
         state => edb_dap_state:set_context(State, context(TargetNode, AttachTimeoutInSecs, Cwd, StripSourcePrefix))
     }.
 

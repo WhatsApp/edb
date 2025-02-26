@@ -52,7 +52,7 @@
 
 -type action() ::
     {event, edb_dap:event_type(), edb_dap:arguments()}
-    | {reverse_request, edb_dap:command(), edb_dap:body()}
+    | {reverse_request, edb_dap_reverse_request:request()}
     | terminate.
 -export_type([action/0]).
 
@@ -133,7 +133,7 @@ handle_cast({handle_message, #{type := response} = Response}, State0) ->
     ?LOG_DEBUG("Handle response: ~p", [Response]),
     Reaction =
         try
-            dispatch_response(Response, State0)
+            edb_dap_reverse_request:dispatch_response(Response, State0)
         catch
             Class:Reason:StackTrace ->
                 {_Error, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
@@ -176,7 +176,7 @@ handle_edb_event({edb_event, Subscription, Event}, State0) ->
     {noreply, State1}.
 
 -spec handle_reaction(Reaction) -> ok when
-    Reaction :: edb_dap_request:reaction(edb_dap:response()) | edb_dap_responses:reaction().
+    Reaction :: edb_dap_request:reaction(edb_dap:response()) | edb_dap_reverse_request:reaction().
 handle_reaction(Reaction) ->
     Actions = maps:get(actions, Reaction, []),
     [handle_action(Action) || Action <- Actions],
@@ -185,18 +185,10 @@ handle_reaction(Reaction) ->
 -spec handle_action(action()) -> ok.
 handle_action({event, Type, Body}) ->
     edb_dap_transport:send_event(Type, Body);
-handle_action({reverse_request, Command, Args}) ->
-    edb_dap_transport:send_reverse_request(Command, Args);
+handle_action({reverse_request, ReverseRequest}) ->
+    edb_dap_transport:send_reverse_request(ReverseRequest);
 handle_action(terminate) ->
     gen_server:cast(self(), terminate).
-
--spec dispatch_response(Response, State) -> Reaction when
-    Response :: edb_dap:response(),
-    State :: state(),
-    Reaction :: edb_dap_responses:reaction().
-dispatch_response(#{command := Command, body := Body}, State) ->
-    Method = method_to_atom(Command),
-    edb_dap_responses:Method(State, Body).
 
 -spec dispatch_event(EdbEvent, State) -> Reaction when
     EdbEvent :: edb:event(),
@@ -209,14 +201,6 @@ dispatch_event({nodedown, Node, Reason}, State) ->
 dispatch_event(Event, _State) ->
     ?LOG_DEBUG("Skipping event: ~p", [Event]),
     #{}.
-
-%% @doc Explicit mapping to avoid the risk of atom exhaustion
--spec method_to_atom(binary()) -> atom().
-method_to_atom(~"runInTerminal") ->
-    run_in_terminal;
-method_to_atom(Method) ->
-    ?LOG_WARNING("Method not found: ~p", [Method]),
-    throw({method_not_found, Method}).
 
 -spec format_exception(Class, Reason, StackTrace) -> binary() when
     Class :: 'error' | 'exit' | 'throw',
