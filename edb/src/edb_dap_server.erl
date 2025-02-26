@@ -91,55 +91,48 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(cast_request(), state()) -> {noreply, state()} | {stop, normal, state()}.
-handle_cast({handle_message, Request = #{type := request}}, State0) ->
-    ?LOG_DEBUG("Handle request: ~p", [Request]),
-    #{command := Command} = Request,
+handle_cast({handle_message, Message = #{command := Cmd, type := Type}}, State0) when
+    is_binary(Cmd), Type =:= request; Type =:= response
+->
+    ?LOG_DEBUG("Handle message: ~p", [Message]),
+    #{command := Command, type := Type} = Message,
 
-    {FinalResponse, FinalState} =
+    Reaction =
         case edb_dap_state:is_initialized(State0) of
             false when Command =/= ~"initialize" ->
-                Response = edb_dap:build_error_response(
+                ErrorResponse = edb_dap:build_error_response(
                     ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"
                 ),
-                {Response, State0};
+                #{response => ErrorResponse};
             _ ->
-                #{response := Response} =
-                    Reaction =
-                    try
-                        edb_dap_request:dispatch(Request, State0)
-                    catch
-                        throw:{method_not_found, Method}:_StackTrace ->
-                            Error = <<"Method not found: ", Method/binary>>,
-                            #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_METHOD_NOT_FOUND, Error)};
-                        throw:{invalid_params, Reason}:_StackTrace when is_binary(Reason) ->
-                            Error = edb_dap:to_binary(
-                                lists:flatten(
-                                    io_lib:format("Invalid parameters for request '~s': ~s", [Command, Reason])
-                                )
-                            ),
-                            #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_INVALID_PARAMS, Error)};
-                        Class:Reason:StackTrace ->
-                            {Error, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
-                            ErrorResponse = edb_dap:build_error_response(?JSON_RPC_ERROR_INTERNAL_ERROR, Error),
-                            #{response => ErrorResponse, actions => Actions}
-                    end,
-                ok = handle_reaction(Reaction),
-                State1 = maps:get(state, Reaction, State0),
-                {Response, State1}
-        end,
-    edb_dap_transport:send_response(Request, FinalResponse),
-    {noreply, FinalState};
-handle_cast({handle_message, #{type := response} = Response}, State0) ->
-    ?LOG_DEBUG("Handle response: ~p", [Response]),
-    Reaction =
-        try
-            edb_dap_reverse_request:dispatch_response(Response, State0)
-        catch
-            Class:Reason:StackTrace ->
-                {_Error, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
-                #{actions => Actions}
+                try
+                    case Message of
+                        Request = #{type := request} -> edb_dap_request:dispatch(Request, State0);
+                        Response = #{type := response} -> edb_dap_reverse_request:dispatch_response(Response, State0)
+                    end
+                catch
+                    throw:{method_not_found, Method}:_StackTrace ->
+                        Error = <<"Method not found: ", Method/binary>>,
+                        #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_METHOD_NOT_FOUND, Error)};
+                    throw:{invalid_params, Reason}:_StackTrace when is_binary(Reason) ->
+                        Error = edb_dap:to_binary(
+                            io_lib:format("Invalid parameters for request '~s': ~s", [Command, Reason])
+                        ),
+                        #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_INVALID_PARAMS, Error)};
+                    Class:Reason:StackTrace ->
+                        {Error, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
+                        ErrorResponse = edb_dap:build_error_response(?JSON_RPC_ERROR_INTERNAL_ERROR, Error),
+                        #{response => ErrorResponse, actions => Actions}
+                end
         end,
     ok = handle_reaction(Reaction),
+    case {Message, Reaction} of
+        {Req = #{type := request}, #{response := RequestResponse}} ->
+            edb_dap_transport:send_response(Req, RequestResponse);
+        {#{type := response}, _} ->
+            % Error responses from catch-handler can be ignored when handling reverse-request responses
+            ok
+    end,
     State1 = maps:get(state, Reaction, State0),
     {noreply, State1};
 handle_cast(terminate, State) ->
