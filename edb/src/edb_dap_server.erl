@@ -106,7 +106,7 @@ handle_cast({handle_message, Request = #{type := request}}, State0) ->
                 #{response := Response} =
                     Reaction =
                     try
-                        validate_and_dispatch_request(Request, State0)
+                        edb_dap_request:dispatch(Request, State0)
                     catch
                         throw:{method_not_found, Method}:_StackTrace ->
                             Error = <<"Method not found: ", Method/binary>>,
@@ -176,7 +176,7 @@ handle_edb_event({edb_event, Subscription, Event}, State0) ->
     {noreply, State1}.
 
 -spec handle_reaction(Reaction) -> ok when
-    Reaction :: edb_dap_requests:reaction(edb_dap:response()) | edb_dap_responses:reaction().
+    Reaction :: edb_dap_request:reaction(edb_dap:response()) | edb_dap_responses:reaction().
 handle_reaction(Reaction) ->
     Actions = maps:get(actions, Reaction, []),
     [handle_action(Action) || Action <- Actions],
@@ -189,25 +189,6 @@ handle_action({reverse_request, Command, Args}) ->
     edb_dap_transport:send_reverse_request(Command, Args);
 handle_action(terminate) ->
     gen_server:cast(self(), terminate).
-
--spec validate_and_dispatch_request(Request, State) -> Reaction when
-    Request :: edb_dap:request(),
-    State :: state(),
-    Reaction :: edb_dap_requests:reaction(edb_dap:response()).
-validate_and_dispatch_request(#{command := Command} = Request, State) ->
-    Method = method_to_atom(Command),
-    Arguments = maps:get(arguments, Request, #{}),
-    case Method of
-        launch ->
-            case edb_dap_launch_config:parse(Arguments) of
-                {ok, LaunchConfig} ->
-                    edb_dap_requests:Method(State, LaunchConfig);
-                {error, Reason} ->
-                    throw({invalid_params, Reason})
-            end;
-        _ ->
-            edb_dap_requests:Method(State, Arguments)
-    end.
 
 -spec dispatch_response(Response, State) -> Reaction when
     Response :: edb_dap:response(),
@@ -231,32 +212,6 @@ dispatch_event(Event, _State) ->
 
 %% @doc Explicit mapping to avoid the risk of atom exhaustion
 -spec method_to_atom(binary()) -> atom().
-% Requests
-method_to_atom(~"initialize") ->
-    initialize;
-method_to_atom(~"launch") ->
-    launch;
-method_to_atom(~"disconnect") ->
-    disconnect;
-method_to_atom(~"setBreakpoints") ->
-    set_breakpoints;
-method_to_atom(~"threads") ->
-    threads;
-method_to_atom(~"stackTrace") ->
-    stack_trace;
-method_to_atom(~"pause") ->
-    pause;
-method_to_atom(~"continue") ->
-    continue;
-method_to_atom(~"next") ->
-    next;
-method_to_atom(~"stepOut") ->
-    step_out;
-method_to_atom(~"scopes") ->
-    scopes;
-method_to_atom(~"variables") ->
-    variables;
-% Reverse requests
 method_to_atom(~"runInTerminal") ->
     run_in_terminal;
 method_to_atom(Method) ->

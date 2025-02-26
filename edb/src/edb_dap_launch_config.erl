@@ -25,21 +25,7 @@
 
 -export([parse/1]).
 
--export_type([t/0]).
--type t() :: #{
-    launchCommand => #{
-        cwd := binary(),
-        command := binary(),
-        arguments => [binary()]
-    },
-    targetNode => #{
-        name := binary(),
-        cookie => binary(),
-        type => binary()
-    },
-    stripSourcePath => binary(),
-    timeout => non_neg_integer()
-}.
+-type t() :: edb_dap_request_launch:arguments().
 
 -spec parse(term()) -> {ok, t()} | {error, HumarReadableReason :: binary()}.
 parse(RobustConfig = #{config := _}) ->

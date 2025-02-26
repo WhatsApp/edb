@@ -84,7 +84,7 @@ set_context(State, Context) ->
 get_context(#{context := Context}) ->
     Context.
 
--spec make_target_node(edb_dap:target_node()) -> target_node().
+-spec make_target_node(edb_dap_request_launch:target_node()) -> target_node().
 make_target_node(#{name := Name} = TargetNode) ->
     #{
         name => binary_to_atom(Name),
@@ -93,13 +93,13 @@ make_target_node(#{name := Name} = TargetNode) ->
     }.
 
 % Internal functions
--spec target_node_cookie(edb_dap:target_node()) -> atom().
+-spec target_node_cookie(edb_dap_request_launch:target_node()) -> atom().
 target_node_cookie(#{cookie := Cookie}) ->
     binary_to_atom(Cookie);
 target_node_cookie(_) ->
     erlang:get_cookie().
 
--spec target_node_type(edb_dap:target_node()) -> target_node_type().
+-spec target_node_type(edb_dap_request_launch:target_node()) -> target_node_type().
 target_node_type(#{type := <<"shortnames">>}) ->
     shortnames;
 target_node_type(#{type := <<"longnames">>}) ->

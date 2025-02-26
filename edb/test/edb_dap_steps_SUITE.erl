@@ -200,9 +200,8 @@ test_stepping_errors_if_process_not_paused(Config) ->
     ThreadId :: integer().
 do_next_and_wait_until_stopped(Client, ThreadId) ->
     NextResponse = edb_dap_test_client:next(Client, #{threadId => ThreadId}),
-    EmptyBody = #{},
     ?assertMatch(
-        #{command := ~"next", type := response, success := true, body := EmptyBody},
+        #{command := ~"next", type := response, success := true},
         NextResponse
     ),
     wait_for_stopped_event_with_step_reason(Client, ThreadId).
@@ -212,9 +211,8 @@ do_next_and_wait_until_stopped(Client, ThreadId) ->
     ThreadId :: integer().
 do_step_out_and_wait_until_stopped(Client, ThreadId) ->
     NextResponse = edb_dap_test_client:step_out(Client, #{threadId => ThreadId}),
-    EmptyBody = #{},
     ?assertMatch(
-        #{command := ~"stepOut", type := response, success := true, body := EmptyBody},
+        #{command := ~"stepOut", type := response, success := true},
         NextResponse
     ),
     wait_for_stopped_event_with_step_reason(Client, ThreadId).

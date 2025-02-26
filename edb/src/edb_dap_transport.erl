@@ -69,7 +69,7 @@ start_link() ->
 
 -spec send_response(OriginalRequest, Response) -> ok when
     OriginalRequest :: edb_dap:request(),
-    Response :: map().
+    Response :: edb_dap_request:response(edb_dap:body()).
 send_response(OriginalRequest, Response) ->
     #{command := Command, seq := RequestSeq} = OriginalRequest,
     Payload = Response#{type => response, request_seq => RequestSeq, command => Command},

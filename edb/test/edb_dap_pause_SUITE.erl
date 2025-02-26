@@ -83,13 +83,11 @@ test_can_pause_and_continue(Config) ->
 
     % Pause!
     PauseResponse = edb_dap_test_client:pause(Client, ThreadId),
-    EmptyBody = #{},
     ?assertMatch(
         #{
             command := ~"pause",
             type := response,
-            success := true,
-            body := EmptyBody
+            success := true
         },
         PauseResponse
     ),
