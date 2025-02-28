@@ -80,7 +80,7 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State0 = #{state := initialized}, Args) ->
-    #{launchCommand := LaunchCommand, targetNode := TargetNode} = Args,
+    #{launchCommand := LaunchCommand, targetNode := #{name := Node, cookie := Cookie}} = Args,
     #{cwd := Cwd, command := Command} = LaunchCommand,
     AttachTimeoutInSecs = maps:get(timeout, Args, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
     StripSourcePrefix = maps:get(stripSourcePrefix, Args, <<>>),
@@ -95,13 +95,10 @@ handle(State0 = #{state := initialized}, Args) ->
     }),
     State1 = State0#{
         state => launching,
-        context => #{
-            target_node => TargetNode,
-            attach_timeout => AttachTimeoutInSecs,
-            cwd => Cwd,
-            strip_source_prefix => StripSourcePrefix,
-            cwd_no_source_prefix => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
-        }
+        node => Node,
+        cookie => Cookie,
+        timeout => AttachTimeoutInSecs,
+        cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
     },
     #{
         response => #{success => true},

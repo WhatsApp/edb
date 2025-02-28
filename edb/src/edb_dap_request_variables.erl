@@ -187,14 +187,13 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, context := Context}, #{variablesReference := VariablesReference}) ->
+handle(#{state := attached, node := Node}, #{variablesReference := VariablesReference}) ->
     case edb_dap_id_mappings:var_reference_to_frame_scope(VariablesReference) of
         {ok, #{frame := FrameId, scope := Scope}} ->
             case edb_dap_id_mappings:frame_id_to_pid_frame(FrameId) of
                 {ok, #{pid := Pid, frame_no := FrameNo}} ->
                     case Scope of
                         messages ->
-                            #{target_node := #{name := Node}} = Context,
                             % elp:ignore W0014 (cross_node_eval)
                             case erpc:call(Node, erlang, process_info, [Pid, messages]) of
                                 {messages, Messages0} when is_list(Messages0) ->

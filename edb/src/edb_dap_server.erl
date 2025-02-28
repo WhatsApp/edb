@@ -48,17 +48,7 @@
 %%% Types
 %%%---------------------------------------------------------------------------------
 -type client_info() :: edb_dap_request_initialize:arguments().
--type context() :: #{
-    target_node => edb_dap_request_launch:target_node(),
-    attach_timeout := non_neg_integer(),
-    cwd := binary(),
-    strip_source_prefix := binary(),
-    % This is `cwd` with the suffix that matches `strip_source_prefix` removed
-    % This is used to make sure that the source paths are relative to the
-    % repo root, and not the cwd, in they case they do not coincide.
-    % It is stored in the context to avoid recomputing it every time.
-    cwd_no_source_prefix := binary()
-}.
+
 -type state() ::
     #{
         % Server is up, waiting for an `initialize` request from the client
@@ -73,13 +63,17 @@
         % A `launch` request was received and we are waiting for the debuggee node to be up
         state := launching,
         client_info := client_info(),
-        context := context()
+        node := node(),
+        cookie := atom(),
+        timeout := non_neg_integer(),
+        cwd := binary()
     }
     | #{
         % We are attached to the debuggee node, debugging is in progress
         state := attached,
         client_info := client_info(),
-        context := context(),
+        node := node(),
+        cwd := binary(),
         subscription := edb:event_subscription()
     }
     | #{
@@ -87,7 +81,7 @@
         state := terminating
     }.
 
--export_type([state/0, context/0]).
+-export_type([state/0]).
 
 -type action() ::
     {event, edb_dap_event:event()}

@@ -132,14 +132,14 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, context := Context}, #{threadId := ThreadId}) ->
+handle(State0 = #{state := attached}, #{threadId := ThreadId}) ->
     case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
         {ok, Pid} ->
             case edb:stack_frames(Pid) of
                 not_paused ->
                     edb_dap_request:not_paused(Pid);
                 {ok, Frames} ->
-                    StackFrames = [stack_frame(Context, Pid, Frame) || Frame <- Frames],
+                    StackFrames = [stack_frame(State0, Pid, Frame) || Frame <- Frames],
                     #{response => #{success => true, body => #{stackFrames => StackFrames}}}
             end;
         {error, not_found} ->
@@ -151,8 +151,8 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec stack_frame(edb_dap_server:context(), pid(), edb:stack_frame()) -> stack_frame().
-stack_frame(Context, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line := Location}) ->
+-spec stack_frame(edb_dap_server:state(), pid(), edb:stack_frame()) -> stack_frame().
+stack_frame(State, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line := Location}) ->
     Name = edb_dap:to_binary(io_lib:format("~p:~p/~p", [M, F, A])),
     Line =
         case Location of
@@ -165,11 +165,10 @@ stack_frame(Context, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line
         undefined ->
             Frame;
         _ when is_list(FilePath) ->
-            Frame#{source => source(Context, edb_dap:to_binary(FilePath))}
+            Frame#{source => source(State, edb_dap:to_binary(FilePath))}
     end;
-stack_frame(Context, Pid, #{id := Id, mfa := 'unknown'}) ->
+stack_frame(#{node := Node}, Pid, #{id := Id, mfa := 'unknown'}) ->
     FrameId = edb_dap_id_mappings:pid_frame_to_frame_id(#{pid => Pid, frame_no => Id}),
-    #{target_node := #{name := Node}} = Context,
     Info =
         % elp:ignore W0014 (cross_node_eval) -- debugging support @fb-only
         try erpc:call(Node, erlang, process_info, [Pid, [current_stacktrace, current_function, registered_name]]) of
@@ -180,14 +179,14 @@ stack_frame(Context, Pid, #{id := Id, mfa := 'unknown'}) ->
     ?LOG_WARNING("Unknown MFA for ~p frame ~p. Info:~p", [Pid, Id, Info]),
     #{id => FrameId, name => <<"???">>, line => 0, column => 0}.
 
--spec source(edb_dap_server:context(), binary()) -> edb_dap:source().
-source(#{cwd_no_source_prefix := CwdNoSourcePrefix}, FilePath0) ->
+-spec source(edb_dap_server:state(), binary()) -> edb_dap:source().
+source(#{cwd := Cwd}, FilePath0) ->
     FileName = filename:basename(FilePath0, ".erl"),
     FilePath =
         case filename:pathtype(FilePath0) of
             absolute ->
                 FilePath0;
             _ ->
-                filename:join(CwdNoSourcePrefix, FilePath0)
+                filename:join(Cwd, FilePath0)
         end,
     #{name => FileName, path => FilePath}.

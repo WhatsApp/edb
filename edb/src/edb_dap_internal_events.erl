@@ -56,24 +56,22 @@ handle(Event, _State) ->
 %%% Implementations
 %%%---------------------------------------------------------------------------------
 -spec nodedown_impl(edb_dap_server:state(), Node :: node(), Reason :: term()) -> reaction().
-nodedown_impl(State, Node, Reason) ->
-    case State of
-        #{context := #{target_node := #{name := Node}}} ->
-            ExitCode =
-                case Reason of
-                    connection_closed -> 0;
-                    _ -> 1
-                end,
-            #{
-                new_state => #{state => terminating},
-                actions => [
-                    {event, edb_dap_event:exited(ExitCode)},
-                    {event, edb_dap_event:terminated()}
-                ]
-            };
-        #{context := _} ->
-            #{}
-    end.
+nodedown_impl(#{node := Node}, Node, Reason) ->
+    ExitCode =
+        case Reason of
+            connection_closed -> 0;
+            _ -> 1
+        end,
+    #{
+        new_state => #{state => terminating},
+        actions => [
+            {event, edb_dap_event:exited(ExitCode)},
+            {event, edb_dap_event:terminated()}
+        ]
+    };
+nodedown_impl(State, Node, _Reason) ->
+    ?LOG_WARNING("Unexpected nodedown event for node ~p received while in state ~p", [Node, State]),
+    #{}.
 
 -spec paused_impl(edb_dap_server:state(), edb:paused_event()) -> reaction().
 paused_impl(_State, {breakpoint, Pid, _MFA, _Line}) ->

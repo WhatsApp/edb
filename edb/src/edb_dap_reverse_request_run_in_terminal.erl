@@ -79,25 +79,19 @@ make_request(Args) ->
     #{command => ~"runInTerminal", arguments => Args}.
 
 -spec handle_response(edb_dap_server:state(), response_body()) -> edb_dap_reverse_request:reaction().
-handle_response(State0 = #{state := launching}, _Body) ->
-    #{
-        context := #{
-            target_node := #{name := NodeName, cookie := Cookie},
-            attach_timeout := AttachTimeoutInSecs
-        }
-    } = State0,
-    case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000, cookie => Cookie}) of
+handle_response(State0 = #{state := launching, node := Node, cookie := Cookie, timeout := TimeoutInSecs}, _Body) ->
+    case edb:attach(#{node => Node, timeout => TimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
             {ok, Subscription} = edb:subscribe(),
-            State1 = State0#{state => attached, subscription => Subscription},
-            #{actions => [{event, edb_dap_event:initialized()}], new_state => State1};
+            State1 = maps:without([cookie, timeout], State0),
+            State2 = State1#{state => attached, subscription => Subscription},
+            #{actions => [{event, edb_dap_event:initialized()}], new_state => State2};
         {error, Reason} ->
             #{
                 new_state => #{state => terminating},
                 actions => [{event, edb_dap_event:terminated()}],
                 error =>
-                    {user_error, ?ERROR_TIMED_OUT,
-                        io_lib:format("Attaching to node: ~p failed: ~p", [NodeName, Reason])}
+                    {user_error, ?ERROR_TIMED_OUT, io_lib:format("Attaching to node: ~p failed: ~p", [Node, Reason])}
             }
     end;
 handle_response(_UnexpectedState, _) ->
