@@ -77,9 +77,9 @@ parse_arguments(Args) ->
     parse(Args).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, Args) ->
+handle(State0, Args) ->
     #{launchCommand := LaunchCommand, targetNode := TargetNode} = Args,
     #{cwd := Cwd, command := Command} = LaunchCommand,
     AttachTimeoutInSecs = maps:get(timeout, Args, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
@@ -93,28 +93,24 @@ handle(State, Args) ->
         args => [Command | Arguments],
         env => Env#{~"ERL_FLAGS" => ?ERL_FLAGS}
     }),
+    State1 = State0#{
+        context => #{
+            target_node => TargetNode,
+            attach_timeout => AttachTimeoutInSecs,
+            cwd => Cwd,
+            strip_source_prefix => StripSourcePrefix,
+            cwd_no_source_prefix => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
+        }
+    },
     #{
         response => #{success => true},
         actions => [{reverse_request, RunInTerminalRequest}],
-        state => edb_dap_state:set_context(State, context(TargetNode, AttachTimeoutInSecs, Cwd, StripSourcePrefix))
+        state => State1
     }.
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec context(TargetNode, AttachTimeout, Cwd, StripSourcePrefix) -> edb_dap_state:context() when
-    TargetNode :: target_node(),
-    AttachTimeout :: non_neg_integer(),
-    Cwd :: binary(),
-    StripSourcePrefix :: binary().
-context(TargetNode, AttachTimeout, Cwd, StripSourcePrefix) ->
-    #{
-        target_node => TargetNode,
-        attach_timeout => AttachTimeout,
-        cwd => Cwd,
-        strip_source_prefix => StripSourcePrefix,
-        cwd_no_source_prefix => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
-    }.
 
 -spec parse(term()) -> {ok, arguments()} | {error, HumarReadableReason :: binary()}.
 parse(RobustConfig = #{config := _}) ->

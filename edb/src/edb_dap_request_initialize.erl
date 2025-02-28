@@ -153,19 +153,16 @@ parse_arguments(Args) ->
     {ok, Args}.
 
 -spec handle(State, Args) -> edb_dap_request:reaction(capabilities()) when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, _Args) ->
-    case edb_dap_state:is_initialized(State) of
-        false ->
-            Capabilities = capabilities(),
-            #{
-                response => #{success => true, body => Capabilities},
-                state => edb_dap_state:set_status(State, initialized)
-            };
-        true ->
-            #{error => {user_error, ?JSON_RPC_ERROR_INVALID_REQUEST, ~"Already initialized"}}
-    end.
+handle(State = #{state := started}, _Args) ->
+    Capabilities = capabilities(),
+    #{
+        response => #{success => true, body => Capabilities},
+        state => State#{state => initialized}
+    };
+handle(_InitializedState, _Args) ->
+    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_REQUEST, ~"Already initialized"}}.
 
 %% ------------------------------------------------------------------
 %% Helpers

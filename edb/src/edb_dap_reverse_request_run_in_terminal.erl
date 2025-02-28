@@ -78,19 +78,21 @@
 make_request(Args) ->
     #{command => ~"runInTerminal", arguments => Args}.
 
--spec handle_response(edb_dap_state:t(), response_body()) -> edb_dap_reverse_request:reaction().
-handle_response(State, _Body) ->
+-spec handle_response(edb_dap_server:state(), response_body()) -> edb_dap_reverse_request:reaction().
+handle_response(State0, _Body) ->
     #{
-        target_node := #{name := NodeName, cookie := Cookie},
-        attach_timeout := AttachTimeoutInSecs
-    } = edb_dap_state:get_context(State),
+        context := #{
+            target_node := #{name := NodeName, cookie := Cookie},
+            attach_timeout := AttachTimeoutInSecs
+        }
+    } = State0,
     case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
             {ok, Subscription} = edb:subscribe(),
-            NewState = edb_dap_state:set_status(State, {attached, Subscription}),
-            #{actions => [{event, edb_dap_event:initialized()}], state => NewState};
+            State1 = State0#{state => {attached, Subscription}},
+            #{actions => [{event, edb_dap_event:initialized()}], state => State1};
         {error, Reason} ->
             ?LOG_ERROR("Attaching (node: ~p) (reason: ~p)", [NodeName, Reason]),
-            NewState = edb_dap_state:set_status(State, cannot_attach),
-            #{actions => [{event, edb_dap_event:terminated()}], state => NewState}
+            State1 = #{state => cannot_attach},
+            #{actions => [{event, edb_dap_event:terminated()}], state => State1}
     end.

@@ -130,7 +130,7 @@ parse_arguments(Args) ->
     {ok, Args}.
 
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State, #{threadId := ThreadId}) ->
     StackFrames = #{stackFrames => stack_frames(State, ThreadId)},
@@ -139,9 +139,9 @@ handle(State, #{threadId := ThreadId}) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec stack_frames(edb_dap_state:t(), edb_dap:thread_id()) -> [stack_frame()].
+-spec stack_frames(edb_dap_server:state(), edb_dap:thread_id()) -> [stack_frame()].
 stack_frames(State, ThreadId) ->
-    Context = edb_dap_state:get_context(State),
+    #{context := Context} = State,
     case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
         {ok, Pid} ->
             case edb:stack_frames(Pid) of
@@ -156,7 +156,7 @@ stack_frames(State, ThreadId) ->
             []
     end.
 
--spec stack_frame(edb_dap_state:context(), pid(), edb:stack_frame()) -> stack_frame().
+-spec stack_frame(edb_dap_server:context(), pid(), edb:stack_frame()) -> stack_frame().
 stack_frame(Context, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line := Location}) ->
     Name = edb_dap:to_binary(io_lib:format("~p:~p/~p", [M, F, A])),
     Line =
@@ -185,7 +185,7 @@ stack_frame(Context, Pid, #{id := Id, mfa := 'unknown'}) ->
     ?LOG_WARNING("Unknown MFA for ~p frame ~p. Info:~p", [Pid, Id, Info]),
     #{id => FrameId, name => <<"???">>, line => 0, column => 0}.
 
--spec source(edb_dap_state:context(), binary()) -> edb_dap:source().
+-spec source(edb_dap_server:context(), binary()) -> edb_dap:source().
 source(#{cwd_no_source_prefix := CwdNoSourcePrefix}, FilePath0) ->
     FileName = filename:basename(FilePath0, ".erl"),
     FilePath =

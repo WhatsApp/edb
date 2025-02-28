@@ -49,7 +49,7 @@ parse_arguments(Args) ->
     {ok, Args}.
 
 -spec handle(State, Args) -> edb_dap_request:reaction(threads()) when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
 handle(_State, _Args) ->
     Threads = maps:fold(fun thread/3, [], edb:processes()),

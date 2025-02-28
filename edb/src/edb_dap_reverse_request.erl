@@ -37,7 +37,7 @@
 -type reaction() :: #{
     error => edb_dap_server:error(),
     actions => [edb_dap_server:action()],
-    state => edb_dap_state:t()
+    state => edb_dap_server:state()
 }.
 
 -type request() :: request(edb_dap:arguments()).
@@ -54,7 +54,7 @@
     Args :: edb_dap:arguments().
 
 -callback handle_response(State, Body) -> reaction() when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Body :: edb_dap:body().
 
 %% ------------------------------------------------------------------
@@ -62,7 +62,7 @@
 %% ------------------------------------------------------------------
 -spec dispatch_response(Response, State) -> reaction() when
     Response :: edb_dap:response(),
-    State :: edb_dap_state:t().
+    State :: edb_dap_server:state().
 dispatch_response(#{command := Method} = Response, State) ->
     case known_handlers() of
         #{Method := Handler} ->

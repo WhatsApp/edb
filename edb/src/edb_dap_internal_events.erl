@@ -33,7 +33,7 @@
 
 -type reaction() :: #{
     actions => [{event, edb_dap_event:event()}],
-    state => edb_dap_state:t()
+    state => edb_dap_server:state()
 }.
 -export_type([reaction/0]).
 
@@ -42,7 +42,7 @@
 %%%---------------------------------------------------------------------------------
 -spec handle(EdbEvent, State) -> Reaction when
     EdbEvent :: edb:event(),
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Reaction :: edb_dap_internal_events:reaction().
 handle({paused, PausedEvent}, State) ->
     paused_impl(State, PausedEvent);
@@ -55,10 +55,10 @@ handle(Event, _State) ->
 %%%---------------------------------------------------------------------------------
 %%% Implementations
 %%%---------------------------------------------------------------------------------
--spec nodedown_impl(edb_dap_state:t(), Node :: node(), Reason :: term()) -> reaction().
+-spec nodedown_impl(edb_dap_server:state(), Node :: node(), Reason :: term()) -> reaction().
 nodedown_impl(State, Node, Reason) ->
-    case edb_dap_state:get_context(State) of
-        #{target_node := #{name := Node}} ->
+    case State of
+        #{context := #{target_node := #{name := Node}}} ->
             ExitCode =
                 case Reason of
                     connection_closed -> 0;
@@ -70,11 +70,11 @@ nodedown_impl(State, Node, Reason) ->
                     {event, edb_dap_event:terminated()}
                 ]
             };
-        _ ->
+        #{context := _} ->
             #{}
     end.
 
--spec paused_impl(edb_dap_state:t(), edb:paused_event()) -> reaction().
+-spec paused_impl(edb_dap_server:state(), edb:paused_event()) -> reaction().
 paused_impl(_State, {breakpoint, Pid, _MFA, _Line}) ->
     StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"breakpoint",

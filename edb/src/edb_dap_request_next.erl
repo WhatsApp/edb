@@ -57,7 +57,7 @@ parse_arguments(Args) ->
     {ok, Args}.
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
 handle(_State, #{threadId := ThreadId}) ->
     stepper(ThreadId, 'step-over').

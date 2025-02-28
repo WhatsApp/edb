@@ -147,13 +147,13 @@ parse_arguments(Args) ->
     {ok, Args}.
 
 -spec handle(State, Args) -> edb_dap_request:reaction(breakpoints()) when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State, Args = #{source := #{path := Path}}) ->
     Module = binary_to_atom(filename:basename(Path, ".erl")),
 
     % TODO(T202772655): Remove once edb:set_breakpoint/2 takes care of auto-loading modules
-    #{target_node := #{name := Node}} = edb_dap_state:get_context(State),
+    #{context := #{target_node := #{name := Node}}} = State,
     % elp:ignore W0014 (cross_node_eval)
     erpc:call(Node, code, ensure_loaded, [Module]),
 

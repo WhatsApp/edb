@@ -40,12 +40,12 @@
     #{
         response := response(T),
         actions => [edb_dap_server:action()],
-        state => edb_dap_state:t()
+        state => edb_dap_server:state()
     }
     | #{
         error := edb_dap_server:error(),
         actions => [edb_dap_server:action()],
-        state => edb_dap_state:t()
+        state => edb_dap_server:state()
     }.
 
 -type response(T) :: #{
@@ -63,7 +63,7 @@
     Reason :: binary().
 
 -callback handle(State, Arguments) -> reaction(edb_dap:body()) when
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Arguments :: edb_dap:arguments().
 
 %% ------------------------------------------------------------------
@@ -71,7 +71,7 @@
 %% ------------------------------------------------------------------
 -spec dispatch(Request, State) -> Reaction when
     Request :: edb_dap:request(),
-    State :: edb_dap_state:t(),
+    State :: edb_dap_server:state(),
     Reaction :: reaction(edb_dap:response()).
 dispatch(#{command := Method} = Request, State) ->
     case known_handlers() of

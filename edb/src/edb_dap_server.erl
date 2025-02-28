@@ -47,8 +47,23 @@
 %%%---------------------------------------------------------------------------------
 %%% Types
 %%%---------------------------------------------------------------------------------
+-type context() :: #{
+    target_node => edb_dap_request_launch:target_node(),
+    attach_timeout := non_neg_integer(),
+    cwd := binary(),
+    strip_source_prefix := binary(),
+    % This is `cwd` with the suffix that matches `strip_source_prefix` removed
+    % This is used to make sure that the source paths are relative to the
+    % repo root, and not the cwd, in they case they do not coincide.
+    % It is stored in the context to avoid recomputing it every time.
+    cwd_no_source_prefix := binary()
+}.
+-type state() :: #{
+    state := started | initialized | {attached, edb:event_subscription()} | cannot_attach,
+    context => context()
+}.
 
--type state() :: edb_dap_state:t().
+-export_type([state/0, context/0]).
 
 -type action() ::
     {event, edb_dap_event:event()}
@@ -61,18 +76,18 @@
         response := edb_dap_request:response(edb_dap:body()),
         request_context := #{command := edb_dap:command(), seq := edb_dap:seq()},
         actions => [edb_dap_server:action()],
-        state => edb_dap_state:t()
+        state => edb_dap_server:state()
     }
     | #{
         error := error(),
         request_context => #{command := edb_dap:command(), seq := edb_dap:seq()},
         actions => [edb_dap_server:action()],
-        state => edb_dap_state:t()
+        state => edb_dap_server:state()
     }
     | #{
         error => error(),
         actions => [edb_dap_server:action()],
-        state => edb_dap_state:t()
+        state => edb_dap_server:state()
     }.
 
 -type error() ::
@@ -106,7 +121,7 @@ handle_message(Message) ->
 
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
-    {ok, edb_dap_state:new()}.
+    {ok, #{state => started}}.
 
 -spec terminate(Reason :: term(), state()) -> ok.
 terminate(_Reason, _State) ->
@@ -117,19 +132,8 @@ terminate(_Reason, _State) ->
         Fun(Arg, State)
     catch
         Class:Reason:StackTrace ->
-            Actions =
-                case edb_dap_state:is_attached(State) of
-                    true ->
-                        [];
-                    false ->
-                        % We are not attached and crashing handling client messages, we
-                        % are unlikely to be able to do any work, so just terminate
-                        % the session
-                        [{event, edb_dap_event:terminated()}]
-                end,
             #{
-                error => {internal_error, #{class => Class, reason => Reason, stacktrace => StackTrace}},
-                actions => Actions
+                error => {internal_error, #{class => Class, reason => Reason, stacktrace => StackTrace}}
             }
     end
 ).
@@ -139,18 +143,21 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(cast_request(), state()) -> {noreply, state()} | {stop, normal, state()}.
-handle_cast({handle_message, Request = #{command := Command, type := request}}, State0) ->
-    Reaction0 =
-        case edb_dap_state:is_initialized(State0) of
-            false when Command =/= ~"initialize" ->
-                #{error => {user_error, ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"}};
-            _ ->
-                ?REACTING_TO_UNEXPECTED_ERRORS(
-                    fun edb_dap_request:dispatch/2,
-                    Request,
-                    State0
-                )
-        end,
+handle_cast({handle_message, Request = #{command := Command, type := request}}, State0 = #{state := started}) when
+    Command =/= ~"initialize"
+->
+    Reaction = #{
+        error => {user_error, ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"},
+        request_context => maps:with([command, seq], Request)
+    },
+    State1 = react(Reaction, State0),
+    {noreply, State1};
+handle_cast({handle_message, Request = #{type := request}}, State0) ->
+    Reaction0 = ?REACTING_TO_UNEXPECTED_ERRORS(
+        fun edb_dap_request:dispatch/2,
+        Request,
+        State0
+    ),
 
     RequestContext = maps:with([command, seq], Request),
     Reaction1 = Reaction0#{request_context => RequestContext},
@@ -174,22 +181,31 @@ handle_info(Unexpected, State) ->
 
 -spec handle_edb_event(Event, state()) -> {noreply, state()} when
     Event :: edb:event_envelope(edb:event()).
-handle_edb_event({edb_event, Subscription, Event}, State0) ->
+handle_edb_event({edb_event, Subscription, Event}, State0 = #{state := {attached, Subscription}}) ->
     ?LOG_DEBUG("Handle event: ~p", [Event]),
-    Reaction =
-        case edb_dap_state:is_valid_subscription(State0, Subscription) of
-            true ->
-                ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0);
-            false ->
-                ?LOG_WARNING("Invalid Subscription, skipping."),
-                #{}
-        end,
+    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0),
     State1 = react(Reaction, State0),
-    {noreply, State1}.
+    {noreply, State1};
+handle_edb_event(_UnexpectedEvent, State0) ->
+    ?LOG_WARNING("Invalid Subscription, skipping."),
+    {noreply, State0}.
 
 -spec react(Reaction, state()) -> state() when
     Reaction :: reaction().
-react(Reaction, State0) ->
+react(Reaction, State = #{state := {attached, _}}) ->
+    react_1(Reaction, State);
+react(Reaction0 = #{error := {internal_error, _}}, State) ->
+    % We are not attached and crashing handling client messages, we
+    % are unlikely to be able to do any work, so just terminate
+    % the session
+    Reaction1 = Reaction0#{actions => [{event, edb_dap_event:terminated()}]},
+    react_1(Reaction1, State);
+react(Reaction, State) ->
+    react_1(Reaction, State).
+
+-spec react_1(Reaction, state()) -> state() when
+    Reaction :: reaction().
+react_1(Reaction, State0) ->
     Actions = maps:get(actions, Reaction, []),
     [handle_action(Action) || Action <- Actions],
     case Reaction of
