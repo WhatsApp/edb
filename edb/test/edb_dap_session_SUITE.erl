@@ -154,6 +154,6 @@ test_terminates_when_node_goes_down(Config) ->
     ?assertMatch([#{event := ~"exited", body := #{exitCode := 0}}], ExitedEvent),
 
     {ok, TerminatedEvent} = edb_dap_test_client:wait_for_event(~"terminated", Client),
-    ?assertMatch([#{event := ~"terminated", body := #{}}], TerminatedEvent),
+    ?assertMatch([#{event := ~"terminated"}], TerminatedEvent),
 
     ok.

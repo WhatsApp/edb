@@ -47,8 +47,6 @@
     error_response/0,
     event/0,
     event_type/0,
-    exited_event_body/0,
-    initialized_event_body/0,
     message/0,
 
     protocol_message_type/0,
@@ -59,8 +57,6 @@
     source/0,
     stepping_granularity/0,
 
-    stopped_event_body/0,
-    terminated_event_body/0,
     thread_id/0
 ]).
 
@@ -166,59 +162,6 @@ build_error_response(Id, Format) ->
         success => false,
         body => #{error => #{id => Id, format => Format}}
     }.
-
-%%%---------------------------------------------------------------------------------
-%%% Events
-%%%---------------------------------------------------------------------------------
-
-%%% Initialized
-%%% https://microsoft.github.io/debug-adapter-protocol/specification#Events_Initialized
--type initialized_event_body() :: #{}.
-
-%%% Exited
-%%% https://microsoft.github.io/debug-adapter-protocol/specification#Events_Exited
--type exited_event_body() :: #{
-    % The exit code returned from the debuggee.
-    exitCode := number()
-}.
-
-%%% Stopped
-%%% https://microsoft.github.io/debug-adapter-protocol/specification#Events_Stopped
--type stopped_event_body() :: #{
-    % The reason for the event. For backward compatibility this string is shown in the UI if the
-    % `description` attribute is missing (but it must not be translated).
-    % Values: 'step' | 'breakpoint' | 'exception' | 'pause' | 'entry' | 'goto' | 'function breakpoint' |
-    % 'data breakpoint' | 'instruction breakpoint'
-    reason := binary(),
-    % The full reason for the event, e.g. 'Paused on exception'. This string is shown in the UI as is and can be translated.
-    description => binary(),
-    % The thread which was stopped
-    threadId => thread_id(),
-    % A value of `true` hints to the client that this event should not change the focus
-    preserveFocusHint => boolean(),
-    % Additional information. E.g. if `reason` is `exception`, text contains the exception name. This string is shown in the UI.
-    text => binary(),
-    % If `allThreadsStopped` is `true`, a debug adapter can announce that all threads have stopped.
-    % - The client should use this information to enable that all threads can be expanded to access their stacktraces.
-    % - If the attribute is missing or `false`, only the thread with the given `threadId` can be expanded.
-    allThreadsStopped => boolean(),
-    % Ids of the breakpoints that triggered the event. In most cases there is only a single breakpoint but here are some examples for multiple
-    % breakpoints:
-    % - Different types of breakpoints map to the same location.
-    % - Multiple source breakpoints get collapsed to the same instruction by the compiler/runtime.
-    % - Multiple function breakpoints with different function names map to the same location.
-    hitBreakpointIds => [number()]
-}.
-
-%%% Terminated
-%%% https://microsoft.github.io/debug-adapter-protocol/specification#Events_Terminated
--type terminated_event_body() :: #{
-    % A debug adapter may set `restart` to true (or to an arbitrary object) to
-    % request that the client restarts the session.
-    % The value is not interpreted by the client and passed unmodified as an
-    % attribute `__restart` to the `launch` and `attach` requests.
-    restart => true | map()
-}.
 
 %%%---------------------------------------------------------------------------------
 %%% Basic Types (used by requests and responses)

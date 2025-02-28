@@ -12,34 +12,51 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc DAP Events
-%%      Handle events coming from the debugger.
-%%      This function should be invoked by the DAP server.
+%% @doc Handle events coming from the debugger.
 %% @end
 %%%-------------------------------------------------------------------
 %%% % @format
 
--module(edb_dap_events).
+-module(edb_dap_internal_events).
 
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
 
--export([
-    exited/3,
-    stopped/2
-]).
+-export([handle/2]).
 
 -include_lib("kernel/include/logger.hrl").
 
+%%%---------------------------------------------------------------------------------
+%%% Types
+%%%---------------------------------------------------------------------------------
+
 -type reaction() :: #{
-    actions => [edb_dap_server:action()],
+    actions => [{event, edb_dap_event:event()}],
     state => edb_dap_state:t()
 }.
 -export_type([reaction/0]).
 
--spec exited(edb_dap_state:t(), Node :: node(), Reason :: term()) -> reaction().
-exited(State, Node, Reason) ->
+%%%---------------------------------------------------------------------------------
+%%% Public API
+%%%---------------------------------------------------------------------------------
+-spec handle(EdbEvent, State) -> Reaction when
+    EdbEvent :: edb:event(),
+    State :: edb_dap_state:t(),
+    Reaction :: edb_dap_internal_events:reaction().
+handle({paused, PausedEvent}, State) ->
+    paused_impl(State, PausedEvent);
+handle({nodedown, Node, Reason}, State) ->
+    nodedown_impl(State, Node, Reason);
+handle(Event, _State) ->
+    ?LOG_DEBUG("Skipping event: ~p", [Event]),
+    #{}.
+
+%%%---------------------------------------------------------------------------------
+%%% Implementations
+%%%---------------------------------------------------------------------------------
+-spec nodedown_impl(edb_dap_state:t(), Node :: node(), Reason :: term()) -> reaction().
+nodedown_impl(State, Node, Reason) ->
     case edb_dap_state:get_context(State) of
         #{target_node := #{name := Node}} ->
             ExitCode =
@@ -49,42 +66,42 @@ exited(State, Node, Reason) ->
                 end,
             #{
                 actions => [
-                    {event, <<"exited">>, #{exitCode => ExitCode}},
-                    {event, <<"terminated">>, #{}}
+                    {event, edb_dap_event:exited(ExitCode)},
+                    {event, edb_dap_event:terminated()}
                 ]
             };
         _ ->
             #{}
     end.
 
--spec stopped(edb_dap_state:t(), edb:paused_event()) -> reaction().
-stopped(_State, {breakpoint, Pid, _MFA, _Line}) ->
-    StoppedEventBody = #{
+-spec paused_impl(edb_dap_state:t(), edb:paused_event()) -> reaction().
+paused_impl(_State, {breakpoint, Pid, _MFA, _Line}) ->
+    StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"breakpoint",
         % On a BP, so we expect the source file of the top-frame
         % of this process to be shown
         preserveFocusHint => false,
         threadId => edb_dap_id_mappings:pid_to_thread_id(Pid),
         allThreadsStopped => true
-    },
-    #{actions => [{event, ~"stopped", StoppedEventBody}]};
-stopped(_State, {step, Pid}) ->
-    StoppedEventBody = #{
+    }),
+    #{actions => [{event, StoppedEvent}]};
+paused_impl(_State, {step, Pid}) ->
+    StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"step",
         % After a step action, so we expect the source file
         % of the top-frame of this process to be shown
         preserveFocusHint => false,
         threadId => edb_dap_id_mappings:pid_to_thread_id(Pid),
         allThreadsStopped => true
-    },
-    #{actions => [{event, ~"stopped", StoppedEventBody}]};
-stopped(_State, pause) ->
-    StoppedEventBody = #{
+    }),
+    #{actions => [{event, StoppedEvent}]};
+paused_impl(_State, pause) ->
+    StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"pause",
         preserveFocusHint => true,
         allThreadsStopped => true
-    },
-    #{actions => [{event, ~"stopped", StoppedEventBody}]};
-stopped(_State, Event) ->
-    ?LOG_WARNING("Skipping stopped event: ~p", [Event]),
+    }),
+    #{actions => [{event, StoppedEvent}]};
+paused_impl(_State, Event) ->
+    ?LOG_WARNING("Skipping paused event: ~p", [Event]),
     #{}.

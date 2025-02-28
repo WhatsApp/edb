@@ -51,7 +51,7 @@
 -type state() :: edb_dap_state:t().
 
 -type action() ::
-    {event, edb_dap:event_type(), edb_dap:arguments()}
+    {event, edb_dap_event:event()}
     | {reverse_request, edb_dap_reverse_request:request()}
     | terminate.
 -export_type([action/0]).
@@ -154,7 +154,7 @@ handle_edb_event({edb_event, Subscription, Event}, State0) ->
         case edb_dap_state:is_valid_subscription(State0, Subscription) of
             true ->
                 try
-                    dispatch_event(Event, State0)
+                    edb_dap_internal_events:handle(Event, State0)
                 catch
                     Class:Reason:StackTrace ->
                         {_Errors, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
@@ -176,24 +176,12 @@ handle_reaction(Reaction) ->
     ok.
 
 -spec handle_action(action()) -> ok.
-handle_action({event, Type, Body}) ->
-    edb_dap_transport:send_event(Type, Body);
+handle_action({event, Event}) ->
+    edb_dap_transport:send_event(Event);
 handle_action({reverse_request, ReverseRequest}) ->
     edb_dap_transport:send_reverse_request(ReverseRequest);
 handle_action(terminate) ->
     gen_server:cast(self(), terminate).
-
--spec dispatch_event(EdbEvent, State) -> Reaction when
-    EdbEvent :: edb:event(),
-    State :: state(),
-    Reaction :: edb_dap_events:reaction().
-dispatch_event({paused, PausedEvent}, State) ->
-    edb_dap_events:stopped(State, PausedEvent);
-dispatch_event({nodedown, Node, Reason}, State) ->
-    edb_dap_events:exited(State, Node, Reason);
-dispatch_event(Event, _State) ->
-    ?LOG_DEBUG("Skipping event: ~p", [Event]),
-    #{}.
 
 -spec format_exception(Class, Reason, StackTrace) -> binary() when
     Class :: 'error' | 'exit' | 'throw',
@@ -223,6 +211,6 @@ react_to_unxpected_failure({Class, Reason, StackTrace}, State) ->
                 % We are not attached and crashing handling client messages, we
                 % are unlikely to be able to do any work, so just terminate
                 % the session
-                [{event, ~"terminated", #{}}]
+                [{event, edb_dap_event:terminated()}]
         end,
     {Error, Actions}.

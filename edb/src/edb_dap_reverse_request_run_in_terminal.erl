@@ -88,9 +88,9 @@ handle_response(State, _Body) ->
         ok ->
             {ok, Subscription} = edb:subscribe(),
             NewState = edb_dap_state:set_status(State, {attached, Subscription}),
-            #{actions => [{event, <<"initialized">>, #{}}], state => NewState};
+            #{actions => [{event, edb_dap_event:initialized()}], state => NewState};
         {error, Reason} ->
             ?LOG_ERROR("Attaching (node: ~p) (reason: ~p)", [NodeName, Reason]),
             NewState = edb_dap_state:set_status(State, cannot_attach),
-            #{actions => [{event, <<"terminated">>, #{}}], state => NewState}
+            #{actions => [{event, edb_dap_event:terminated()}], state => NewState}
     end.

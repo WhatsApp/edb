@@ -35,7 +35,7 @@
 
 %% Public API
 -export([start_link/0]).
--export([send_response/2, send_reverse_request/1, send_event/2]).
+-export([send_response/2, send_reverse_request/1, send_event/1]).
 
 %% gen_server callbacks
 -export([
@@ -81,15 +81,10 @@ send_reverse_request(Request) ->
     Payload = Request#{type => request},
     ok = gen_server:cast(?SERVER, {send, Payload}).
 
--spec send_event(EventType, EventBody) -> ok when
-    EventType :: edb_dap:event_type(),
-    EventBody :: edb_dap:body().
-send_event(Type, Body) ->
-    Payload = #{
-        type => event,
-        event => Type,
-        body => Body
-    },
+-spec send_event(Event) -> ok when
+    Event :: edb_dap_event:event().
+send_event(Event) ->
+    Payload = Event#{type => event},
     ok = gen_server:cast(?SERVER, {send, Payload}).
 
 %%%---------------------------------------------------------------------------------
