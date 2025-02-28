@@ -186,7 +186,7 @@
     Reason ::
         attachment_in_progress
         | nodedown
-        | bootstrap_failure().
+        | {bootstrap_failed, bootstrap_failure()}.
 attach(AttachOpts0) ->
     {NodeToDebug, AttachOpts1} = take_arg(node, AttachOpts0, #{parse => fun parse_atom/1}),
     {AttachTimeout, AttachOpts2} = take_arg(timeout, AttachOpts1, #{default => 0, parse => fun parse_timeout/1}),
@@ -234,7 +234,8 @@ attach(AttachOpts0) ->
 %%
 %% - `{NotificationRef, ok}': The reverse attachment succeeded, the node is now paused.
 %% - `{NotificationRef, timeout}': The reverse attachment timed out; it will now never happen.
-%% - `{NotificationRef, {error, BootstrapFailure}}': We tried to bootstrap edb on the node but failed
+%% - `{NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}}': We tried to bootstrap
+%%    edb on the node but failed
 %%
 %% This call may start distribution and set the node name.
 %%

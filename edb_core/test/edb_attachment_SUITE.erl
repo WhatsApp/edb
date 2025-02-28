@@ -367,7 +367,7 @@ test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
         {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{enable_debugging_mode => false}),
 
         ?assertEqual(
-            {error, {no_debugger_support, not_enabled}},
+            {error, {bootstrap_failed, {no_debugger_support, not_enabled}}},
             edb:attach(#{node => Node, cookie => Cookie})
         ),
 
@@ -496,7 +496,7 @@ test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
         }),
 
         ?assertEqual(
-            {error, {no_debugger_support, not_enabled}},
+            {error, {bootstrap_failed, {no_debugger_support, not_enabled}}},
             wait_reverse_attach_notification(Ref)
         ),
 
@@ -787,12 +787,13 @@ start_distribution(NameDomain) ->
 stop_distribution() ->
     ok = net_kernel:stop().
 
--spec wait_reverse_attach_notification(NotificationRef :: reference()) -> ok | timeout | {error, edb:bootstrap_error()}.
+-spec wait_reverse_attach_notification(NotificationRef :: reference()) ->
+    ok | timeout | {error, {bootstrap_failed, edb:bootstrap_error()}}.
 wait_reverse_attach_notification(NotificationRef) ->
     receive
         {NotificationRef, ok} -> ok;
         {NotificationRef, timeout} -> timeout;
-        {NotificationRef, {error, Reason}} -> {error, Reason};
-        {NotificationRef, Unexpected} -> error(unexpected_notification, Unexpected)
+        {NotificationRef, {error, {bootstrap_failed, Reason}}} -> {error, {bootstrap_failed, Reason}};
+        {NotificationRef, Unexpected} -> error({unexpected_notification, Unexpected})
     after 2_000 -> error(timeout_waiting_for_notification)
     end.

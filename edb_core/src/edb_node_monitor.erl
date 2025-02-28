@@ -108,7 +108,7 @@ start_link() ->
     Reason ::
         attachment_in_progress
         | nodedown
-        | edb:bootstrap_failure().
+        | {bootstrap_failed, edb:bootstrap_failure()}.
 attach(Node, AttachTimeout) when is_atom(Node), AttachTimeout =:= infinity orelse AttachTimeout >= 0 ->
     call({attach, Node, AttachTimeout}).
 
@@ -304,7 +304,7 @@ try_attach_impl(Node, State0, Data0) ->
     Reason ::
         attachment_in_progress
         | nodedown
-        | edb:bootstrap_failure().
+        | {bootstrap_failed, edb:bootstrap_failure()}.
 attach_impl(_, _, From, #{state := attachment_in_progress}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
 attach_impl(Node, AttachTimeout, From, State0, Data0) ->
@@ -376,9 +376,9 @@ reverse_attach_notification_impl(
 ) ->
     #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
     case bootstrap_edb(Node, pause) of
-        Error = {error, _} ->
+        {error, BootstrapFailure} ->
             State1 = #{state => not_attached},
-            CallerPid ! {NotificationRef, Error},
+            CallerPid ! {NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}},
             {next_state, State1, Data0};
         ok ->
             State1 = #{state => up, node => Node},
@@ -520,9 +520,9 @@ schedule_try_attach_after(Delay, Node) ->
 on_node_connected(State0 = #{state := attachment_in_progress, type := attach, node := Node, caller := Caller}) ->
     State2 =
         try bootstrap_edb(Node, keep_running) of
-            Error = {error, _} ->
+            {error, BootstrapFailure} ->
                 State1 = #{state => not_attached},
-                gen_statem:reply(Caller, Error),
+                gen_statem:reply(Caller, {error, {bootstrap_failed, BootstrapFailure}}),
                 State1;
             ok ->
                 State1 = #{state => up, node => Node},
