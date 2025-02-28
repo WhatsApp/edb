@@ -12,67 +12,43 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc DAP Launch Configuration
-%%      Validation functions for the DAP launch configuration
+%% @doc Support for parsing of request arguments, etc
 %% @end
 %%%-------------------------------------------------------------------
 %%% % @format
--module(edb_dap_launch_config).
+-module(edb_dap_parse).
 
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
 
--export([parse/1]).
+-export([parse/3]).
+-export([
+    is_non_neg_integer/1,
+    is_true/1
+]).
 
--type t() :: edb_dap_request_launch:arguments().
+%% --------------------------------------------------------------------
+%% Types
+%% --------------------------------------------------------------------
+-export_type([template/0, predicate/0, value_validation/0, field_validation/0]).
+-type predicate() :: fun((term()) -> boolean()).
+-type value_validation() :: predicate() | template().
+-type field_validation() :: value_validation() | {optional, value_validation()}.
+-type template() :: #{atom() => field_validation()}.
 
--spec parse(term()) -> {ok, t()} | {error, HumarReadableReason :: binary()}.
-parse(RobustConfig = #{config := _}) ->
-    Template = #{config => launch_config_template()},
-    Filtered = maps:with([config], RobustConfig),
-    case parse_config(Template, Filtered) of
-        {ok, #{config := Parsed}} -> {ok, Parsed};
-        Error = {error, _} -> Error
-    end;
-parse(FlatConfig) when is_map(FlatConfig) ->
-    ConfigKeys = maps:keys(launch_config_template()),
-    case maps:with(ConfigKeys, FlatConfig) of
-        Filtered when map_size(Filtered) > 0 ->
-            Template = launch_config_template(),
-            parse_config(Template, Filtered);
-        _ ->
-            % We will fail, but suggest the user to use the new format
-            Template = #{config => launch_config_template()},
-            parse_config(Template, #{})
-    end;
-parse(Other) ->
-    {error, human_readable_error({invalid, Other})}.
-
--spec launch_config_template() -> map_template().
-launch_config_template() ->
-    #{
-        launchCommand => #{
-            cwd => fun is_binary/1,
-            command => fun is_binary/1,
-            arguments => {optional, fun is_valid_arguments/1},
-            env => {optional, fun is_valid_env/1}
-        },
-        targetNode => #{
-            name => fun is_binary/1,
-            cookie => {optional, fun is_binary/1},
-            type => {optional, fun is_node_type/1}
-        },
-        stripSourcePrefix => {optional, fun is_binary/1},
-        timeout => {optional, fun is_non_neg_integer/1}
-    }.
-
--spec parse_config(map_template(), term()) ->
+%% --------------------------------------------------------------------
+%% Public API
+%% --------------------------------------------------------------------
+-spec parse(template(), term(), allow_unknown | reject_unknown) ->
     {ok, dynamic()} | {error, HumarReadableReason :: binary()}.
-parse_config(Template, LaunchConfig) ->
-    try parse_map(Template, LaunchConfig) of
+parse(Template, Map0, allow_unknown) when is_map(Map0) ->
+    Map1 = maps:with(maps:keys(Template), Map0),
+    parse(Template, Map1, reject_unknown);
+parse(Template, Term, _) ->
+    try parse_map(Template, Term) of
         ok ->
-            {ok, LaunchConfig}
+            {ok, Term}
     catch
         throw:{parse_error, Reason} ->
             {error, human_readable_error(Reason)}
@@ -82,36 +58,13 @@ parse_config(Template, LaunchConfig) ->
 is_non_neg_integer(N) ->
     is_integer(N) andalso N >= 0.
 
--spec is_valid_arguments(term()) -> boolean().
-is_valid_arguments(Arguments) when is_list(Arguments) ->
-    lists:all(fun is_binary/1, Arguments);
-is_valid_arguments(_) ->
-    false.
-
--spec is_valid_env(term()) -> boolean().
-is_valid_env(Env) when is_map(Env) ->
-    lists:all(fun is_true/1, [is_atom(Key) andalso is_binary(Value) || Key := Value <- Env]);
-is_valid_env(_) ->
-    false.
-
--spec is_node_type(term()) -> boolean().
-is_node_type(Type) when is_binary(Type) ->
-    lists:member(Type, [~"longnames", ~"shortnames"]);
-is_node_type(_Type) ->
-    false.
-
 -spec is_true(boolean()) -> boolean().
 is_true(true) -> true;
 is_true(false) -> false.
 
 %% --------------------------------------------------------------------
-%% Parser functions
+%% Helpers
 %% --------------------------------------------------------------------
-
--type predicate() :: fun((term()) -> boolean()).
--type value_validation() :: predicate() | map_template().
--type field_validation() :: value_validation() | {optional, value_validation()}.
--type map_template() :: #{atom() => field_validation()}.
 
 -spec parse_value(value_validation(), term()) -> ok.
 parse_value(P, V) when is_function(P) ->
@@ -145,7 +98,7 @@ parse_field(Field, FieldValidation, Map) ->
             end
     end.
 
--spec parse_map(map_template(), term()) -> ok.
+-spec parse_map(template(), term()) -> ok.
 parse_map(Template, Map) when is_map(Map) ->
     maps:foreach(
         fun(Field, Validation) ->

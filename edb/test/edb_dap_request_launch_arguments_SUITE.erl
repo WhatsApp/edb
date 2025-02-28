@@ -12,7 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %% % @format
--module(edb_dap_launch_config_SUITE).
+-module(edb_dap_request_launch_arguments_SUITE).
 
 %% erlfmt;ignore
 
@@ -44,26 +44,26 @@ all() ->
 test_validate_old_style(_Config) ->
     ?assertEqual(
         {error, ~"invalid value"},
-        edb_dap_launch_config:parse(foo)
+        edb_dap_request_launch:parse_arguments(foo)
     ),
 
     ?assertEqual(
         {error, ~"on field 'launchCommand': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => foo
         })
     ),
 
     ?assertEqual(
         {error, ~"on field 'launchCommand': mandatory field missing 'command'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{}
         })
     ),
 
     ?assertEqual(
         {error, ~"on field 'launchCommand.command': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => foo
             }
@@ -72,7 +72,7 @@ test_validate_old_style(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'launchCommand': mandatory field missing 'cwd'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo"
             }
@@ -81,7 +81,7 @@ test_validate_old_style(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'launchCommand.cwd': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => blah
@@ -90,7 +90,7 @@ test_validate_old_style(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'launchCommand.arguments': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah",
@@ -100,7 +100,7 @@ test_validate_old_style(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'launchCommand': unexpected field: garments"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah",
@@ -111,7 +111,7 @@ test_validate_old_style(_Config) ->
 
     ?assertEqual(
         {error, ~"mandatory field missing 'targetNode'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah"
@@ -120,7 +120,7 @@ test_validate_old_style(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'targetNode': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah"
@@ -130,7 +130,7 @@ test_validate_old_style(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'targetNode': mandatory field missing 'name'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah"
@@ -141,7 +141,7 @@ test_validate_old_style(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'targetNode.name': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             launchCommand => #{
                 command => ~"foo",
                 cwd => ~"/blah"
@@ -163,16 +163,16 @@ test_validate_old_style(_Config) ->
     },
     ?assertEqual(
         {ok, MinimalLaunchConfig},
-        edb_dap_launch_config:parse(MinimalLaunchConfig)
+        edb_dap_request_launch:parse_arguments(MinimalLaunchConfig)
     ),
 
     ?assertEqual(
         {error, ~"on field 'timeout': invalid value"},
-        edb_dap_launch_config:parse(MinimalLaunchConfig#{timeout => on})
+        edb_dap_request_launch:parse_arguments(MinimalLaunchConfig#{timeout => on})
     ),
     ?assertEqual(
         {error, ~"on field 'stripSourcePrefix': invalid value"},
-        edb_dap_launch_config:parse(MinimalLaunchConfig#{stripSourcePrefix => on})
+        edb_dap_request_launch:parse_arguments(MinimalLaunchConfig#{stripSourcePrefix => on})
     ),
 
     MaximalLaunchConfig = #{
@@ -204,23 +204,18 @@ test_validate_old_style(_Config) ->
     },
     ?assertEqual(
         {ok, MaximalLaunchConfig},
-        edb_dap_launch_config:parse(MaximalLaunchConfigWithExtraStuff)
+        edb_dap_request_launch:parse_arguments(MaximalLaunchConfigWithExtraStuff)
     ).
 
 test_validate(_Config) ->
     ?assertEqual(
         {error, ~"invalid value"},
-        edb_dap_launch_config:parse(foo)
-    ),
-
-    ?assertEqual(
-        {error, ~"mandatory field missing 'config'"},
-        edb_dap_launch_config:parse(#{})
+        edb_dap_request_launch:parse_arguments(foo)
     ),
 
     ?assertEqual(
         {error, ~"on field 'config.launchCommand': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => foo
             }
@@ -229,7 +224,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config.launchCommand': mandatory field missing 'command'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{}
             }
@@ -238,7 +233,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config.launchCommand.command': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => foo
@@ -249,7 +244,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config.launchCommand': mandatory field missing 'cwd'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo"
@@ -260,7 +255,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config.launchCommand.cwd': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -271,7 +266,7 @@ test_validate(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'config.launchCommand.arguments': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -283,7 +278,7 @@ test_validate(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'config.launchCommand': unexpected field: garments"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -296,7 +291,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config': mandatory field missing 'targetNode'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -307,7 +302,7 @@ test_validate(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'config.targetNode': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -319,7 +314,7 @@ test_validate(_Config) ->
     ),
     ?assertEqual(
         {error, ~"on field 'config.targetNode': mandatory field missing 'name'"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -332,7 +327,7 @@ test_validate(_Config) ->
 
     ?assertEqual(
         {error, ~"on field 'config.targetNode.name': invalid value"},
-        edb_dap_launch_config:parse(#{
+        edb_dap_request_launch:parse_arguments(#{
             config => #{
                 launchCommand => #{
                     command => ~"foo",
@@ -356,20 +351,20 @@ test_validate(_Config) ->
     },
     ?assertEqual(
         {ok, Minimal},
-        edb_dap_launch_config:parse(#{config => Minimal})
+        edb_dap_request_launch:parse_arguments(#{config => Minimal})
     ),
 
     ?assertEqual(
         {error, ~"on field 'config.timeout': invalid value"},
-        edb_dap_launch_config:parse(#{config => Minimal#{timeout => on}})
+        edb_dap_request_launch:parse_arguments(#{config => Minimal#{timeout => on}})
     ),
     ?assertEqual(
         {error, ~"on field 'config.stripSourcePrefix': invalid value"},
-        edb_dap_launch_config:parse(#{config => Minimal#{stripSourcePrefix => on}})
+        edb_dap_request_launch:parse_arguments(#{config => Minimal#{stripSourcePrefix => on}})
     ),
     ?assertEqual(
         {error, ~"on field 'config': unexpected field: foo"},
-        edb_dap_launch_config:parse(#{config => Minimal#{foo => bar}})
+        edb_dap_request_launch:parse_arguments(#{config => Minimal#{foo => bar}})
     ),
 
     Maximal = #{
@@ -401,5 +396,5 @@ test_validate(_Config) ->
     },
     ?assertEqual(
         {ok, Maximal},
-        edb_dap_launch_config:parse(MaximalLaunchConfig)
+        edb_dap_request_launch:parse_arguments(MaximalLaunchConfig)
     ).
