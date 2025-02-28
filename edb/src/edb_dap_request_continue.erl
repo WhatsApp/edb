@@ -58,7 +58,9 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(_State, _Args) ->
+handle(#{state := attached}, _Args) ->
     edb_dap_id_mappings:reset(),
     {ok, _} = edb:continue(),
-    #{response => #{success => true, body => #{allThreadsContinued => true}}}.
+    #{response => #{success => true, body => #{allThreadsContinued => true}}};
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().

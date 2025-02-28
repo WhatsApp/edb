@@ -79,7 +79,7 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State0, Args) ->
+handle(State0 = #{state := initialized}, Args) ->
     #{launchCommand := LaunchCommand, targetNode := TargetNode} = Args,
     #{cwd := Cwd, command := Command} = LaunchCommand,
     AttachTimeoutInSecs = maps:get(timeout, Args, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
@@ -94,6 +94,7 @@ handle(State0, Args) ->
         env => Env#{~"ERL_FLAGS" => ?ERL_FLAGS}
     }),
     State1 = State0#{
+        state => launching,
         context => #{
             target_node => TargetNode,
             attach_timeout => AttachTimeoutInSecs,
@@ -106,7 +107,9 @@ handle(State0, Args) ->
         response => #{success => true},
         actions => [{reverse_request, RunInTerminalRequest}],
         state => State1
-    }.
+    };
+handle(_InvalidState, _Args) ->
+    edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers

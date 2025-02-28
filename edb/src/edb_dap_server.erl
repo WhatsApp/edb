@@ -47,6 +47,7 @@
 %%%---------------------------------------------------------------------------------
 %%% Types
 %%%---------------------------------------------------------------------------------
+-type client_info() :: edb_dap_request_initialize:arguments().
 -type context() :: #{
     target_node => edb_dap_request_launch:target_node(),
     attach_timeout := non_neg_integer(),
@@ -58,10 +59,33 @@
     % It is stored in the context to avoid recomputing it every time.
     cwd_no_source_prefix := binary()
 }.
--type state() :: #{
-    state := started | initialized | {attached, edb:event_subscription()} | cannot_attach,
-    context => context()
-}.
+-type state() ::
+    #{
+        % Server is up, waiting for an `initialize` request from the client
+        state := started
+    }
+    | #{
+        % Server received an `initialize` request and is waiting for `attach`/`launch` requests
+        state := initialized,
+        client_info := client_info()
+    }
+    | #{
+        % A `launch` request was received and we are waiting for the debuggee node to be up
+        state := launching,
+        client_info := client_info(),
+        context := context()
+    }
+    | #{
+        % We are attached to the debuggee node, debugging is in progress
+        state := attached,
+        client_info := client_info(),
+        context := context(),
+        subscription := edb:event_subscription()
+    }
+    | #{
+        % We are shutting down
+        state := terminating
+    }.
 
 -export_type([state/0, context/0]).
 
@@ -143,15 +167,6 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(cast_request(), state()) -> {noreply, state()} | {stop, normal, state()}.
-handle_cast({handle_message, Request = #{command := Command, type := request}}, State0 = #{state := started}) when
-    Command =/= ~"initialize"
-->
-    Reaction = #{
-        error => {user_error, ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"},
-        request_context => maps:with([command, seq], Request)
-    },
-    State1 = react(Reaction, State0),
-    {noreply, State1};
 handle_cast({handle_message, Request = #{type := request}}, State0) ->
     Reaction0 = ?REACTING_TO_UNEXPECTED_ERRORS(
         fun edb_dap_request:dispatch/2,
@@ -181,7 +196,7 @@ handle_info(Unexpected, State) ->
 
 -spec handle_edb_event(Event, state()) -> {noreply, state()} when
     Event :: edb:event_envelope(edb:event()).
-handle_edb_event({edb_event, Subscription, Event}, State0 = #{state := {attached, Subscription}}) ->
+handle_edb_event({edb_event, Subscription, Event}, State0 = #{state := attached, subscription := Subscription}) ->
     ?LOG_DEBUG("Handle event: ~p", [Event]),
     Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0),
     State1 = react(Reaction, State0),
@@ -192,13 +207,16 @@ handle_edb_event(_UnexpectedEvent, State0) ->
 
 -spec react(Reaction, state()) -> state() when
     Reaction :: reaction().
-react(Reaction, State = #{state := {attached, _}}) ->
+react(Reaction, State = #{state := attached}) ->
     react_1(Reaction, State);
 react(Reaction0 = #{error := {internal_error, _}}, State) ->
     % We are not attached and crashing handling client messages, we
     % are unlikely to be able to do any work, so just terminate
     % the session
-    Reaction1 = Reaction0#{actions => [{event, edb_dap_event:terminated()}]},
+    Reaction1 = Reaction0#{
+        state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}]
+    },
     react_1(Reaction1, State);
 react(Reaction, State) ->
     react_1(Reaction, State).

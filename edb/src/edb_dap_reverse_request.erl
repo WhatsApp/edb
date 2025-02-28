@@ -29,6 +29,11 @@
 %% Public API
 -export([dispatch_response/2]).
 
+%% Helpers for behaviour implementations
+-export([unexpected_response/0]).
+
+-include("edb_dap.hrl").
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -78,3 +83,10 @@ known_handlers() ->
     #{
         ~"runInTerminal" => edb_dap_reverse_request_run_in_terminal
     }.
+
+%% ------------------------------------------------------------------
+%% Helpers for behaviour implementations
+%% ------------------------------------------------------------------
+-spec unexpected_response() -> reaction().
+unexpected_response() ->
+    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_REQUEST, ~"Response sent when it was not expected"}}.

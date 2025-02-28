@@ -29,6 +29,11 @@
 %% Public API
 -export([dispatch/2]).
 
+%% Helpers for behaviour implementations
+-export([unexpected_request/0]).
+
+-include("edb_dap.hrl").
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -104,3 +109,10 @@ known_handlers() ->
         ~"threads" => edb_dap_request_threads,
         ~"variables" => edb_dap_request_variables
     }.
+
+%% ------------------------------------------------------------------
+%% Helpers for behaviour implementations
+%% ------------------------------------------------------------------
+-spec unexpected_request() -> reaction().
+unexpected_request() ->
+    #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, ~"Request sent when it was not expected"}}.

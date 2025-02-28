@@ -83,7 +83,7 @@ test_fails_if_not_initialized(Config) ->
             request_seq := 1,
             type := response,
             success := false,
-            body := #{error := #{id := ?ERROR_SERVER_NOT_INITIALIZED}}
+            body := #{error := #{id := ?ERROR_PRECONDITION_VIOLATION}}
         },
         Response1
     ).
@@ -102,7 +102,7 @@ test_fails_if_initialized_twice(Config) ->
             request_seq := 2,
             type := response,
             success := false,
-            body := #{error := #{id := ?JSON_RPC_ERROR_INVALID_REQUEST}}
+            body := #{error := #{id := ?ERROR_PRECONDITION_VIOLATION}}
         },
         Response2
     ).

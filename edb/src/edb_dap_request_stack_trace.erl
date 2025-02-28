@@ -132,16 +132,17 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, #{threadId := ThreadId}) ->
-    StackFrames = #{stackFrames => stack_frames(State, ThreadId)},
-    #{response => #{success => true, body => StackFrames}}.
+handle(#{state := attached, context := Context}, #{threadId := ThreadId}) ->
+    StackFrames = #{stackFrames => stack_frames(Context, ThreadId)},
+    #{response => #{success => true, body => StackFrames}};
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec stack_frames(edb_dap_server:state(), edb_dap:thread_id()) -> [stack_frame()].
-stack_frames(State, ThreadId) ->
-    #{context := Context} = State,
+-spec stack_frames(edb_dap_server:context(), edb_dap:thread_id()) -> [stack_frame()].
+stack_frames(Context, ThreadId) ->
     case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
         {ok, Pid} ->
             case edb:stack_frames(Pid) of

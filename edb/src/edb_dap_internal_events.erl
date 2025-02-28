@@ -65,6 +65,7 @@ nodedown_impl(State, Node, Reason) ->
                     _ -> 1
                 end,
             #{
+                state => #{state => terminating},
                 actions => [
                     {event, edb_dap_event:exited(ExitCode)},
                     {event, edb_dap_event:terminated()}

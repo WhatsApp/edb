@@ -100,7 +100,7 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, #{frameId := FrameId}) ->
+handle(#{state := attached, context := Context}, #{frameId := FrameId}) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
     VariablesScopes =
         case edb:stack_frame_vars(Pid, FrameNo, _MaxTermSize = 1) of
@@ -129,7 +129,7 @@ handle(State, #{frameId := FrameId}) ->
             _ ->
                 []
         end,
-    #{context := #{target_node := #{name := Node}}} = State,
+    #{target_node := #{name := Node}} = Context,
     MessagesScopes =
         % elp:ignore W0014 (cross_node_eval)
         case erpc:call(Node, erlang, process_info, [Pid, message_queue_len]) of
@@ -153,4 +153,6 @@ handle(State, #{frameId := FrameId}) ->
                 scopes => MessagesScopes ++ VariablesScopes
             }
         }
-    }.
+    };
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().

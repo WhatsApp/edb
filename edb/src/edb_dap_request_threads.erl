@@ -51,11 +51,13 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(threads()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(_State, _Args) ->
+handle(#{state := attached}, _Args) ->
     Threads = maps:fold(fun thread/3, [], edb:processes()),
     #{
         response => #{success => true, body => #{threads => Threads}}
-    }.
+    };
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers

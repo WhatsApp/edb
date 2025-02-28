@@ -24,8 +24,6 @@
 
 -export([parse_arguments/1, handle/2]).
 
--include("edb_dap.hrl").
-
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -155,14 +153,14 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(capabilities()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State = #{state := started}, _Args) ->
+handle(#{state := started}, ClientInfo) ->
     Capabilities = capabilities(),
     #{
         response => #{success => true, body => Capabilities},
-        state => State#{state => initialized}
+        state => #{state => initialized, client_info => ClientInfo}
     };
-handle(_InitializedState, _Args) ->
-    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_REQUEST, ~"Already initialized"}}.
+handle(_InvalidState, _Args) ->
+    edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers

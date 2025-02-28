@@ -24,7 +24,7 @@
 
 -export([parse_arguments/1, handle/2]).
 
--export([stepper/2]).
+-export([stepper/3]).
 
 -include_lib("kernel/include/logger.hrl").
 -include("edb_dap.hrl").
@@ -59,16 +59,17 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(_State, #{threadId := ThreadId}) ->
-    stepper(ThreadId, 'step-over').
+handle(State, #{threadId := ThreadId}) ->
+    stepper(State, ThreadId, 'step-over').
 
 %% ------------------------------------------------------------------
 %% Generic stepping implementation
 %% ------------------------------------------------------------------
--spec stepper(ThreadId, StepType) -> edb_dap_request:reaction() when
+-spec stepper(State, ThreadId, StepType) -> edb_dap_request:reaction() when
+    State :: edb_dap_server:state(),
     ThreadId :: edb_dap:thread_id(),
     StepType :: 'step-over' | 'step-out'.
-stepper(ThreadId, StepType) ->
+stepper(#{state := attached}, ThreadId, StepType) ->
     StepFun =
         case StepType of
             'step-over' -> fun edb:step_over/1;
@@ -90,4 +91,6 @@ stepper(ThreadId, StepType) ->
         {error, not_found} ->
             ?LOG_WARNING("Cannot find pid for thread id ~p", [ThreadId]),
             throw(~"Unknown threadId")
-    end.
+    end;
+stepper(_UnexpectedState, _, _) ->
+    edb_dap_request:unexpected_request().

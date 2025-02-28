@@ -189,14 +189,14 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, #{variablesReference := VariablesReference}) ->
+handle(#{state := attached, context := Context}, #{variablesReference := VariablesReference}) ->
     case edb_dap_id_mappings:var_reference_to_frame_scope(VariablesReference) of
         {ok, #{frame := FrameId, scope := Scope}} ->
             case edb_dap_id_mappings:frame_id_to_pid_frame(FrameId) of
                 {ok, #{pid := Pid, frame_no := FrameNo}} ->
                     case Scope of
                         messages ->
-                            #{context := #{target_node := #{name := Node}}} = State,
+                            #{target_node := #{name := Node}} = Context,
                             % elp:ignore W0014 (cross_node_eval)
                             case erpc:call(Node, erlang, process_info, [Pid, messages]) of
                                 {messages, Messages0} when is_list(Messages0) ->
@@ -255,7 +255,9 @@ handle(State, #{variablesReference := VariablesReference}) ->
         {error, not_found} ->
             ?LOG_WARNING("Cannot find frame for variables reference ~p", [VariablesReference]),
             throw(~"Cannot resolve variables (frame_id_not_found)")
-    end.
+    end;
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers

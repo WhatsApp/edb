@@ -79,7 +79,7 @@ make_request(Args) ->
     #{command => ~"runInTerminal", arguments => Args}.
 
 -spec handle_response(edb_dap_server:state(), response_body()) -> edb_dap_reverse_request:reaction().
-handle_response(State0, _Body) ->
+handle_response(State0 = #{state := launching}, _Body) ->
     #{
         context := #{
             target_node := #{name := NodeName, cookie := Cookie},
@@ -89,10 +89,12 @@ handle_response(State0, _Body) ->
     case edb:attach(#{node => NodeName, timeout => AttachTimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
             {ok, Subscription} = edb:subscribe(),
-            State1 = State0#{state => {attached, Subscription}},
+            State1 = State0#{state => attached, subscription => Subscription},
             #{actions => [{event, edb_dap_event:initialized()}], state => State1};
         {error, Reason} ->
             ?LOG_ERROR("Attaching (node: ~p) (reason: ~p)", [NodeName, Reason]),
-            State1 = #{state => cannot_attach},
+            State1 = #{state => terminating},
             #{actions => [{event, edb_dap_event:terminated()}], state => State1}
-    end.
+    end;
+handle_response(_UnexpectedState, _) ->
+    edb_dap_reverse_request:unexpected_response().
