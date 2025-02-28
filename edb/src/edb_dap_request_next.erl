@@ -26,7 +26,6 @@
 
 -export([stepper/3]).
 
--include_lib("kernel/include/logger.hrl").
 -include("edb_dap.hrl").
 
 %% ------------------------------------------------------------------
@@ -82,15 +81,14 @@ stepper(#{state := attached}, ThreadId, StepType) ->
                     edb_dap_id_mappings:reset(),
                     #{response => #{success => true}};
                 {error, not_paused} ->
-                    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_PARAMS, ~"Process is not stopped"}};
+                    edb_dap_request:not_paused(Pid);
                 {error, no_abstract_code} ->
                     #{error => {user_error, ?ERROR_NOT_SUPPORTED, ~"Module not compiled with debug_info"}};
                 {error, {beam_analysis, Err}} ->
                     throw({beam_analysis, Err})
             end;
         {error, not_found} ->
-            ?LOG_WARNING("Cannot find pid for thread id ~p", [ThreadId]),
-            throw(~"Unknown threadId")
+            edb_dap_request:unknown_resource(thread_id, ThreadId)
     end;
 stepper(_UnexpectedState, _, _) ->
     edb_dap_request:unexpected_request().

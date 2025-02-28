@@ -172,7 +172,7 @@ test_stepping_errors_if_process_not_paused(Config) ->
             command := ~"next",
             success := false,
             body := #{
-                error := #{format := ~"Process is not stopped"}
+                error := #{format := ~"Process is not paused"}
             }
         },
         NextResponse
@@ -184,7 +184,7 @@ test_stepping_errors_if_process_not_paused(Config) ->
             command := ~"stepOut",
             success := false,
             body := #{
-                error := #{format := ~"Process is not stopped"}
+                error := #{format := ~"Process is not paused"}
             }
         },
         StepOutResponse

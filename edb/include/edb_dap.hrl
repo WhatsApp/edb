@@ -38,5 +38,6 @@
 %%%---------------------------------------------------------------------------------
 %%% Reserved for implementation-defined server-errors.
 %%%---------------------------------------------------------------------------------
+-define(ERROR_TIMED_OUT, -32001).
 -define(ERROR_PRECONDITION_VIOLATION, -32002).
 -define(ERROR_NOT_SUPPORTED, -32003).

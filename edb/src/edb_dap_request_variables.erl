@@ -24,8 +24,6 @@
 
 -export([parse_arguments/1, handle/2]).
 
--include_lib("kernel/include/logger.hrl").
-
 -define(MAX_TERM_SIZE, 1_000_000).
 
 %% ------------------------------------------------------------------
@@ -213,21 +211,14 @@ handle(#{state := attached, context := Context}, #{variablesReference := Variabl
                                         }
                                     };
                                 _ ->
-                                    ?LOG_WARNING("Cannot resolve messages for pid ~p and frame_no ~p", [Pid, FrameNo]),
-                                    throw(~"Cannot resolve messages")
+                                    throw({failed_to_get_messages, {Pid, FrameNo}})
                             end;
                         _ ->
                             case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
                                 not_paused ->
-                                    ?LOG_WARNING("Cannot resolve variables (not_paused) for pid ~p and frame_no ~p", [
-                                        Pid, FrameNo
-                                    ]),
-                                    throw(~"Cannot resolve variables (not_paused)");
+                                    edb_dap_request:not_paused(Pid);
                                 undefined ->
-                                    ?LOG_WARNING("Cannot resolve variables (undefined) for pid ~p and frame_no ~p", [
-                                        Pid, FrameNo
-                                    ]),
-                                    throw(~"Cannot resolve variables (undefined)");
+                                    throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
                                 {ok, Result} ->
                                     Variables =
                                         case Scope of
@@ -249,12 +240,10 @@ handle(#{state := attached, context := Context}, #{variablesReference := Variabl
                             end
                     end;
                 {error, not_found} ->
-                    ?LOG_WARNING("Cannot find pid_frame for frame ~p", [FrameId]),
-                    throw(~"Cannot resolve variables (variable_ref_not_found)")
+                    throw({cant_resolve_pid_frame, FrameId})
             end;
         {error, not_found} ->
-            ?LOG_WARNING("Cannot find frame for variables reference ~p", [VariablesReference]),
-            throw(~"Cannot resolve variables (frame_id_not_found)")
+            edb_dap_request:unknown_resource(variables_ref, VariablesReference)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().

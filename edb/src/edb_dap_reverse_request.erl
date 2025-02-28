@@ -24,8 +24,6 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--include_lib("kernel/include/logger.hrl").
-
 %% Public API
 -export([dispatch_response/2]).
 
@@ -74,7 +72,6 @@ dispatch_response(#{command := Method} = Response, State) ->
             Body = maps:get(body, Response, #{}),
             Handler:handle_response(State, Body);
         _ ->
-            ?LOG_WARNING("Method not found: ~p", [Method]),
             #{error => {method_not_found, Method}}
     end.
 

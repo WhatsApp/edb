@@ -117,7 +117,7 @@
 -type error() ::
     {method_not_found, edb_dap:command()}
     | {invalid_params, Reason :: binary()}
-    | {user_error, Id :: integer(), Msg :: binary()}
+    | {user_error, Id :: integer(), Msg :: binary() | io_lib:chars()}
     | {internal_error, #{class := error | exit | throw, reason := term(), stacktrace := erlang:stacktrace()}}.
 -export_type([error/0]).
 
@@ -231,6 +231,13 @@ react_1(Reaction, State0) ->
     Actions = maps:get(actions, Reaction, []),
     [handle_action(Action) || Action <- Actions],
     case Reaction of
+        #{error := ErrorToLog} ->
+            IsHandlingRequest = maps:is_key(request_context, Reaction),
+            log_error(IsHandlingRequest, ErrorToLog);
+        _ ->
+            ok
+    end,
+    case Reaction of
         #{request_context := ReqCtx, response := Response} ->
             edb_dap_transport:send_response(ReqCtx, Response);
         #{request_context := ReqCtx, error := Error} ->
@@ -273,9 +280,30 @@ format_exception(Class, Reason, StackTrace) ->
         _ -> ~"Error converting error to binary"
     end.
 
--spec build_error_response(number(), binary()) -> edb_dap:error_response().
-build_error_response(Id, Format) ->
+-spec build_error_response(number(), binary() | io_lib:chars()) -> edb_dap:error_response().
+build_error_response(Id, Message) when is_binary(Message) ->
     #{
         success => false,
-        body => #{error => #{id => Id, format => Format}}
-    }.
+        body => #{error => #{id => Id, format => Message}}
+    };
+build_error_response(Id, Chars) ->
+    case unicode:characters_to_binary(Chars) of
+        Binary when is_binary(Binary) ->
+            build_error_response(Id, Binary)
+    end.
+
+-spec log_error(IsHandlingRequest, Error) -> ok when
+    IsHandlingRequest :: boolean(),
+    Error :: error().
+log_error(_, {internal_error, #{class := Class, reason := Reason, stacktrace := ST}}) ->
+    ?LOG_ERROR("Internal error: ~s", [erl_error:format_exception(Class, Reason, ST)]);
+log_error(true, _) ->
+    % A user error: will be logged as part of the response to the client, so we avoid
+    % duplicating this
+    ok;
+log_error(false, {method_not_found, Method}) ->
+    ?LOG_WARNING("Method not found: ~p", [Method]);
+log_error(false, {invalid_params, Reason}) ->
+    ?LOG_INFO("Invalid parameters: ~p", [Reason]);
+log_error(false, {user_error, _Id, Msg}) ->
+    ?LOG_DEBUG("User error: ~s", [Msg]).

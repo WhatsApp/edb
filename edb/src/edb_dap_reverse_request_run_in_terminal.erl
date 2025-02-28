@@ -24,7 +24,7 @@
 
 -export([make_request/1, handle_response/2]).
 
--include_lib("kernel/include/logger.hrl").
+-include("edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types
@@ -92,9 +92,13 @@ handle_response(State0 = #{state := launching}, _Body) ->
             State1 = State0#{state => attached, subscription => Subscription},
             #{actions => [{event, edb_dap_event:initialized()}], new_state => State1};
         {error, Reason} ->
-            ?LOG_ERROR("Attaching (node: ~p) (reason: ~p)", [NodeName, Reason]),
-            State1 = #{state => terminating},
-            #{actions => [{event, edb_dap_event:terminated()}], new_state => State1}
+            #{
+                new_state => #{state => terminating},
+                actions => [{event, edb_dap_event:terminated()}],
+                error =>
+                    {user_error, ?ERROR_TIMED_OUT,
+                        io_lib:format("Attaching to node: ~p failed: ~p", [NodeName, Reason])}
+            }
     end;
 handle_response(_UnexpectedState, _) ->
     edb_dap_reverse_request:unexpected_response().

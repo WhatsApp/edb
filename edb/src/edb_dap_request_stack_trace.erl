@@ -133,30 +133,24 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := attached, context := Context}, #{threadId := ThreadId}) ->
-    StackFrames = #{stackFrames => stack_frames(Context, ThreadId)},
-    #{response => #{success => true, body => StackFrames}};
+    case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
+        {ok, Pid} ->
+            case edb:stack_frames(Pid) of
+                not_paused ->
+                    edb_dap_request:not_paused(Pid);
+                {ok, Frames} ->
+                    StackFrames = [stack_frame(Context, Pid, Frame) || Frame <- Frames],
+                    #{response => #{success => true, body => #{stackFrames => StackFrames}}}
+            end;
+        {error, not_found} ->
+            edb_dap_request:unknown_resource(thread_id, ThreadId)
+    end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec stack_frames(edb_dap_server:context(), edb_dap:thread_id()) -> [stack_frame()].
-stack_frames(Context, ThreadId) ->
-    case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
-        {ok, Pid} ->
-            case edb:stack_frames(Pid) of
-                not_paused ->
-                    ?LOG_WARNING("Client requesting stack frames for not_paused thread ~p", [ThreadId]),
-                    [];
-                {ok, Frames} ->
-                    [stack_frame(Context, Pid, Frame) || Frame <- Frames]
-            end;
-        {error, not_found} ->
-            ?LOG_WARNING("Cannot find pid for thread id ~p", [ThreadId]),
-            []
-    end.
-
 -spec stack_frame(edb_dap_server:context(), pid(), edb:stack_frame()) -> stack_frame().
 stack_frame(Context, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line := Location}) ->
     Name = edb_dap:to_binary(io_lib:format("~p:~p/~p", [M, F, A])),

@@ -24,20 +24,20 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--include_lib("kernel/include/logger.hrl").
-
 %% Public API
 -export([dispatch/2]).
 
 %% Helpers for behaviour implementations
 -export([unexpected_request/0]).
+-export([unknown_resource/2]).
+-export([not_paused/1]).
 
 -include("edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
--export_type([reaction/0, reaction/1, response/1]).
+-export_type([reaction/0, reaction/1, response/1, resource/0]).
 
 -type reaction() :: reaction(none()).
 
@@ -58,6 +58,10 @@
     message => binary(),
     body => T
 }.
+
+-type resource() ::
+    thread_id
+    | variables_ref.
 
 %% ------------------------------------------------------------------
 %% Callbacks
@@ -89,7 +93,6 @@ dispatch(#{command := Method} = Request, State) ->
                     #{error => {invalid_params, Reason}}
             end;
         _ ->
-            ?LOG_WARNING("Method not found: ~p", [Method]),
             #{error => {method_not_found, Method}}
     end.
 
@@ -116,3 +119,22 @@ known_handlers() ->
 -spec unexpected_request() -> reaction().
 unexpected_request() ->
     #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, ~"Request sent when it was not expected"}}.
+
+-spec unknown_resource(Type, Id) -> reaction() when
+    Type :: resource(),
+    Id :: number().
+unknown_resource(thread_id, Id) -> unknown_resource_1(~"threadId", Id);
+unknown_resource(variables_ref, Id) -> unknown_resource_1(~"variablesReference", Id).
+
+-spec unknown_resource_1(Name, Id) -> reaction() when
+    Name :: binary(),
+    Id :: number().
+unknown_resource_1(Name, Id) ->
+    Msg = io_lib:format("Unknown ~s: ~p", [Name, Id]),
+    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_PARAMS, Msg}}.
+
+-spec not_paused(Pid) -> reaction() when Pid :: pid().
+not_paused(_Pid) ->
+    % Not including the Pid in the message, since it will be displayed in the context of the wrong node
+    % but useful to have here for troubleshooting
+    #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, "Process is not paused"}}.

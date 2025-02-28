@@ -24,8 +24,6 @@
 
 -export([parse_arguments/1, handle/2]).
 
--include_lib("kernel/include/logger.hrl").
-
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -168,9 +166,8 @@ handle(#{state := attached, context := Context}, Args = #{source := #{path := Pa
                 ok ->
                     #{line => Line, verified => true};
                 {error, Reason} ->
-                    ?LOG_WARNING("Failed to set breakpoint: ~p, ~p, ~p", [Module, Line, Reason]),
                     Message = edb:format("~p", [Reason]),
-                    #{line => Line, verified => false, message => Message, reason => <<"failed">>}
+                    #{line => Line, verified => false, message => Message, reason => ~"failed"}
             end
         end,
         LineResults
