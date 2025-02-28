@@ -46,27 +46,27 @@
     stripSourcePath => binary()
 }.
 -type target_node() :: #{
-    name := binary(),
-    cookie => binary(),
-    type => binary()
+    name := node(),
+    cookie => atom(),
+    type => longnames | shortnames
 }.
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
     #{
         launchCommand => #{
-            cwd => fun is_binary/1,
-            command => fun is_binary/1,
-            arguments => {optional, fun is_valid_arguments/1},
-            env => {optional, fun is_valid_env/1}
+            cwd => edb_dap_parse:binary(),
+            command => edb_dap_parse:binary(),
+            arguments => {optional, edb_dap_parse:list(edb_dap_parse:binary())},
+            env => {optional, edb_dap_parse:map(edb_dap_parse:binary(), edb_dap_parse:binary())}
         },
         targetNode => #{
-            name => fun is_binary/1,
-            cookie => {optional, fun is_binary/1},
-            type => {optional, fun is_node_type/1}
+            name => edb_dap_parse:atom(),
+            cookie => {optional, edb_dap_parse:atom()},
+            type => {optional, edb_dap_parse:atoms([longnames, shortnames])}
         },
-        stripSourcePrefix => {optional, fun is_binary/1},
-        timeout => {optional, fun edb_dap_parse:is_non_neg_integer/1}
+        stripSourcePrefix => {optional, edb_dap_parse:binary()},
+        timeout => {optional, edb_dap_parse:non_neg_integer()}
     }.
 
 %% ------------------------------------------------------------------
@@ -109,7 +109,7 @@ handle(State, Args) ->
     StripSourcePrefix :: binary().
 context(TargetNode, AttachTimeout, Cwd, StripSourcePrefix) ->
     #{
-        target_node => edb_dap_state:make_target_node(TargetNode),
+        target_node => TargetNode,
         attach_timeout => AttachTimeout,
         cwd => Cwd,
         strip_source_prefix => StripSourcePrefix,
@@ -127,21 +127,3 @@ parse(RobustConfig = #{config := _}) ->
 parse(FlatConfig) ->
     Template = arguments_template(),
     edb_dap_parse:parse(Template, FlatConfig, allow_unknown).
-
--spec is_valid_arguments(term()) -> boolean().
-is_valid_arguments(Arguments) when is_list(Arguments) ->
-    lists:all(fun is_binary/1, Arguments);
-is_valid_arguments(_) ->
-    false.
-
--spec is_node_type(term()) -> boolean().
-is_node_type(Type) when is_binary(Type) ->
-    lists:member(Type, [~"longnames", ~"shortnames"]);
-is_node_type(_Type) ->
-    false.
-
--spec is_valid_env(term()) -> boolean().
-is_valid_env(Env) when is_map(Env) ->
-    lists:all(fun edb_dap_parse:is_true/1, [is_atom(Key) andalso is_binary(Value) || Key := Value <- Env]);
-is_valid_env(_) ->
-    false.

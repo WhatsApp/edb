@@ -24,10 +24,8 @@
 -compile(warn_missing_spec_all).
 
 -type status() :: started | initialized | {attached, edb:event_subscription()} | cannot_attach.
--type target_node_type() :: shortnames | longnames.
--type target_node() :: #{name := node(), cookie := atom(), type => target_node_type()}.
 -type context() :: #{
-    target_node => target_node(),
+    target_node => edb_dap_request_launch:target_node(),
     attach_timeout := non_neg_integer(),
     cwd := binary(),
     strip_source_prefix := binary(),
@@ -41,7 +39,7 @@
     status := status(),
     context => context()
 }.
--export_type([status/0, target_node/0, context/0, t/0]).
+-export_type([status/0, context/0, t/0]).
 
 -export([
     new/0,
@@ -52,10 +50,6 @@
     get_context/1,
     is_valid_subscription/2
 ]).
-
--export([make_target_node/1]).
-
--include_lib("kernel/include/logger.hrl").
 
 -spec new() -> t().
 new() ->
@@ -84,29 +78,7 @@ set_context(State, Context) ->
 get_context(#{context := Context}) ->
     Context.
 
--spec make_target_node(edb_dap_request_launch:target_node()) -> target_node().
-make_target_node(#{name := Name} = TargetNode) ->
-    #{
-        name => binary_to_atom(Name),
-        cookie => target_node_cookie(TargetNode),
-        type => target_node_type(TargetNode)
-    }.
-
 % Internal functions
--spec target_node_cookie(edb_dap_request_launch:target_node()) -> atom().
-target_node_cookie(#{cookie := Cookie}) ->
-    binary_to_atom(Cookie);
-target_node_cookie(_) ->
-    erlang:get_cookie().
-
--spec target_node_type(edb_dap_request_launch:target_node()) -> target_node_type().
-target_node_type(#{type := <<"shortnames">>}) ->
-    shortnames;
-target_node_type(#{type := <<"longnames">>}) ->
-    longnames;
-target_node_type(_) ->
-    ?LOG_DEBUG("Missing or invalid target node type. Defaulting to shortnames", []),
-    shortnames.
 
 -spec is_valid_subscription(State :: t(), Subscription :: edb:event_subscription()) -> boolean().
 is_valid_subscription(#{status := {attached, Subscription}}, Subscription) ->

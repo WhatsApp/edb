@@ -24,18 +24,23 @@
 
 -export([parse/3]).
 -export([
-    is_non_neg_integer/1,
-    is_true/1
+    non_neg_integer/0,
+    atom/0,
+    atom/1,
+    atoms/1,
+    binary/0,
+    list/1,
+    map/2
 ]).
 
 %% --------------------------------------------------------------------
 %% Types
 %% --------------------------------------------------------------------
--export_type([template/0, predicate/0, value_validation/0, field_validation/0]).
--type predicate() :: fun((term()) -> boolean()).
--type value_validation() :: predicate() | template().
--type field_validation() :: value_validation() | {optional, value_validation()}.
--type template() :: #{atom() => field_validation()}.
+-export_type([template/0, parser/1]).
+-type parser(T) :: fun((term()) -> {ok, T}).
+-type value_parser() :: parser(term()) | template().
+-type field_parser() :: value_parser() | {optional, value_parser()}.
+-type template() :: #{atom() => field_parser()}.
 
 %% --------------------------------------------------------------------
 %% Public API
@@ -46,36 +51,76 @@ parse(Template, Map0, allow_unknown) when is_map(Map0) ->
     Map1 = maps:with(maps:keys(Template), Map0),
     parse(Template, Map1, reject_unknown);
 parse(Template, Term, _) ->
-    try parse_map(Template, Term) of
-        ok ->
-            {ok, Term}
+    try
+        parse_map(Template, Term)
     catch
         throw:{parse_error, Reason} ->
             {error, human_readable_error(Reason)}
     end.
 
--spec is_non_neg_integer(term()) -> boolean().
-is_non_neg_integer(N) ->
-    is_integer(N) andalso N >= 0.
+-spec non_neg_integer() -> parser(non_neg_integer()).
+non_neg_integer() ->
+    fun(N) when is_integer(N) andalso N >= 0 -> {ok, N} end.
 
--spec is_true(boolean()) -> boolean().
-is_true(true) -> true;
-is_true(false) -> false.
+-spec atom() -> parser(atom()).
+atom() ->
+    fun
+        (A) when is_atom(A) -> {ok, A};
+        (B) when is_binary(B) -> {ok, binary_to_atom(B)}
+    end.
+
+-spec atom(A) -> parser(A) when A :: atom().
+atom(A) when is_atom(A) ->
+    atoms([A]).
+
+-spec atoms(A) -> parser(atom()) when A :: [atom()].
+atoms(As) when is_list(As) ->
+    fun
+        F(B) when is_binary(B) -> F(binary_to_atom(B));
+        F(A) when is_atom(A) ->
+            case lists:member(A, As) of
+                true -> {ok, A}
+            end
+    end.
+
+-spec binary() -> parser(binary()).
+binary() ->
+    fun(B) when is_binary(B) -> {ok, B} end.
+
+-spec list(parser(T)) -> parser([T]).
+list(Parser) ->
+    fun(L) when is_list(L) ->
+        {ok, [run_parser(Parser, Raw) || Raw <- L]}
+    end.
+
+-spec map(parser(K), parser(V)) -> parser(#{K => V}).
+map(KParser, VParser) ->
+    fun(M) when is_map(M) ->
+        {ok, #{run_parser(KParser, RawK) => run_parser(VParser, RawV) || RawK := RawV <- M}}
+    end.
 
 %% --------------------------------------------------------------------
 %% Helpers
 %% --------------------------------------------------------------------
 
--spec parse_value(value_validation(), term()) -> ok.
-parse_value(P, V) when is_function(P) ->
-    case P(V) of
-        true -> ok;
-        false -> throw({parse_error, {invalid, V}})
+-spec run_parser(parser(T), term()) -> T.
+run_parser(Parser, Raw) ->
+    {ok, Parsed} = Parser(Raw),
+    Parsed.
+
+-spec parse_value(value_parser(), Raw) -> {ok, Parsed} when
+    Raw :: term(),
+    Parsed :: term().
+parse_value(Parser, V) when is_function(Parser) ->
+    try
+        Parser(V)
+    catch
+        _:_ -> throw({parse_error, {invalid, V}})
     end;
 parse_value(Template, V) when is_map(Template) ->
     parse_map(Template, V).
 
--spec parse_field(Field :: atom(), field_validation(), #{term() => term()}) -> ok.
+-spec parse_field(Field :: atom(), field_parser(), map()) -> {ok, map()}.
 parse_field(Field, FieldValidation, Map) ->
     Action =
         case {maps:find(Field, Map), FieldValidation} of
@@ -86,10 +131,10 @@ parse_field(Field, FieldValidation, Map) ->
         end,
     case Action of
         ignore ->
-            ok;
-        {parse, What, With} ->
-            try
-                parse_value(With, What)
+            {ok, Map};
+        {parse, Raw, With} ->
+            try parse_value(With, Raw) of
+                {ok, Parsed} -> {ok, Map#{Field => Parsed}}
             catch
                 throw:{parse_error, {fields, Fields, Reason}} when is_list(Fields) ->
                     throw({parse_error, {fields, [Field | Fields], Reason}});
@@ -98,16 +143,18 @@ parse_field(Field, FieldValidation, Map) ->
             end
     end.
 
--spec parse_map(template(), term()) -> ok.
-parse_map(Template, Map) when is_map(Map) ->
-    maps:foreach(
-        fun(Field, Validation) ->
-            parse_field(Field, Validation, Map)
+-spec parse_map(template(), term()) -> {ok, map()}.
+parse_map(Template, Map0) when is_map(Map0) ->
+    Map1 = maps:fold(
+        fun(Field, FieldParser, Acc0) ->
+            {ok, Acc1} = parse_field(Field, FieldParser, Acc0),
+            Acc1
         end,
+        Map0,
         Template
     ),
-    case maps:without(maps:keys(Template), Map) of
-        Unexpected when map_size(Unexpected) =:= 0 -> ok;
+    case maps:without(maps:keys(Template), Map1) of
+        Unexpected when map_size(Unexpected) =:= 0 -> {ok, Map1};
         Unexpected -> throw({parse_error, {unexpected, maps:keys(Unexpected)}})
     end;
 parse_map(_, X) ->

@@ -147,7 +147,7 @@ test_validate_old_style(_Config) ->
                 cwd => ~"/blah"
             },
             targetNode => #{
-                name => true
+                name => 42
             }
         })
     ),
@@ -162,7 +162,7 @@ test_validate_old_style(_Config) ->
         }
     },
     ?assertEqual(
-        {ok, MinimalLaunchConfig},
+        {ok, MinimalLaunchConfig#{targetNode => #{name => 'some_node@localhost'}}},
         edb_dap_request_launch:parse_arguments(MinimalLaunchConfig)
     ),
 
@@ -203,7 +203,13 @@ test_validate_old_style(_Config) ->
         '__sessionId' => ~"some session"
     },
     ?assertEqual(
-        {ok, MaximalLaunchConfig},
+        {ok, MaximalLaunchConfig#{
+            targetNode => #{
+                name => 'test42-123-atn@localhost',
+                cookie => 'connect_cookie',
+                type => 'shortnames'
+            }
+        }},
         edb_dap_request_launch:parse_arguments(MaximalLaunchConfigWithExtraStuff)
     ).
 
@@ -334,7 +340,7 @@ test_validate(_Config) ->
                     cwd => ~"/blah"
                 },
                 targetNode => #{
-                    name => true
+                    name => 42
                 }
             }
         })
@@ -350,7 +356,7 @@ test_validate(_Config) ->
         }
     },
     ?assertEqual(
-        {ok, Minimal},
+        {ok, Minimal#{targetNode => #{name => 'some_node@localhost'}}},
         edb_dap_request_launch:parse_arguments(#{config => Minimal})
     ),
 
@@ -395,6 +401,12 @@ test_validate(_Config) ->
         config => Maximal
     },
     ?assertEqual(
-        {ok, Maximal},
+        {ok, Maximal#{
+            targetNode => #{
+                name => 'test42-123-atn@localhost',
+                cookie => 'connect_cookie',
+                type => 'shortnames'
+            }
+        }},
         edb_dap_request_launch:parse_arguments(MaximalLaunchConfig)
     ).
