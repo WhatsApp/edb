@@ -35,7 +35,6 @@
 -compile(warn_missing_spec_all).
 
 -export([encode_frame/1, decode_frames/1, frame/1, unframe/1]).
--export([build_error_response/2]).
 -export([to_binary/1]).
 
 -export_type([
@@ -155,13 +154,6 @@ decode_frames(Data, Messages) ->
     url => binary(),
     urlLabel => binary()
 }.
-
--spec build_error_response(number(), binary()) -> error_response().
-build_error_response(Id, Format) ->
-    #{
-        success => false,
-        body => #{error => #{id => Id, format => Format}}
-    }.
 
 %%%---------------------------------------------------------------------------------
 %%% Basic Types (used by requests and responses)

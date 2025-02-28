@@ -81,29 +81,13 @@ stepper(ThreadId, StepType) ->
                     edb_dap_id_mappings:reset(),
                     #{response => #{success => true}};
                 {error, not_paused} ->
-                    #{
-                        response => edb_dap:build_error_response(
-                            ?JSON_RPC_ERROR_INVALID_PARAMS,
-                            ~"Process is not stopped"
-                        )
-                    };
+                    #{error => {user_error, ?JSON_RPC_ERROR_INVALID_PARAMS, ~"Process is not stopped"}};
                 {error, no_abstract_code} ->
-                    #{
-                        response => edb_dap:build_error_response(
-                            ?ERROR_NOT_SUPPORTED,
-                            ~"Module not compiled with debug_info"
-                        )
-                    };
+                    #{error => {user_error, ?ERROR_NOT_SUPPORTED, ~"Module not compiled with debug_info"}};
                 {error, {beam_analysis, Err}} ->
-                    ?LOG_ERROR("beam analysis error: ~p", [Err]),
-                    #{
-                        response => edb_dap:build_error_response(
-                            ?JSON_RPC_ERROR_INTERNAL_ERROR,
-                            erlang:iolist_to_binary(io_lib:format("beam analysis failure: ~w", [Err]))
-                        )
-                    }
+                    throw({beam_analysis, Err})
             end;
         {error, not_found} ->
             ?LOG_WARNING("Cannot find pid for thread id ~p", [ThreadId]),
-            #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_INTERNAL_ERROR, ~"Unknown threadId")}
+            throw(~"Unknown threadId")
     end.

@@ -35,6 +35,7 @@
 -export_type([request/0, request/1, reaction/0]).
 
 -type reaction() :: #{
+    error => edb_dap_server:error(),
     actions => [edb_dap_server:action()],
     state => edb_dap_state:t()
 }.
@@ -69,7 +70,7 @@ dispatch_response(#{command := Method} = Response, State) ->
             Handler:handle_response(State, Body);
         _ ->
             ?LOG_WARNING("Method not found: ~p", [Method]),
-            throw({method_not_found, Method})
+            #{error => {method_not_found, Method}}
     end.
 
 -spec known_handlers() -> #{binary() => module()}.

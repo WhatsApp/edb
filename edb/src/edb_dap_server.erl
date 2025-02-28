@@ -56,6 +56,32 @@
     | terminate.
 -export_type([action/0]).
 
+-type reaction() ::
+    #{
+        response := edb_dap_request:response(edb_dap:body()),
+        request_context := #{command := edb_dap:command(), seq := edb_dap:seq()},
+        actions => [edb_dap_server:action()],
+        state => edb_dap_state:t()
+    }
+    | #{
+        error := error(),
+        request_context => #{command := edb_dap:command(), seq := edb_dap:seq()},
+        actions => [edb_dap_server:action()],
+        state => edb_dap_state:t()
+    }
+    | #{
+        error => error(),
+        actions => [edb_dap_server:action()],
+        state => edb_dap_state:t()
+    }.
+
+-type error() ::
+    {method_not_found, edb_dap:command()}
+    | {invalid_params, Reason :: binary()}
+    | {user_error, Id :: integer(), Msg :: binary()}
+    | {internal_error, #{class := error | exit | throw, reason := term(), stacktrace := erlang:stacktrace()}}.
+-export_type([error/0]).
+
 -type cast_request() ::
     {handle_message, edb_dap:request() | edb_dap:response()}
     | {handle_response, edb_dap:response()}
@@ -86,54 +112,54 @@ init(noargs) ->
 terminate(_Reason, _State) ->
     ok.
 
+-define(REACTING_TO_UNEXPECTED_ERRORS(Fun, Arg, State),
+    try
+        Fun(Arg, State)
+    catch
+        Class:Reason:StackTrace ->
+            Actions =
+                case edb_dap_state:is_attached(State) of
+                    true ->
+                        [];
+                    false ->
+                        % We are not attached and crashing handling client messages, we
+                        % are unlikely to be able to do any work, so just terminate
+                        % the session
+                        [{event, edb_dap_event:terminated()}]
+                end,
+            #{
+                error => {internal_error, #{class => Class, reason => Reason, stacktrace => StackTrace}},
+                actions => Actions
+            }
+    end
+).
+
 -spec handle_call(term(), term(), state()) -> {noreply, state()} | {stop | reply, term(), state()}.
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(cast_request(), state()) -> {noreply, state()} | {stop, normal, state()}.
-handle_cast({handle_message, Message = #{command := Cmd, type := Type}}, State0) when
-    is_binary(Cmd), Type =:= request; Type =:= response
-->
-    ?LOG_DEBUG("Handle message: ~p", [Message]),
-    #{command := Command, type := Type} = Message,
-
-    Reaction =
+handle_cast({handle_message, Request = #{command := Command, type := request}}, State0) ->
+    Reaction0 =
         case edb_dap_state:is_initialized(State0) of
             false when Command =/= ~"initialize" ->
-                ErrorResponse = edb_dap:build_error_response(
-                    ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"
-                ),
-                #{response => ErrorResponse};
+                #{error => {user_error, ?ERROR_SERVER_NOT_INITIALIZED, ~"DAP server not initialized"}};
             _ ->
-                try
-                    case Message of
-                        Request = #{type := request} -> edb_dap_request:dispatch(Request, State0);
-                        Response = #{type := response} -> edb_dap_reverse_request:dispatch_response(Response, State0)
-                    end
-                catch
-                    throw:{method_not_found, Method}:_StackTrace ->
-                        Error = <<"Method not found: ", Method/binary>>,
-                        #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_METHOD_NOT_FOUND, Error)};
-                    throw:{invalid_params, Reason}:_StackTrace when is_binary(Reason) ->
-                        Error = edb_dap:to_binary(
-                            io_lib:format("Invalid parameters for request '~s': ~s", [Command, Reason])
-                        ),
-                        #{response => edb_dap:build_error_response(?JSON_RPC_ERROR_INVALID_PARAMS, Error)};
-                    Class:Reason:StackTrace ->
-                        {Error, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
-                        ErrorResponse = edb_dap:build_error_response(?JSON_RPC_ERROR_INTERNAL_ERROR, Error),
-                        #{response => ErrorResponse, actions => Actions}
-                end
+                ?REACTING_TO_UNEXPECTED_ERRORS(
+                    fun edb_dap_request:dispatch/2,
+                    Request,
+                    State0
+                )
         end,
-    ok = handle_reaction(Reaction),
-    case {Message, Reaction} of
-        {Req = #{type := request}, #{response := RequestResponse}} ->
-            edb_dap_transport:send_response(Req, RequestResponse);
-        {#{type := response}, _} ->
-            % Error responses from catch-handler can be ignored when handling reverse-request responses
-            ok
-    end,
-    State1 = maps:get(state, Reaction, State0),
+
+    RequestContext = maps:with([command, seq], Request),
+    Reaction1 = Reaction0#{request_context => RequestContext},
+
+    State1 = react(Reaction1, State0),
+    {noreply, State1};
+handle_cast({handle_message, Response = #{type := response}}, State0) ->
+    Reaction = edb_dap_reverse_request:dispatch_response(Response, State0),
+    State1 = react(Reaction, State0),
     {noreply, State1};
 handle_cast(terminate, State) ->
     {stop, normal, State}.
@@ -153,27 +179,43 @@ handle_edb_event({edb_event, Subscription, Event}, State0) ->
     Reaction =
         case edb_dap_state:is_valid_subscription(State0, Subscription) of
             true ->
-                try
-                    edb_dap_internal_events:handle(Event, State0)
-                catch
-                    Class:Reason:StackTrace ->
-                        {_Errors, Actions} = react_to_unxpected_failure({Class, Reason, StackTrace}, State0),
-                        #{actions => Actions}
-                end;
+                ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0);
             false ->
                 ?LOG_WARNING("Invalid Subscription, skipping."),
                 #{}
         end,
-    ok = handle_reaction(Reaction),
-    State1 = maps:get(state, Reaction, State0),
+    State1 = react(Reaction, State0),
     {noreply, State1}.
 
--spec handle_reaction(Reaction) -> ok when
-    Reaction :: edb_dap_request:reaction(edb_dap:response()) | edb_dap_reverse_request:reaction().
-handle_reaction(Reaction) ->
+-spec react(Reaction, state()) -> state() when
+    Reaction :: reaction().
+react(Reaction, State0) ->
     Actions = maps:get(actions, Reaction, []),
     [handle_action(Action) || Action <- Actions],
-    ok.
+    case Reaction of
+        #{request_context := ReqCtx, response := Response} ->
+            edb_dap_transport:send_response(ReqCtx, Response);
+        #{request_context := ReqCtx, error := Error} ->
+            edb_dap_transport:send_response(ReqCtx, error_response(Error));
+        _ ->
+            ok
+    end,
+    State1 = maps:get(state, Reaction, State0),
+    State1.
+
+-spec error_response(Error :: error()) -> edb_dap:error_response().
+error_response({method_not_found, Method}) ->
+    Error = <<"Method not found: ", Method/binary>>,
+    build_error_response(?JSON_RPC_ERROR_METHOD_NOT_FOUND, Error);
+error_response({invalid_params, Reason}) ->
+    Error = <<"Invalid parameters': ", Reason/binary>>,
+    build_error_response(?JSON_RPC_ERROR_INVALID_PARAMS, Error);
+error_response({user_error, Id, Msg}) ->
+    build_error_response(Id, Msg);
+error_response({internal_error, #{class := Class, reason := Reason, stacktrace := ST}}) ->
+    Error = format_exception(Class, Reason, ST),
+    ?LOG_ERROR("Unexpected Error: ~p", [Error]),
+    build_error_response(?JSON_RPC_ERROR_INTERNAL_ERROR, Error).
 
 -spec handle_action(action()) -> ok.
 handle_action({event, Event}) ->
@@ -190,27 +232,12 @@ handle_action(terminate) ->
 format_exception(Class, Reason, StackTrace) ->
     case unicode:characters_to_binary(erl_error:format_exception(Class, Reason, StackTrace)) of
         Binary when is_binary(Binary) -> Binary;
-        _ -> <<"Error converting error to binary">>
+        _ -> ~"Error converting error to binary"
     end.
 
--spec react_to_unxpected_failure({Class, Reason, StackTrace}, State) -> {Error, Actions} when
-    Class :: error | exit | throw,
-    Reason :: term(),
-    StackTrace :: erlang:stacktrace(),
-    State :: state(),
-    Error :: binary(),
-    Actions :: [action()].
-react_to_unxpected_failure({Class, Reason, StackTrace}, State) ->
-    Error = format_exception(Class, Reason, StackTrace),
-    ?LOG_ERROR("Unexpected Error: ~p", [Error]),
-    Actions =
-        case edb_dap_state:is_attached(State) of
-            true ->
-                [];
-            false ->
-                % We are not attached and crashing handling client messages, we
-                % are unlikely to be able to do any work, so just terminate
-                % the session
-                [{event, edb_dap_event:terminated()}]
-        end,
-    {Error, Actions}.
+-spec build_error_response(number(), binary()) -> edb_dap:error_response().
+build_error_response(Id, Format) ->
+    #{
+        success => false,
+        body => #{error => #{id => Id, format => Format}}
+    }.

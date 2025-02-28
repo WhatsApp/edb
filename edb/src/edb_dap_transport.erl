@@ -67,8 +67,8 @@
 start_link() ->
     {ok, _Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE, noargs, []).
 
--spec send_response(OriginalRequest, Response) -> ok when
-    OriginalRequest :: edb_dap:request(),
+-spec send_response(RequestContext, Response) -> ok when
+    RequestContext :: #{command := edb_dap:command(), seq := edb_dap:seq()},
     Response :: edb_dap_request:response(edb_dap:body()).
 send_response(OriginalRequest, Response) ->
     #{command := Command, seq := RequestSeq} = OriginalRequest,

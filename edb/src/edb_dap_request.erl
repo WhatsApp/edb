@@ -36,11 +36,17 @@
 
 -type reaction() :: reaction(none()).
 
--type reaction(T) :: #{
-    response := response(T) | edb_dap:error_response(),
-    actions => [edb_dap_server:action()],
-    state => edb_dap_state:t()
-}.
+-type reaction(T) ::
+    #{
+        response := response(T),
+        actions => [edb_dap_server:action()],
+        state => edb_dap_state:t()
+    }
+    | #{
+        error := edb_dap_server:error(),
+        actions => [edb_dap_server:action()],
+        state => edb_dap_state:t()
+    }.
 
 -type response(T) :: #{
     success := boolean(),
@@ -74,12 +80,12 @@ dispatch(#{command := Method} = Request, State) ->
             case Handler:parse_arguments(Arguments) of
                 {ok, ParsedArguments} ->
                     Handler:handle(State, ParsedArguments);
-                {error, Reason} ->
-                    throw({invalid_params, Reason})
+                {error, Reason} when is_binary(Reason) ->
+                    #{error => {invalid_params, Reason}}
             end;
         _ ->
             ?LOG_WARNING("Method not found: ~p", [Method]),
-            throw({method_not_found, Method})
+            #{error => {method_not_found, Method}}
     end.
 
 -spec known_handlers() -> #{binary() => module()}.

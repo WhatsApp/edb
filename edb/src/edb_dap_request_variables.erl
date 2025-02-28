@@ -25,7 +25,6 @@
 -export([parse_arguments/1, handle/2]).
 
 -include_lib("kernel/include/logger.hrl").
--include("edb_dap.hrl").
 
 -define(MAX_TERM_SIZE, 1_000_000).
 
@@ -215,11 +214,7 @@ handle(State, #{variablesReference := VariablesReference}) ->
                                     };
                                 _ ->
                                     ?LOG_WARNING("Cannot resolve messages for pid ~p and frame_no ~p", [Pid, FrameNo]),
-                                    #{
-                                        response => edb_dap:build_error_response(
-                                            ?JSON_RPC_ERROR_INTERNAL_ERROR, ~"Cannot resolve messages"
-                                        )
-                                    }
+                                    throw(~"Cannot resolve messages")
                             end;
                         _ ->
                             case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
@@ -227,20 +222,12 @@ handle(State, #{variablesReference := VariablesReference}) ->
                                     ?LOG_WARNING("Cannot resolve variables (not_paused) for pid ~p and frame_no ~p", [
                                         Pid, FrameNo
                                     ]),
-                                    #{
-                                        response => edb_dap:build_error_response(
-                                            ?JSON_RPC_ERROR_INTERNAL_ERROR, ~"Cannot resolve variables (not_paused)"
-                                        )
-                                    };
+                                    throw(~"Cannot resolve variables (not_paused)");
                                 undefined ->
                                     ?LOG_WARNING("Cannot resolve variables (undefined) for pid ~p and frame_no ~p", [
                                         Pid, FrameNo
                                     ]),
-                                    #{
-                                        response => edb_dap:build_error_response(
-                                            ?JSON_RPC_ERROR_INTERNAL_ERROR, ~"Cannot resolve variables (undefined)"
-                                        )
-                                    };
+                                    throw(~"Cannot resolve variables (undefined)");
                                 {ok, Result} ->
                                     Variables =
                                         case Scope of
@@ -263,19 +250,11 @@ handle(State, #{variablesReference := VariablesReference}) ->
                     end;
                 {error, not_found} ->
                     ?LOG_WARNING("Cannot find pid_frame for frame ~p", [FrameId]),
-                    #{
-                        response => edb_dap:build_error_response(
-                            ?JSON_RPC_ERROR_INTERNAL_ERROR, ~"Cannot resolve variables (variable_ref_not_found)"
-                        )
-                    }
+                    throw(~"Cannot resolve variables (variable_ref_not_found)")
             end;
         {error, not_found} ->
             ?LOG_WARNING("Cannot find frame for variables reference ~p", [VariablesReference]),
-            #{
-                response => edb_dap:build_error_response(
-                    ?JSON_RPC_ERROR_INVALID_PARAMS, ~"Cannot resolve variables (frame_id_not_found)"
-                )
-            }
+            throw(~"Cannot resolve variables (frame_id_not_found)")
     end.
 
 %% ------------------------------------------------------------------

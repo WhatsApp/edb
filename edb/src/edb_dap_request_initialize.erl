@@ -164,9 +164,7 @@ handle(State, _Args) ->
                 state => edb_dap_state:set_status(State, initialized)
             };
         true ->
-            #{
-                response => edb_dap:build_error_response(?JSON_RPC_ERROR_INVALID_REQUEST, ~"Already initialized")
-            }
+            #{error => {user_error, ?JSON_RPC_ERROR_INVALID_REQUEST, ~"Already initialized"}}
     end.
 
 %% ------------------------------------------------------------------
