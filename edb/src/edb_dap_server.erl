@@ -180,7 +180,11 @@ handle_cast({handle_message, Request = #{type := request}}, State0) ->
     State1 = react(Reaction1, State0),
     {noreply, State1};
 handle_cast({handle_message, Response = #{type := response}}, State0) ->
-    Reaction = edb_dap_reverse_request:dispatch_response(Response, State0),
+    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(
+        fun edb_dap_reverse_request:dispatch_response/2,
+        Response,
+        State0
+    ),
     State1 = react(Reaction, State0),
     {noreply, State1};
 handle_cast(terminate, State) ->
