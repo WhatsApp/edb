@@ -157,7 +157,7 @@ handle(#{state := started}, ClientInfo) ->
     Capabilities = capabilities(),
     #{
         response => #{success => true, body => Capabilities},
-        state => #{state => initialized, client_info => ClientInfo}
+        new_state => #{state => initialized, client_info => ClientInfo}
     };
 handle(_InvalidState, _Args) ->
     edb_dap_request:unexpected_request().

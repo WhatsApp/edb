@@ -45,12 +45,12 @@
     #{
         response := response(T),
         actions => [edb_dap_server:action()],
-        state => edb_dap_server:state()
+        new_state => edb_dap_server:state()
     }
     | #{
         error := edb_dap_server:error(),
         actions => [edb_dap_server:action()],
-        state => edb_dap_server:state()
+        new_state => edb_dap_server:state()
     }.
 
 -type response(T) :: #{

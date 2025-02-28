@@ -100,18 +100,18 @@
         response := edb_dap_request:response(edb_dap:body()),
         request_context := #{command := edb_dap:command(), seq := edb_dap:seq()},
         actions => [edb_dap_server:action()],
-        state => edb_dap_server:state()
+        new_state => edb_dap_server:state()
     }
     | #{
         error := error(),
         request_context => #{command := edb_dap:command(), seq := edb_dap:seq()},
         actions => [edb_dap_server:action()],
-        state => edb_dap_server:state()
+        new_state => edb_dap_server:state()
     }
     | #{
         error => error(),
         actions => [edb_dap_server:action()],
-        state => edb_dap_server:state()
+        new_state => edb_dap_server:state()
     }.
 
 -type error() ::
@@ -214,7 +214,7 @@ react(Reaction0 = #{error := {internal_error, _}}, State) ->
     % are unlikely to be able to do any work, so just terminate
     % the session
     Reaction1 = Reaction0#{
-        state => #{state => terminating},
+        new_state => #{state => terminating},
         actions => [{event, edb_dap_event:terminated()}]
     },
     react_1(Reaction1, State);
@@ -234,7 +234,7 @@ react_1(Reaction, State0) ->
         _ ->
             ok
     end,
-    State1 = maps:get(state, Reaction, State0),
+    State1 = maps:get(new_state, Reaction, State0),
     State1.
 
 -spec error_response(Error :: error()) -> edb_dap:error_response().

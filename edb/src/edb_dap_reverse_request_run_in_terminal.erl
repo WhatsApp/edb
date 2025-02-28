@@ -90,11 +90,11 @@ handle_response(State0 = #{state := launching}, _Body) ->
         ok ->
             {ok, Subscription} = edb:subscribe(),
             State1 = State0#{state => attached, subscription => Subscription},
-            #{actions => [{event, edb_dap_event:initialized()}], state => State1};
+            #{actions => [{event, edb_dap_event:initialized()}], new_state => State1};
         {error, Reason} ->
             ?LOG_ERROR("Attaching (node: ~p) (reason: ~p)", [NodeName, Reason]),
             State1 = #{state => terminating},
-            #{actions => [{event, edb_dap_event:terminated()}], state => State1}
+            #{actions => [{event, edb_dap_event:terminated()}], new_state => State1}
     end;
 handle_response(_UnexpectedState, _) ->
     edb_dap_reverse_request:unexpected_response().

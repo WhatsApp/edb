@@ -33,7 +33,7 @@
 
 -type reaction() :: #{
     actions => [{event, edb_dap_event:event()}],
-    state => edb_dap_server:state()
+    new_state => edb_dap_server:state()
 }.
 -export_type([reaction/0]).
 
@@ -65,7 +65,7 @@ nodedown_impl(State, Node, Reason) ->
                     _ -> 1
                 end,
             #{
-                state => #{state => terminating},
+                new_state => #{state => terminating},
                 actions => [
                     {event, edb_dap_event:exited(ExitCode)},
                     {event, edb_dap_event:terminated()}

@@ -42,7 +42,7 @@
 -type reaction() :: #{
     error => edb_dap_server:error(),
     actions => [edb_dap_server:action()],
-    state => edb_dap_server:state()
+    new_state => edb_dap_server:state()
 }.
 
 -type request() :: request(edb_dap:arguments()).

@@ -106,7 +106,7 @@ handle(State0 = #{state := initialized}, Args) ->
     #{
         response => #{success => true},
         actions => [{reverse_request, RunInTerminalRequest}],
-        state => State1
+        new_state => State1
     };
 handle(_InvalidState, _Args) ->
     edb_dap_request:unexpected_request().
