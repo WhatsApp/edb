@@ -247,7 +247,7 @@ error_response({method_not_found, Method}) ->
     Error = <<"Method not found: ", Method/binary>>,
     build_error_response(?JSON_RPC_ERROR_METHOD_NOT_FOUND, Error);
 error_response({invalid_params, Reason}) ->
-    Error = <<"Invalid parameters': ", Reason/binary>>,
+    Error = <<"Invalid parameters: ", Reason/binary>>,
     build_error_response(?JSON_RPC_ERROR_INVALID_PARAMS, Error);
 error_response({user_error, Id, Msg}) ->
     build_error_response(Id, Msg);

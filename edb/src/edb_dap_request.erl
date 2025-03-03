@@ -99,6 +99,7 @@ dispatch(#{command := Method} = Request, State) ->
 -spec known_handlers() -> #{binary() => module()}.
 known_handlers() ->
     #{
+        ~"attach" => edb_dap_request_attach,
         ~"continue" => edb_dap_request_continue,
         ~"disconnect" => edb_dap_request_disconnect,
         ~"initialize" => edb_dap_request_initialize,

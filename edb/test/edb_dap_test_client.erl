@@ -33,6 +33,7 @@
 -export([
     initialize/2,
     wait_for_event/2,
+    attach/2,
     launch/2,
     set_breakpoints/2,
     threads/2,
@@ -79,6 +80,11 @@ initialize(Client, Args) ->
 wait_for_event(Type, Client) ->
     WaitTimeoutSecs = 10_000,
     call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
+
+-spec attach(client(), edb_dap_request_attach:arguments()) -> edb_dap:response().
+attach(Client, Args) ->
+    Request = #{type => request, command => ~"attach", arguments => Args},
+    call(Client, Request).
 
 -spec launch(client(), edb_dap_request_launch:arguments()) -> edb_dap:response().
 launch(Client, Args) ->
