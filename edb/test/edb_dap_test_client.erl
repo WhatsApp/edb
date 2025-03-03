@@ -24,6 +24,7 @@
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
+-typing([eqwalizer]).
 
 -behaviour(gen_server).
 
@@ -58,79 +59,81 @@
     buffer := binary(),
     requests := [{pos_integer(), gen_server:from()}],
     seq := pos_integer(),
-    waiting := #{binary => [gen_server:from()]},
+    waiting := #{binary() => [gen_server:from()]},
     events := #{binary() => [edb_dap:event()]}
 }.
 -type client() :: pid().
+
+-type request_no_seq() :: #{type := request, command := edb_dap:command(), arguments => edb_dap:arguments()}.
 
 -spec start_link(file:filename_all(), [string()]) -> {ok, pid()}.
 start_link(Executable, Args) ->
     {ok, _Pid} = gen_server:start_link(?MODULE, #{executable => Executable, args => Args}, []).
 
--spec initialize(client(), edb_dap:initialize_request_arguments()) -> ok.
+-spec initialize(client(), edb_dap_request_initialize:arguments()) -> edb_dap:response().
 initialize(Client, Args) ->
-    Request = #{type => request, command => <<"initialize">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"initialize", arguments => Args},
+    call(Client, Request).
 
 -spec wait_for_event(edb_dap:event_type(), client()) -> ok.
 wait_for_event(Type, Client) ->
     WaitTimeoutSecs = 10_000,
-    gen_server:call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
+    call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
 
--spec launch(client(), edb_dap:launch_request_arguments()) -> ok.
+-spec launch(client(), edb_dap_request_launch:arguments()) -> edb_dap:response().
 launch(Client, Args) ->
-    Request = #{type => request, command => <<"launch">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"launch", arguments => Args},
+    call(Client, Request).
 
--spec set_breakpoints(client(), edb_dap:set_breakpoints_arguments()) -> ok.
+-spec set_breakpoints(client(), edb_dap_request_set_breakpoints:arguments()) -> edb_dap:response().
 set_breakpoints(Client, Args) ->
-    Request = #{type => request, command => <<"setBreakpoints">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"setBreakpoints", arguments => Args},
+    call(Client, Request).
 
--spec threads(client(), edb_dap:threads_arguments()) -> ok.
+-spec threads(client(), edb_dap_request_threads:arguments()) -> edb_dap:response().
 threads(Client, Args) ->
-    Request = #{type => request, command => <<"threads">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"threads", arguments => Args},
+    call(Client, Request).
 
--spec stack_trace(client(), edb_dap:stack_trace_request_arguments()) -> ok.
+-spec stack_trace(client(), edb_dap_request_stack_trace:arguments()) -> edb_dap:response().
 stack_trace(Client, Args) ->
-    Request = #{type => request, command => <<"stackTrace">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"stackTrace", arguments => Args},
+    call(Client, Request).
 
--spec pause(client(), edb_dap:pause_request_arguments()) -> ok.
+-spec pause(client(), edb_dap_request_pause:arguments()) -> edb_dap:response().
 pause(Client, Args) ->
-    Request = #{type => request, command => <<"pause">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"pause", arguments => Args},
+    call(Client, Request).
 
--spec continue(client(), edb_dap:continue_request_arguments()) -> ok.
+-spec continue(client(), edb_dap_request_continue:arguments()) -> edb_dap:response().
 continue(Client, Args) ->
-    Request = #{type => request, command => <<"continue">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"continue", arguments => Args},
+    call(Client, Request).
 
--spec next(client(), edb_dap:next_request_arguments()) -> ok.
+-spec next(client(), edb_dap_request_next:arguments()) -> edb_dap:response().
 next(Client, Args) ->
-    Request = #{type => request, command => <<"next">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"next", arguments => Args},
+    call(Client, Request).
 
--spec step_out(client(), edb_dap:step_out_request_arguments()) -> ok.
+-spec step_out(client(), edb_dap_request_step_out:arguments()) -> edb_dap:response().
 step_out(Client, Args) ->
-    Request = #{type => request, command => <<"stepOut">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"stepOut", arguments => Args},
+    call(Client, Request).
 
--spec scopes(client(), edb_dap:scopes_request_arguments()) -> ok.
+-spec scopes(client(), edb_dap_request_scopes:arguments()) -> edb_dap:response().
 scopes(Client, Args) ->
-    Request = #{type => request, command => <<"scopes">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"scopes", arguments => Args},
+    call(Client, Request).
 
--spec variables(client(), edb_dap:variables_request_arguments()) -> ok.
+-spec variables(client(), edb_dap_request_variables:arguments()) -> edb_dap:response().
 variables(Client, Args) ->
-    Request = #{type => request, command => <<"variables">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"variables", arguments => Args},
+    call(Client, Request).
 
--spec disconnect(client(), edb_dap:disonnect_request_arguments()) -> ok.
+-spec disconnect(client(), edb_dap_request_disconnect:arguments()) -> edb_dap:response().
 disconnect(Client, Args) ->
-    Request = #{type => request, command => <<"disconnect">>, arguments => Args},
-    gen_server:call(Client, Request).
+    Request = #{type => request, command => ~"disconnect", arguments => Args},
+    call(Client, Request).
 
 -spec init(#{executable := file:filename_all(), args := [string()]}) -> {ok, state()}.
 init(#{executable := Executable, args := Args}) ->
@@ -146,7 +149,20 @@ init(#{executable := Executable, args := Args}) ->
     },
     {ok, State}.
 
--spec handle_call({'$wait_for_event', edb_dap:event_type()} | edb_dap:request(), gen_server:from(), state()) ->
+-type call_request() ::
+    {'$wait_for_event', edb_dap:event_type()} | request_no_seq().
+
+-spec call
+    (client(), request_no_seq()) -> edb_dap:response();
+    (client(), {'$wait_for_event', edb_dap:event_type()}) -> {ok, [edb_dap:event()]}.
+call(Client, Request) ->
+    gen_server:call(Client, Request).
+
+-spec call(client(), call_request(), timeout()) -> dynamic().
+call(Client, Request, Timeout) ->
+    gen_server:call(Client, Request, Timeout).
+
+-spec handle_call(call_request(), gen_server:from(), state()) ->
     {noreply, state()} | {stop | reply, term(), state()}.
 handle_call({'$wait_for_event', Type}, From, #{waiting := Waiting, events := EventsReceived} = State) ->
     case maps:get(Type, EventsReceived, []) of
@@ -161,20 +177,17 @@ handle_call(#{command := _Command} = Request, From, #{io := IO, requests := Requ
     send(IO, Data),
     {noreply, State#{seq => Seq + 1, requests => [{Seq, From} | Requests]}}.
 
--spec handle_cast(term(), state()) -> {noreply, state()}.
-handle_cast(_Request, State) ->
-    {noreply, State}.
+-type cast_request() ::
+    {event_received, edb_dap:event()}
+    | {request_received, edb_dap:request()}
+    | {response_received, edb_dap:response()}.
 
--spec handle_info(term(), state()) -> {noreply, state()}.
-handle_info({IO, {data, Data}}, #{io := IO, buffer := Buffer} = State) when
-    is_binary(Data), is_port(IO)
-->
-    {Frames, NewBuffer} = edb_dap:decode_frames(<<Buffer/binary, Data/binary>>),
-    [handle_message_async(edb_dap:unframe(Frame)) || Frame <- Frames],
-    {noreply, State#{buffer => NewBuffer}};
-handle_info({IO, {exit_status, _Status}}, #{io := IO} = State) when is_port(IO) ->
-    {stop, normal, State};
-handle_info({handle_event, #{event := Type} = Event}, #{waiting := Waiting, events := Events} = State) ->
+-spec cast(client(), cast_request()) -> ok.
+cast(Client, Request) ->
+    gen_server:cast(Client, Request).
+
+-spec handle_cast(cast_request(), state()) -> {noreply, state()}.
+handle_cast({event_received, #{event := Type} = Event}, #{waiting := Waiting, events := Events} = State) ->
     case maps:get(Type, Waiting, []) of
         [] ->
             NewEvents = Events#{Type => [Event | maps:get(Type, Events, [])]},
@@ -183,7 +196,7 @@ handle_info({handle_event, #{event := Type} = Event}, #{waiting := Waiting, even
             [gen_server:reply(Client, {ok, [Event]}) || Client <- WaitingForEvent],
             {noreply, State#{waiting => Waiting#{Type => []}}}
     end;
-handle_info({handle_request, Request}, #{io := IO, seq := StateSeq} = State) ->
+handle_cast({request_received, Request}, #{io := IO, seq := StateSeq} = State) ->
     #{seq := Seq, command := Command} = Request,
     % Just send empty responses to reverse requests for now
     Response = #{
@@ -192,11 +205,21 @@ handle_info({handle_request, Request}, #{io := IO, seq := StateSeq} = State) ->
     Data = edb_dap:encode_frame(edb_dap:frame(Response)),
     send(IO, Data),
     {noreply, State};
-handle_info({handle_response, Response}, #{requests := Requests} = State) ->
+handle_cast({response_received, Response}, #{requests := Requests} = State) ->
     #{request_seq := Seq} = Response,
     {value, {Seq, Client}, NewRequests} = lists:keytake(Seq, 1, Requests),
     ok = gen_server:reply(Client, Response),
-    {noreply, State#{requests => NewRequests}};
+    {noreply, State#{requests => NewRequests}}.
+
+-spec handle_info(term(), state()) -> {noreply, state()} | {stop, normal, state()}.
+handle_info({IO, {data, Data}}, #{io := IO, buffer := Buffer} = State) when
+    is_binary(Data), is_port(IO)
+->
+    {Frames, NewBuffer} = edb_dap:decode_frames(<<Buffer/binary, Data/binary>>),
+    [handle_message_async(edb_dap:unframe(Frame)) || Frame <- Frames],
+    {noreply, State#{buffer => NewBuffer}};
+handle_info({IO, {exit_status, _Status}}, #{io := IO} = State) when is_port(IO) ->
+    {stop, normal, State};
 handle_info({IO, eof}, #{io := IO} = State) ->
     erlang:halt(0),
     {noreply, State}.
@@ -208,11 +231,8 @@ send(IO, Data) ->
 
 -spec handle_message_async(edb_dap:request() | edb_dap:response()) -> ok.
 handle_message_async(#{type := request} = Message) ->
-    self() ! {handle_request, Message},
-    ok;
+    cast(self(), {request_received, Message});
 handle_message_async(#{type := response} = Message) ->
-    self() ! {handle_response, Message},
-    ok;
+    cast(self(), {response_received, Message});
 handle_message_async(#{type := event} = Message) ->
-    self() ! {handle_event, Message},
-    ok.
+    cast(self(), {event_received, Message}).
