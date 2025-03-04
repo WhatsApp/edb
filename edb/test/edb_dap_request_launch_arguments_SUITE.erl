@@ -18,6 +18,7 @@
 
 % @fb-only
 -oncall("whatsapp_server_devx").
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -44,6 +45,7 @@ all() ->
 test_validate_old_style(_Config) ->
     ?assertEqual(
         {error, ~"invalid value"},
+        % eqwalizer:ignore Checking that parsing works on random input
         edb_dap_request_launch:parse_arguments(foo)
     ),
 
@@ -216,6 +218,7 @@ test_validate_old_style(_Config) ->
 test_validate(_Config) ->
     ?assertEqual(
         {error, ~"invalid value"},
+        % eqwalizer:ignore Checking that parsing works on random input
         edb_dap_request_launch:parse_arguments(foo)
     ),
 

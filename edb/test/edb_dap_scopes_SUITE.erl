@@ -19,6 +19,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").

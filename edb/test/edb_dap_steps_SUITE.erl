@@ -19,6 +19,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -163,7 +164,7 @@ test_stepping_errors_if_process_not_paused(Config) ->
         Config, Client, Peer, {source, ModuleSource}, go, [], {line, 4}
     ),
 
-    ContinueResponse = edb_dap_test_client:continue(Client, #{}),
+    ContinueResponse = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(#{success := true, body := #{allThreadsContinued := true}}, ContinueResponse),
 
     NextResponse = edb_dap_test_client:next(Client, #{threadId => ThreadId}),

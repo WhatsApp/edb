@@ -19,6 +19,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -68,7 +69,7 @@ test_can_pause_and_continue(Config) ->
     ?assertMatch([#{name := ~"foo:go/0", line := 4} | _], ST0),
 
     % Continue!
-    ContinueResponse = edb_dap_test_client:continue(Client, ThreadId),
+    ContinueResponse = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
             command := ~"continue",
@@ -82,7 +83,7 @@ test_can_pause_and_continue(Config) ->
     ),
 
     % Pause!
-    PauseResponse = edb_dap_test_client:pause(Client, ThreadId),
+    PauseResponse = edb_dap_test_client:pause(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
             command := ~"pause",

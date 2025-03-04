@@ -36,7 +36,7 @@
     attach/2,
     launch/2,
     set_breakpoints/2,
-    threads/2,
+    threads/1,
     stack_trace/2,
     pause/2,
     continue/2,
@@ -63,6 +63,8 @@
     waiting := #{binary() => [gen_server:from()]},
     events := #{binary() => [edb_dap:event()]}
 }.
+
+-export_type([client/0]).
 -type client() :: pid().
 
 -type request_no_seq() :: #{type := request, command := edb_dap:command(), arguments => edb_dap:arguments()}.
@@ -96,9 +98,9 @@ set_breakpoints(Client, Args) ->
     Request = #{type => request, command => ~"setBreakpoints", arguments => Args},
     call(Client, Request).
 
--spec threads(client(), edb_dap_request_threads:arguments()) -> edb_dap:response().
-threads(Client, Args) ->
-    Request = #{type => request, command => ~"threads", arguments => Args},
+-spec threads(client()) -> edb_dap:response().
+threads(Client) ->
+    Request = #{type => request, command => ~"threads"},
     call(Client, Request).
 
 -spec stack_trace(client(), edb_dap_request_stack_trace:arguments()) -> edb_dap:response().

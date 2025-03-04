@@ -17,6 +17,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 %% Test server callbacks
 -export([

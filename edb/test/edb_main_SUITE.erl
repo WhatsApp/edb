@@ -17,6 +17,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -56,13 +57,16 @@ escript_executable(Config) ->
     Escript = filename:join([DataDir, ?EDB]),
     ?assert(filelib:is_file(Escript), "Escript should exists"),
     {ok, FileInfo} = file:read_file_info(Escript),
-    ?assertEqual(8#111, FileInfo#file_info.mode band 8#111, "Escript should be executable").
+    case FileInfo#file_info.mode of
+        Mode when is_integer(Mode) ->
+            ?assertEqual(8#111, Mode band 8#111, "Escript should be executable")
+    end.
 
 escript_dap(Config) ->
     {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client, Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
 
-    Response3 = edb_dap_test_client:threads(Client, #{}),
+    Response3 = edb_dap_test_client:threads(Client),
     ?assertMatch(#{request_seq := 3, type := response, success := true}, Response3),
 
     Line = 32,
@@ -164,7 +168,7 @@ escript_dap(Config) ->
 
     ok = edb_dap_test_support:set_breakpoints(Client, SourcePath, []),
 
-    Response8 = edb_dap_test_client:continue(Client, #{}),
+    Response8 = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
             request_seq := 9,

@@ -19,6 +19,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -76,8 +77,7 @@ end_per_testcase(_TestCase, _Config) ->
 test_fails_if_not_initialized(Config) ->
     {ok, Client} = edb_dap_test_support:start_test_client(Config),
 
-    AdapterID = atom_to_binary(?MODULE),
-    Response1 = edb_dap_test_client:set_breakpoints(Client, #{adapterID => AdapterID}),
+    Response1 = edb_dap_test_client:threads(Client),
     ?assertMatch(
         #{
             request_seq := 1,
@@ -115,6 +115,7 @@ test_fails_if_invalid_launch_config(Config) ->
     Response1 = edb_dap_test_client:initialize(Client, #{adapterID => AdapterID}),
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
+    % eqwalizer:ignore: Testing behaviour on invalid input
     Response2 = edb_dap_test_client:launch(Client, #{
         invalid => ~"invalid"
     }),
