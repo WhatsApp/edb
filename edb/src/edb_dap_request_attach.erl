@@ -75,7 +75,7 @@ handle(State0 = #{state := initialized}, Args) ->
             },
             #{
                 new_state => State1,
-                response => #{success => true},
+                response => edb_dap_request:success(),
                 actions => [{event, edb_dap_event:initialized()}]
             };
         {error, Reason} ->

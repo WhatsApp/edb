@@ -146,12 +146,9 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
                 []
         end,
     #{
-        response => #{
-            success => true,
-            body => #{
-                scopes => MessagesScopes ++ VariablesScopes
-            }
-        }
+        response => edb_dap_request:success(#{
+            scopes => MessagesScopes ++ VariablesScopes
+        })
     };
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().

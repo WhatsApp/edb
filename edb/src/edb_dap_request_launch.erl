@@ -101,7 +101,7 @@ handle(State0 = #{state := initialized}, Args) ->
         cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
     },
     #{
-        response => #{success => true},
+        response => edb_dap_request:success(),
         actions => [{reverse_request, RunInTerminalRequest}],
         new_state => State1
     };

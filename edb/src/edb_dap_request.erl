@@ -28,6 +28,7 @@
 -export([dispatch/2]).
 
 %% Helpers for behaviour implementations
+-export([success/0, success/1]).
 -export([unexpected_request/0]).
 -export([unknown_resource/2]).
 -export([not_paused/1]).
@@ -117,6 +118,14 @@ known_handlers() ->
 %% ------------------------------------------------------------------
 %% Helpers for behaviour implementations
 %% ------------------------------------------------------------------
+-spec success() -> response(none()).
+success() ->
+    #{success => true}.
+
+-spec success(Body) -> response(Body) when Body :: edb_dap:body().
+success(Body) ->
+    #{success => true, body => Body}.
+
 -spec unexpected_request() -> reaction().
 unexpected_request() ->
     #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, ~"Request sent when it was not expected"}}.

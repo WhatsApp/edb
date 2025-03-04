@@ -202,12 +202,9 @@ handle(#{state := attached, node := Node}, #{variablesReference := VariablesRefe
                                     % a too_large entry if the message is too large.
                                     Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
                                     #{
-                                        response => #{
-                                            success => true,
-                                            body => #{
-                                                variables => unnamed_variables(~"", Messages)
-                                            }
-                                        }
+                                        response => edb_dap_request:success(#{
+                                            variables => unnamed_variables(~"", Messages)
+                                        })
                                     };
                                 _ ->
                                     throw({failed_to_get_messages, {Pid, FrameNo}})
@@ -228,14 +225,7 @@ handle(#{state := attached, node := Node}, #{variablesReference := VariablesRefe
                                                 YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
                                                 XRegs ++ YRegs
                                         end,
-                                    #{
-                                        response => #{
-                                            success => true,
-                                            body => #{
-                                                variables => Variables
-                                            }
-                                        }
-                                    }
+                                    #{response => edb_dap_request:success(#{variables => Variables})}
                             end
                     end;
                 {error, not_found} ->

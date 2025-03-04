@@ -140,7 +140,7 @@ handle(State0 = #{state := attached}, #{threadId := ThreadId}) ->
                     edb_dap_request:not_paused(Pid);
                 {ok, Frames} ->
                     StackFrames = [stack_frame(State0, Pid, Frame) || Frame <- Frames],
-                    #{response => #{success => true, body => #{stackFrames => StackFrames}}}
+                    #{response => edb_dap_request:success(#{stackFrames => StackFrames})}
             end;
         {error, not_found} ->
             edb_dap_request:unknown_resource(thread_id, ThreadId)

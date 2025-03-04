@@ -48,6 +48,6 @@ parse_arguments(Args) ->
     Args :: arguments().
 handle(#{state := attached}, _Args) ->
     ok = edb:pause(),
-    #{response => #{success => true}};
+    #{response => edb_dap_request:success()};
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().

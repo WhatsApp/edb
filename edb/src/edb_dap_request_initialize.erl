@@ -154,9 +154,8 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := started}, ClientInfo) ->
-    Capabilities = capabilities(),
     #{
-        response => #{success => true, body => Capabilities},
+        response => edb_dap_request:success(capabilities()),
         new_state => #{state => initialized, client_info => ClientInfo}
     };
 handle(_InvalidState, _Args) ->

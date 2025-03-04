@@ -64,6 +64,6 @@ handle(_State, _Args) ->
     % TODO(T206222651) make the behaviour compliant
     ok = edb:terminate(),
     #{
-        response => #{success => true},
+        response => edb_dap_request:success(),
         actions => [terminate]
     }.

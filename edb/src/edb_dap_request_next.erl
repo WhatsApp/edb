@@ -79,7 +79,7 @@ stepper(#{state := attached}, ThreadId, StepType) ->
             case StepFun(Pid) of
                 ok ->
                     edb_dap_id_mappings:reset(),
-                    #{response => #{success => true}};
+                    #{response => edb_dap_request:success()};
                 {error, not_paused} ->
                     edb_dap_request:not_paused(Pid);
                 {error, no_abstract_code} ->

@@ -171,7 +171,6 @@ handle(#{state := attached, node := Node}, Args = #{source := #{path := Path}}) 
         end,
         LineResults
     ),
-    Body = #{breakpoints => Breakpoints},
-    #{response => #{success => true, body => Body}};
+    #{response => edb_dap_request:success(#{breakpoints => Breakpoints})};
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().

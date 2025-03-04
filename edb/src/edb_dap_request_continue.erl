@@ -61,6 +61,6 @@ parse_arguments(Args) ->
 handle(#{state := attached}, _Args) ->
     edb_dap_id_mappings:reset(),
     {ok, _} = edb:continue(),
-    #{response => #{success => true, body => #{allThreadsContinued => true}}};
+    #{response => edb_dap_request:success(#{allThreadsContinued => true})};
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
