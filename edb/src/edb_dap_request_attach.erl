@@ -33,8 +33,10 @@
 %%% Notice that, since , the arguments for this request are
 %%% not part of the DAP specification itself.
 
--export_type([arguments/0]).
--type arguments() :: #{
+-export_type([arguments/0, config/0]).
+-type arguments() :: config() | #{config => config()}.
+
+-type config() :: #{
     node := node(),
     cookie => atom(),
     cwd := binary(),
@@ -53,13 +55,13 @@ arguments_template() ->
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, config()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
     parse(Args).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
-    Args :: arguments().
+    Args :: config().
 handle(State0 = #{state := initialized}, Args) ->
     AttachArgs = maps:without([cwd, stripSourcePath], Args),
     case edb:attach(AttachArgs) of
@@ -87,7 +89,7 @@ handle(_InvalidState, _Args) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec parse(term()) -> {ok, arguments()} | {error, HumarReadableReason :: binary()}.
+-spec parse(term()) -> {ok, config()} | {error, HumarReadableReason :: binary()}.
 parse(RobustConfig = #{config := _}) ->
     Template = #{config => arguments_template()},
     Filtered = maps:with([config], RobustConfig),

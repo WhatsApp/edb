@@ -19,6 +19,7 @@
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
+-typing([eqwalizer]).
 
 %% Public API
 -export([start_test_client/1]).
@@ -60,7 +61,7 @@ start_session(Config, Node, Cookie) ->
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
     PrivDir = ?config(priv_dir, Config),
-    Cwd = unicode:characters_to_binary(PrivDir),
+    Cwd = safe_string_to_binary(PrivDir),
     LaunchCommand = #{
         cwd => Cwd,
         command => ~"dummy",
@@ -68,7 +69,8 @@ start_session(Config, Node, Cookie) ->
     },
     Response2 = edb_dap_test_client:launch(Client, #{
         config => #{
-            launchCommand => LaunchCommand, targetNode => #{name => Node, cookie => Cookie}
+            launchCommand => LaunchCommand,
+            targetNode => #{name => Node, cookie => Cookie}
         }
     }),
     ?assertMatch(#{request_seq := 2, type := response, success := true}, Response2),
@@ -97,10 +99,11 @@ load_file_and_set_breakpoints(Config, Peer, Client, {filename, FileName}, Lines)
     load_file_and_set_breakpoints(Config, Peer, Client, {filepath, FileCopyPath}, Lines);
 load_file_and_set_breakpoints(Config, Peer, Client, {filepath, FilePath0}, Lines) ->
     PrivDir = ?config(priv_dir, Config),
-    {ok, Module} = edb_test_support:compile_and_load_file_in_peer(#{source => FilePath0, peer => Peer, ebin => PrivDir}),
-    FilePath1 = unicode:characters_to_binary(FilePath0),
-    ok = set_breakpoints(Client, FilePath1, Lines),
-    {ok, Module, FilePath1};
+    FilePath1 = file_name_all_to_string(FilePath0),
+    {ok, Module} = edb_test_support:compile_and_load_file_in_peer(#{source => FilePath1, peer => Peer, ebin => PrivDir}),
+    FilePath2 = safe_string_to_binary(FilePath1),
+    ok = set_breakpoints(Client, FilePath2, Lines),
+    {ok, Module, FilePath2};
 load_file_and_set_breakpoints(Config, Peer, Client, {source, Source}, Lines) ->
     MatchModuleRegex = "-module\\(([^)]+)\\)\\.",
     case re:run(Source, MatchModuleRegex, [{capture, all_but_first, list}]) of
@@ -142,17 +145,17 @@ set_breakpoints(Client, FilePath, Lines) ->
     Args :: [term()],
     Line :: pos_integer(),
     ThreadId :: integer(),
-    StackFrames :: [edb_dap:stack_frame()].
+    StackFrames :: [edb_dap_request_stack_trace:stack_frame()].
 ensure_process_in_bp(Config, Client, Peer, ModSpec, Fun, Args, {line, Line}) ->
     {ok, Module, ModFilePath} = load_file_and_set_breakpoints(Config, Peer, Client, ModSpec, [Line]),
     erlang:spawn(fun() -> peer:call(Peer, Module, Fun, Args) end),
-    {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(<<"stopped">>, Client),
+    {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(~"stopped", Client),
     ThreadId =
         case StoppedEvent of
             #{
-                event := <<"stopped">>,
+                event := ~"stopped",
                 body := #{
-                    reason := <<"breakpoint">>,
+                    reason := ~"breakpoint",
                     preserveFocusHint := false,
                     threadId := ThreadId_,
                     allThreadsStopped := true
@@ -176,7 +179,7 @@ ensure_process_in_bp(Config, Client, Peer, ModSpec, Fun, Args, {line, Line}) ->
 -spec get_stack_trace(Client, ThreadId) -> Frames when
     Client :: client(),
     ThreadId :: integer(),
-    Frames :: [edb_dap:stack_frame()].
+    Frames :: [edb_dap_request_stack_trace:stack_frame()].
 get_stack_trace(Client, ThreadId) ->
     case edb_dap_test_client:stack_trace(Client, #{threadId => ThreadId}) of
         #{type := response, success := true, body := #{stackFrames := StackFrames}} ->
@@ -185,13 +188,13 @@ get_stack_trace(Client, ThreadId) ->
 
 -spec get_scopes(Client, FrameId) -> #{ScopeName => Scope} when
     Client :: client(),
-    FrameId :: edb_dap:stack_frame_id(),
+    FrameId :: number(),
     ScopeName :: binary(),
-    Scope :: edb_dap:scope().
+    Scope :: edb_dap_request_scopes:scope().
 get_scopes(Client, FrameId) ->
     case edb_dap_test_client:scopes(Client, #{frameId => FrameId}) of
         #{
-            command := <<"scopes">>,
+            command := ~"scopes",
             type := response,
             success := true,
             body := #{scopes := Scopes}
@@ -201,14 +204,14 @@ get_scopes(Client, FrameId) ->
 
 -spec get_variables(Client, Scope) -> #{VarName => VarInfo} when
     Client :: client(),
-    Scope :: edb_dap:scope(),
+    Scope :: edb_dap_request_scopes:scope(),
     VarName :: binary(),
-    VarInfo :: edb_dap:variable().
+    VarInfo :: edb_dap_request_variables:variable().
 get_variables(Client, Scope) ->
     #{variablesReference := VarRef} = Scope,
     case edb_dap_test_client:variables(Client, #{variablesReference => VarRef}) of
         #{
-            command := <<"variables">>,
+            command := ~"variables",
             type := response,
             success := true,
             body := #{variables := Vars}
@@ -230,3 +233,19 @@ get_top_frame(Client, ThreadId) ->
         line => Line,
         vars => #{Var => Val || Var := #{value := Val} <- Locals}
     }.
+
+%% -------------------------------------------------------------------
+%% Helpers
+%% -------------------------------------------------------------------
+-spec file_name_all_to_string(file:name_all()) -> string().
+file_name_all_to_string(FileNameAll) ->
+    case filename:flatten(FileNameAll) of
+        Bin when is_binary(Bin) -> binary_to_list(Bin);
+        Str -> Str
+    end.
+
+-spec safe_string_to_binary(string()) -> binary().
+safe_string_to_binary(String) ->
+    case unicode:characters_to_binary(String) of
+        Bin when is_binary(Bin) -> Bin
+    end.
