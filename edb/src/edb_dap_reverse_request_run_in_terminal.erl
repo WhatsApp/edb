@@ -82,9 +82,9 @@ make_request(Args) ->
 handle_response(State0 = #{state := launching, node := Node, cookie := Cookie, timeout := TimeoutInSecs}, _Body) ->
     case edb:attach(#{node => Node, timeout => TimeoutInSecs * 1000, cookie => Cookie}) of
         ok ->
-            {ok, Subscription} = edb:subscribe(),
+            ok = edb:pause(),
             State1 = maps:without([cookie, timeout], State0),
-            State2 = State1#{state => attached, subscription => Subscription},
+            State2 = State1#{state => configuring},
             #{actions => [{event, edb_dap_event:initialized()}], new_state => State2};
         {error, Reason} ->
             #{

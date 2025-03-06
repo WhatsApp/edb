@@ -44,7 +44,7 @@
     %% which results in new breakpoint locations.
     sourceModified => boolean()
 }.
--type breakpoints() :: #{breakpoints := [breakpoint()]}.
+-type response() :: #{breakpoints := [breakpoint()]}.
 -type breakpoint() :: #{
     %% The identifier for the breakpoint. It is needed if breakpoint events are
     %% used to update or remove breakpoints.
@@ -134,7 +134,7 @@
     %% `breakpointModes` the debug adapter advertised in its `Capabilities`.
     mode => binary()
 }.
--export_type([arguments/0, breakpoints/0]).
+-export_type([arguments/0, response/0]).
 -export_type([breakpoint/0, sourceBreakpoint/0]).
 
 %% ------------------------------------------------------------------
@@ -144,10 +144,23 @@
 parse_arguments(Args) ->
     {ok, Args}.
 
--spec handle(State, Args) -> edb_dap_request:reaction(breakpoints()) when
+-spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, node := Node}, Args = #{source := #{path := Path}}) ->
+handle(#{state := configuring, node := Node}, Args) ->
+    set_breakpoints(Node, Args);
+handle(#{state := attached, node := Node}, Args) ->
+    set_breakpoints(Node, Args);
+handle(_UnexpectedState, _) ->
+    edb_dap_request:unexpected_request().
+
+%% ------------------------------------------------------------------
+%% Helpers
+%% ------------------------------------------------------------------
+-spec set_breakpoints(Node, Args) -> edb_dap_request:reaction(response()) when
+    Node :: node(),
+    Args :: arguments().
+set_breakpoints(Node, Args = #{source := #{path := Path}}) ->
     Module = binary_to_atom(filename:basename(Path, ".erl")),
 
     % TODO(T202772655): Remove once edb:set_breakpoint/2 takes care of auto-loading modules
@@ -171,6 +184,4 @@ handle(#{state := attached, node := Node}, Args = #{source := #{path := Path}}) 
         end,
         LineResults
     ),
-    #{response => edb_dap_request:success(#{breakpoints => Breakpoints})};
-handle(_UnexpectedState, _) ->
-    edb_dap_request:unexpected_request().
+    #{response => edb_dap_request:success(#{breakpoints => Breakpoints})}.

@@ -42,7 +42,8 @@
 
     %% Shutdown
     test_handles_disconnect_request/1,
-    test_terminates_when_node_goes_down/1
+    test_terminates_when_node_goes_down/1,
+    test_terminates_when_node_goes_down_while_configuring/1
 ]).
 
 all() ->
@@ -60,7 +61,8 @@ groups() ->
         ]},
         {shutdown, [
             test_handles_disconnect_request,
-            test_terminates_when_node_goes_down
+            test_terminates_when_node_goes_down,
+            test_terminates_when_node_goes_down_while_configuring
         ]}
     ].
 
@@ -150,8 +152,27 @@ test_terminates_when_node_goes_down(Config) ->
         Config, #{}
     ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    ok = edb_dap_test_support:configure(Client, []),
 
     edb_test_support:stop_peer(Peer),
+
+    {ok, ExitedEvent} = edb_dap_test_client:wait_for_event(~"exited", Client),
+    ?assertMatch([#{event := ~"exited", body := #{exitCode := 0}}], ExitedEvent),
+
+    {ok, TerminatedEvent} = edb_dap_test_client:wait_for_event(~"terminated", Client),
+    ?assertMatch([#{event := ~"terminated"}], TerminatedEvent),
+
+    ok.
+
+test_terminates_when_node_goes_down_while_configuring(Config) ->
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
+        Config, #{}
+    ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+
+    edb_test_support:stop_peer(Peer),
+
+    ok = edb_dap_test_support:configure(Client, []),
 
     {ok, ExitedEvent} = edb_dap_test_client:wait_for_event(~"exited", Client),
     ?assertMatch([#{event := ~"exited", body := #{exitCode := 0}}], ExitedEvent),

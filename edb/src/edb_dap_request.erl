@@ -109,6 +109,7 @@ known_handlers() ->
         ~"next" => edb_dap_request_next,
         ~"scopes" => edb_dap_request_scopes,
         ~"setBreakpoints" => edb_dap_request_set_breakpoints,
+        ~"setExceptionBreakpoints" => edb_dap_request_set_exception_breakpoints,
         ~"stackTrace" => edb_dap_request_stack_trace,
         ~"stepOut" => edb_dap_request_step_out,
         ~"threads" => edb_dap_request_threads,

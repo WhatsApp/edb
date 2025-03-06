@@ -67,7 +67,8 @@ test_can_pause_and_continue(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, ThreadId, ST0} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [], {line, 4}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
     % Sanity-check: we are on line 4
     ?assertMatch([#{name := ~"foo:go/0", line := 4} | _], ST0),

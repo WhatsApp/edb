@@ -25,7 +25,8 @@
 -export([start_test_client/1]).
 -export([start_session/4]).
 -export([set_breakpoints/3]).
--export([ensure_process_in_bp/6]).
+-export([spawn_and_wait_for_bp/3, wait_for_bp/1]).
+-export([configure/2]).
 -export([get_stack_trace/2, get_scopes/2, get_variables/2]).
 -export([get_top_frame/2]).
 
@@ -79,6 +80,20 @@ start_session(Config, Node, Cookie, Cwd) ->
 
     {ok, Client}.
 
+-spec configure(Client, [BreakpointSpec]) -> ok when
+    Client :: client(),
+    BreakpointSpec :: {ModulePath, Lines},
+    ModulePath :: binary(),
+    Lines :: [{line, pos_integer()}].
+configure(Client, BreakpointSpecs) ->
+    [
+        ok = set_breakpoints(Client, ModPath, [Line || {line, Line} <- Lines])
+     || {ModPath, Lines} <- BreakpointSpecs
+    ],
+    #{success := true, body := #{breakpoints := []}} =
+        edb_dap_test_client:set_exception_breakpoints(Client, #{filters => []}),
+    ok.
+
 -spec set_breakpoints(Client, FilePath, Lines) -> ok when
     Client :: client(),
     FilePath :: binary(),
@@ -99,21 +114,23 @@ set_breakpoints(Client, FilePath, Lines) ->
     ),
     ok.
 
--spec ensure_process_in_bp(Client, Peer, ModFilePath, Fun, Args, {line, Line}) ->
-    {ok, ThreadId, StackFrames}
-when
+-spec spawn_and_wait_for_bp(Client, Peer, {M, F, Args}) -> {ok, ThreadId, StackFrames} when
     Client :: client(),
     Peer :: peer(),
-    ModFilePath :: binary(),
-    Fun :: atom(),
+    M :: module(),
+    F :: atom(),
     Args :: [term()],
-    Line :: pos_integer(),
     ThreadId :: integer(),
     StackFrames :: [edb_dap_request_stack_trace:stack_frame()].
-ensure_process_in_bp(Client, Peer, ModFilePath, Fun, Args, {line, Line}) ->
-    ok = set_breakpoints(Client, ModFilePath, [Line]),
-    Module = binary_to_atom(edb_test_support:file_name_all_to_binary(filename:basename(ModFilePath, ".erl"))),
-    erlang:spawn(fun() -> peer:call(Peer, Module, Fun, Args) end),
+spawn_and_wait_for_bp(Client, Peer, {M, F, Args}) ->
+    erlang:spawn(fun() -> peer:call(Peer, M, F, Args) end),
+    wait_for_bp(Client).
+
+-spec wait_for_bp(Client) -> {ok, ThreadId, StackFrames} when
+    Client :: client(),
+    ThreadId :: integer(),
+    StackFrames :: [edb_dap_request_stack_trace:stack_frame()].
+wait_for_bp(Client) ->
     {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(~"stopped", Client),
     ThreadId =
         case StoppedEvent of
@@ -134,7 +151,7 @@ ensure_process_in_bp(Client, Peer, ModFilePath, Fun, Args, {line, Line}) ->
         #{
             type := response,
             success := true,
-            body := #{stackFrames := StackFrames = [#{line := Line, source := #{path := ModFilePath}} | _]}
+            body := #{stackFrames := StackFrames = _}
         } ->
             {ok, ThreadId, StackFrames};
         UnexpectedStackTrace ->

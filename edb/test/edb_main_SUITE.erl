@@ -71,18 +71,21 @@ escript_dap(Config) ->
 
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
 
+    Module = factorial,
+    ok = edb_dap_test_support:configure(Client, [{SourcePath, [{line, 32}]}]),
+
     Response3 = edb_dap_test_client:threads(Client),
-    ?assertMatch(#{request_seq := 3, type := response, success := true}, Response3),
+    ?assertMatch(#{request_seq := 5, type := response, success := true}, Response3),
 
     Line = 32,
     ok = edb_dap_test_support:set_breakpoints(Client, SourcePath, [Line]),
 
     spawn(fun() -> 120 = peer:call(Peer, Module, fact, [5]) end),
-    {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(<<"stopped">>, Client),
+    {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(~"stopped", Client),
     ?assertMatch(
         #{
-            event := <<"stopped">>,
-            body := #{reason := <<"breakpoint">>, preserveFocusHint := false, threadId := _, allThreadsStopped := true}
+            event := ~"stopped",
+            body := #{reason := ~"breakpoint", preserveFocusHint := false, threadId := _, allThreadsStopped := true}
         },
         StoppedEvent
     ),
@@ -91,7 +94,7 @@ escript_dap(Config) ->
     Response5 = edb_dap_test_client:stack_trace(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
-            request_seq := 5,
+            request_seq := 7,
             type := response,
             success := true,
             body := #{stackFrames := _}
@@ -105,16 +108,16 @@ escript_dap(Config) ->
             #{
                 id := 1,
                 line := 32,
-                name := <<"factorial:fact/1">>,
+                name := ~"factorial:fact/1",
                 column := 0,
-                source := #{name := <<"factorial">>, path := SourcePath}
+                source := #{name := ~"factorial", path := SourcePath}
             },
             #{
                 id := 2,
                 line := 1548,
-                name := <<"peer:'-do_call/4-fun-0-'/5">>,
+                name := ~"peer:'-do_call/4-fun-0-'/5",
                 column := 0,
-                source := #{name := <<"peer">>, path := _}
+                source := #{name := ~"peer", path := _}
             }
         ],
         StackFrames
@@ -124,20 +127,20 @@ escript_dap(Config) ->
     Response6 = edb_dap_test_client:scopes(Client, #{frameId => FrameId}),
     ?assertMatch(
         #{
-            command := <<"scopes">>,
+            command := ~"scopes",
             type := response,
             success := true,
             body := #{
                 scopes := [
                     #{
-                        name := <<"Locals">>,
+                        name := ~"Locals",
                         expensive := false,
-                        presentationHint := <<"locals">>,
+                        presentationHint := ~"locals",
                         variablesReference := 1
                     }
                 ]
             },
-            request_seq := 6
+            request_seq := 8
         },
         Response6
     ),
@@ -145,7 +148,7 @@ escript_dap(Config) ->
     #{body := #{scopes := Scopes}} = Response6,
     [VariablesReferenceLocals] = lists:filtermap(
         fun
-            (#{name := <<"Locals">>, variablesReference := VR}) -> {true, VR};
+            (#{name := ~"Locals", variablesReference := VR}) -> {true, VR};
             (_) -> false
         end,
         Scopes
@@ -153,13 +156,13 @@ escript_dap(Config) ->
     Response7 = edb_dap_test_client:variables(Client, #{variablesReference => VariablesReferenceLocals}),
     ?assertMatch(
         #{
-            command := <<"variables">>,
+            command := ~"variables",
             type := response,
             success := true,
             body := #{
                 variables := _
             },
-            request_seq := 7
+            request_seq := 9
         },
         Response7
     ),
@@ -169,7 +172,7 @@ escript_dap(Config) ->
     Response8 = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
-            request_seq := 9,
+            request_seq := 11,
             type := response,
             success := true,
             body := #{allThreadsContinued := true}
@@ -180,9 +183,9 @@ escript_dap(Config) ->
     Response9 = edb_dap_test_client:disconnect(Client, #{}),
     ?assertMatch(
         #{
-            command := <<"disconnect">>,
+            command := ~"disconnect",
             type := response,
-            request_seq := 10,
+            request_seq := 12,
             success := true
         },
         Response9

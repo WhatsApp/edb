@@ -69,7 +69,17 @@
         cwd := binary()
     }
     | #{
-        % We are attached to the debuggee node, debugging is in progress
+        % We are attached to the debuggee node, have paused it
+        % and sent an `initialized` event to the client. We are now
+        % waiting for the client to send all the initial configuration
+        % requests (setBreakpoints, etc)
+        state := configuring,
+        client_info := client_info(),
+        node := node(),
+        cwd := binary()
+    }
+    | #{
+        % We are attached to the debuggee node, and debugging is in progress
         state := attached,
         client_info := client_info(),
         node := node(),
@@ -194,7 +204,7 @@ handle_info(Unexpected, State) ->
 
 -spec handle_edb_event(Event, state()) -> {noreply, state()} when
     Event :: edb:event_envelope(edb:event()).
-handle_edb_event({edb_event, Subscription, Event}, State0 = #{state := attached, subscription := Subscription}) ->
+handle_edb_event({edb_event, Subscription, Event}, State0 = #{subscription := Subscription}) ->
     ?LOG_DEBUG("Handle event: ~p", [Event]),
     Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0),
     State1 = react(Reaction, State0),

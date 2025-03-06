@@ -74,7 +74,7 @@ nodedown_impl(State, Node, _Reason) ->
     #{}.
 
 -spec paused_impl(edb_dap_server:state(), edb:paused_event()) -> reaction().
-paused_impl(_State, {breakpoint, Pid, _MFA, _Line}) ->
+paused_impl(#{state := attached}, {breakpoint, Pid, _MFA, _Line}) ->
     StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"breakpoint",
         % On a BP, so we expect the source file of the top-frame
@@ -84,7 +84,7 @@ paused_impl(_State, {breakpoint, Pid, _MFA, _Line}) ->
         allThreadsStopped => true
     }),
     #{actions => [{event, StoppedEvent}]};
-paused_impl(_State, {step, Pid}) ->
+paused_impl(#{state := attached}, {step, Pid}) ->
     StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"step",
         % After a step action, so we expect the source file
@@ -94,13 +94,13 @@ paused_impl(_State, {step, Pid}) ->
         allThreadsStopped => true
     }),
     #{actions => [{event, StoppedEvent}]};
-paused_impl(_State, pause) ->
+paused_impl(#{state := attached}, pause) ->
     StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"pause",
         preserveFocusHint => true,
         allThreadsStopped => true
     }),
     #{actions => [{event, StoppedEvent}]};
-paused_impl(_State, Event) ->
-    ?LOG_WARNING("Skipping paused event: ~p", [Event]),
+paused_impl(#{state := S}, Event) ->
+    ?LOG_WARNING("Skipping paused event: ~p when ~p", [Event, S]),
     #{}.

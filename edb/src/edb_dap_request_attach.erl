@@ -66,13 +66,12 @@ handle(State0 = #{state := initialized}, Args) ->
     AttachArgs = maps:without([cwd, stripSourcePath], Args),
     case edb:attach(AttachArgs) of
         ok ->
-            {ok, Subscription} = edb:subscribe(),
+            ok = edb:pause(),
             Cwd = maps:get(cwd, Args),
             StripSourcePrefix = maps:get(stripSourcePrefix, Args, ~""),
             State1 = State0#{
-                state => attached,
+                state => configuring,
                 node => maps:get(node, Args),
-                subscription => Subscription,
                 cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
             },
             #{

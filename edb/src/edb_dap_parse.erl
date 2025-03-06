@@ -29,6 +29,7 @@
     atom/1,
     atoms/1,
     binary/0,
+    empty_list/0,
     list/1,
     map/2
 ]).
@@ -86,6 +87,10 @@ atoms(As) when is_list(As) ->
 -spec binary() -> parser(binary()).
 binary() ->
     fun(B) when is_binary(B) -> {ok, B} end.
+
+-spec empty_list() -> parser([none()]).
+empty_list() ->
+    fun([]) -> {ok, []} end.
 
 -spec list(parser(T)) -> parser([T]).
 list(Parser) ->

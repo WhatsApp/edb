@@ -70,7 +70,8 @@ test_reports_locals_scope(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 4}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
         [#{id := TopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, TopFrameId),
@@ -113,7 +114,8 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 4}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
@@ -159,7 +161,8 @@ test_reports_messages_scope(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 5}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),

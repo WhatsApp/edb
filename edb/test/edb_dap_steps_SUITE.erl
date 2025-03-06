@@ -83,7 +83,8 @@ test_next_works(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, ThreadId, ST0} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [], {line, 4}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
     % Sanity-check: we are on line 4
     ?assertMatch([#{name := ~"foo:go/0", line := 4} | _], ST0),
@@ -136,7 +137,8 @@ test_step_out_works(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, ThreadId, ST0} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [], {line, 12}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 12}]}]),
+    {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
     % Sanity-check: we are on line 12
     ?assertMatch([#{name := ~"foo:g/1", line := 12} | _], ST0),
@@ -174,7 +176,8 @@ test_stepping_errors_if_process_not_paused(Config) ->
             }
         ),
     {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
-    {ok, ThreadId, _ST0} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [], {line, 4}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, _ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
     ContinueResponse = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(#{success := true, body := #{allThreadsContinued := true}}, ContinueResponse),
