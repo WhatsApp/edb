@@ -23,13 +23,13 @@
 
 %% Public API
 -export([start_test_client/1]).
--export([start_session/3]).
--export([load_file_and_set_breakpoints/5, set_breakpoints/3]).
--export([ensure_process_in_bp/7]).
+-export([start_session/4]).
+-export([set_breakpoints/3]).
+-export([ensure_process_in_bp/6]).
 -export([get_stack_trace/2, get_scopes/2, get_variables/2]).
 -export([get_top_frame/2]).
 
--export_type([client/0, peer/0, module_spec/0]).
+-export_type([client/0, peer/0]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -49,19 +49,18 @@ start_test_client(Config) ->
     Args = ["dap"],
     edb_dap_test_client:start_link(Executable, Args).
 
--spec start_session(Config, Node, Cookie) -> {ok, client(), Cwd :: binary()} when
+-spec start_session(Config, Node, Cookie, Cwd) -> {ok, client()} when
     Config :: ct_suite:ct_config(),
     Node :: node(),
-    Cookie :: atom() | no_cookie.
-start_session(Config, Node, Cookie) ->
+    Cookie :: atom() | no_cookie,
+    Cwd :: binary().
+start_session(Config, Node, Cookie, Cwd) ->
     {ok, Client} = start_test_client(Config),
 
     AdapterID = atom_to_binary(?MODULE),
     Response1 = edb_dap_test_client:initialize(Client, #{adapterID => AdapterID}),
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
-    PrivDir = ?config(priv_dir, Config),
-    Cwd = safe_string_to_binary(PrivDir),
     LaunchCommand = #{
         cwd => Cwd,
         command => ~"dummy",
@@ -78,43 +77,7 @@ start_session(Config, Node, Cookie) ->
     {ok, InitializedEvent} = edb_dap_test_client:wait_for_event(~"initialized", Client),
     ?assertMatch([#{event := ~"initialized"}], InitializedEvent),
 
-    {ok, Client, Cwd}.
-
--type module_spec() :: {filename, file:name_all()} | {filepath, file:name_all()} | {source, binary() | string()}.
--spec load_file_and_set_breakpoints(Config, Peer, Client, ModuleSpec, Lines) -> {ok, Module, FilePath} when
-    Config :: ct_suite:ct_config(),
-    Peer :: peer(),
-    Client :: client(),
-    ModuleSpec :: module_spec(),
-    Lines :: [pos_integer()],
-    Module :: module(),
-    FilePath :: binary().
-load_file_and_set_breakpoints(Config, Peer, Client, {filename, FileName}, Lines) ->
-    DataDir = ?config(data_dir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    FilePath = filename:join(DataDir, FileName),
-    FileCopyPath = filename:join(PrivDir, FileName),
-    {ok, Contents} = file:read_file(FilePath),
-    ok = file:write_file(FileCopyPath, Contents),
-    load_file_and_set_breakpoints(Config, Peer, Client, {filepath, FileCopyPath}, Lines);
-load_file_and_set_breakpoints(Config, Peer, Client, {filepath, FilePath0}, Lines) ->
-    PrivDir = ?config(priv_dir, Config),
-    FilePath1 = file_name_all_to_string(FilePath0),
-    {ok, Module} = edb_test_support:compile_and_load_file_in_peer(#{source => FilePath1, peer => Peer, ebin => PrivDir}),
-    FilePath2 = safe_string_to_binary(FilePath1),
-    ok = set_breakpoints(Client, FilePath2, Lines),
-    {ok, Module, FilePath2};
-load_file_and_set_breakpoints(Config, Peer, Client, {source, Source}, Lines) ->
-    MatchModuleRegex = "-module\\(([^)]+)\\)\\.",
-    case re:run(Source, MatchModuleRegex, [{capture, all_but_first, list}]) of
-        {match, [ModuleName]} ->
-            PrivDir = ?config(priv_dir, Config),
-            FilePath = filename:join(PrivDir, ModuleName ++ ".erl"),
-            file:write_file(FilePath, Source),
-            load_file_and_set_breakpoints(Config, Peer, Client, {filepath, FilePath}, Lines);
-        nomatch ->
-            error(couldnt_parse_module_name)
-    end.
+    {ok, Client}.
 
 -spec set_breakpoints(Client, FilePath, Lines) -> ok when
     Client :: client(),
@@ -136,18 +99,20 @@ set_breakpoints(Client, FilePath, Lines) ->
     ),
     ok.
 
--spec ensure_process_in_bp(Config, Client, Peer, ModSpec, Fun, Args, {line, Line}) -> {ok, ThreadId, StackFrames} when
-    Config :: ct_suite:ct_config(),
+-spec ensure_process_in_bp(Client, Peer, ModFilePath, Fun, Args, {line, Line}) ->
+    {ok, ThreadId, StackFrames}
+when
     Client :: client(),
     Peer :: peer(),
-    ModSpec :: module_spec(),
+    ModFilePath :: binary(),
     Fun :: atom(),
     Args :: [term()],
     Line :: pos_integer(),
     ThreadId :: integer(),
     StackFrames :: [edb_dap_request_stack_trace:stack_frame()].
-ensure_process_in_bp(Config, Client, Peer, ModSpec, Fun, Args, {line, Line}) ->
-    {ok, Module, ModFilePath} = load_file_and_set_breakpoints(Config, Peer, Client, ModSpec, [Line]),
+ensure_process_in_bp(Client, Peer, ModFilePath, Fun, Args, {line, Line}) ->
+    ok = set_breakpoints(Client, ModFilePath, [Line]),
+    Module = binary_to_atom(edb_test_support:file_name_all_to_binary(filename:basename(ModFilePath, ".erl"))),
     erlang:spawn(fun() -> peer:call(Peer, Module, Fun, Args) end),
     {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(~"stopped", Client),
     ThreadId =
@@ -233,19 +198,3 @@ get_top_frame(Client, ThreadId) ->
         line => Line,
         vars => #{Var => Val || Var := #{value := Val} <- Locals}
     }.
-
-%% -------------------------------------------------------------------
-%% Helpers
-%% -------------------------------------------------------------------
--spec file_name_all_to_string(file:name_all()) -> string().
-file_name_all_to_string(FileNameAll) ->
-    case filename:flatten(FileNameAll) of
-        Bin when is_binary(Bin) -> binary_to_list(Bin);
-        Str -> Str
-    end.
-
--spec safe_string_to_binary(string()) -> binary().
-safe_string_to_binary(String) ->
-    case unicode:characters_to_binary(String) of
-        Bin when is_binary(Bin) -> Bin
-    end.

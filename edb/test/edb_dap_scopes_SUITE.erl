@@ -56,17 +56,21 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_reports_locals_scope(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
-    ModuleSource = iolist_to_binary([
-        ~"-module(foo).     %L01\n",
-        ~"-export([go/2]).  %L02\n",
-        ~"go(X, Y) ->       %L03\n",
-        ~"    X + 2 * Y.    %L04\n"
-    ]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(
-        Config, Client, Peer, {source, ModuleSource}, go, [42, 7], {line, 4}
-    ),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
+        edb_test_support:start_peer_node(
+            Config, #{
+                modules => [
+                    {source, [
+                        ~"-module(foo).     %L01\n",
+                        ~"-export([go/2]).  %L02\n",
+                        ~"go(X, Y) ->       %L03\n",
+                        ~"    X + 2 * Y.    %L04\n"
+                    ]}
+                ]
+            }
+        ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 4}),
     case ST of
         [#{id := TopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, TopFrameId),
@@ -95,17 +99,21 @@ test_reports_locals_scope(Config) ->
     ok.
 
 test_reports_registers_scope_when_locals_not_available(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
-    ModuleSource = iolist_to_binary([
-        ~"-module(foo).     %L01\n",
-        ~"-export([go/2]).  %L02\n",
-        ~"go(X, Y) ->       %L03\n",
-        ~"    X + 2 * Y.    %L04\n"
-    ]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(
-        Config, Client, Peer, {source, ModuleSource}, go, [42, 7], {line, 4}
-    ),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
+        edb_test_support:start_peer_node(
+            Config, #{
+                modules => [
+                    {source, [
+                        ~"-module(foo).     %L01\n",
+                        ~"-export([go/2]).  %L02\n",
+                        ~"go(X, Y) ->       %L03\n",
+                        ~"    X + 2 * Y.    %L04\n"
+                    ]}
+                ]
+            }
+        ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 4}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
@@ -136,18 +144,22 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
     ok.
 
 test_reports_messages_scope(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
-    ModuleSource = iolist_to_binary([
-        ~"-module(foo).      %L01\n",
-        ~"-export([go/2]).   %L02\n",
-        ~"go(X, Y) ->        %L03\n",
-        ~"    self() ! hola, %L04\n",
-        ~"    X + 2 * Y.     %L05\n"
-    ]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(
-        Config, Client, Peer, {source, ModuleSource}, go, [42, 7], {line, 5}
-    ),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
+        edb_test_support:start_peer_node(
+            Config, #{
+                modules => [
+                    {source, [
+                        ~"-module(foo).      %L01\n",
+                        ~"-export([go/2]).   %L02\n",
+                        ~"go(X, Y) ->        %L03\n",
+                        ~"    self() ! hola, %L04\n",
+                        ~"    X + 2 * Y.     %L05\n"
+                    ]}
+                ]
+            }
+        ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, _ThreadId, ST} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [42, 7], {line, 5}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),

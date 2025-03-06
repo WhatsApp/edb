@@ -154,7 +154,7 @@ test_raises_error_until_attached(Config) ->
         ?assertError(not_attached, edb:attached_node()),
         ?assertError(not_attached, edb:processes()),
 
-        {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % Sanity-check: edb_server is not available in the peer
         ?assertEqual(
@@ -178,7 +178,7 @@ test_raises_error_until_attached(Config) ->
 
 test_attaching_injects_edb_server(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % Initially edb_server is not available in the debuggee
         ?assertEqual(
@@ -225,7 +225,7 @@ test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) ->
             receive
             after NodeStartupDelayInMs -> ok
             end,
-            {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{node => Node, cookie => Cookie}),
+            {ok, #{peer := Peer}} = edb_test_support:start_peer_node(Config, #{node => Node, cookie => Cookie}),
 
             % Keep node alive
             receive
@@ -260,8 +260,8 @@ test_can_attach_with_specific_cookie(Config) ->
         CustomCookie2 = 'customcookie2',
 
         % Start two nodes, one with each cookie
-        {ok, _Peer1, Node1, CustomCookie1} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie1}),
-        {ok, _Peer2, Node2, CustomCookie2} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie2}),
+        {ok, #{node := Node1}} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie1}),
+        {ok, #{node := Node2}} = edb_test_support:start_peer_node(Config, #{cookie => CustomCookie2}),
 
         % We can't attach to a node with the wrong cookie
         {error, nodedown} = edb:attach(#{node => Node1, cookie => CustomCookie2}),
@@ -286,7 +286,7 @@ test_can_attach_when_distribution_is_already_started(Config) ->
         ?assertMatch(#{started := dynamic}, net_kernel:get_state()),
 
         % Start a debuggee with same cookie as debugger
-        {ok, _Peer, DebuggeeNode, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := DebuggeeNode, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % We can attach to the DebuggeeNode, we don't need to specify a cookie
         ok = edb:attach(#{node => DebuggeeNode})
@@ -364,7 +364,9 @@ test_attach_validates_args(Config) ->
 
 test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{enable_debugging_mode => false}),
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{
+            enable_debugging_mode => false
+        }),
 
         ?assertEqual(
             {error, {bootstrap_failed, {no_debugger_support, not_enabled}}},
@@ -389,9 +391,7 @@ test_raises_error_until_reverse_attached(Config) ->
         }),
 
         % Launch new node, injecting special code to inject
-        {ok, _Peer, Node, _Cookie} = edb_test_support:start_peer_node(Config, #{
-            extra_args => ["-eval", InjectedCode]
-        }),
+        {ok, #{node := Node}} = edb_test_support:start_peer_node(Config, #{extra_args => ["-eval", InjectedCode]}),
 
         % We eventually attach, and no longer error
         ok = wait_reverse_attach_notification(Ref),
@@ -414,10 +414,12 @@ test_reverse_attaching_picks_the_right_node(Config) ->
         }),
 
         % Launch two nodes, only of the them contains the injected code
-        {ok, _, NodeWithInjectedCode, _} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{node := NodeWithInjectedCode}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode]
         }),
-        {ok, _, _TheOtherNode, _} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := TheOtherNode}} = edb_test_support:start_peer_node(Config, #{}),
+        % Sanity-check: different nodes
+        ?assertNotEqual(NodeWithInjectedCode, TheOtherNode),
 
         % We eventually attach to the node with injected code
         ok = wait_reverse_attach_notification(Ref),
@@ -438,7 +440,7 @@ test_injectable_code_can_be_composed(Config) ->
         ),
 
         % Launch a node with the complex code
-        {ok, Peer, Node, _} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{peer := Peer, node := Node}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", ComplexInjectedCode]
         }),
 
@@ -490,7 +492,7 @@ test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
         }),
 
         % start a node with debugging mode off
-        {ok, _Peer, _Node, _Cookie} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode],
             enable_debugging_mode => false
         }),
@@ -544,7 +546,7 @@ test_reverse_attach_validates_args(Config) ->
 
 test_querying_on_a_vanished_node_detaches(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ok = edb_test_support:start_event_collector(),
 
@@ -565,7 +567,7 @@ test_querying_on_a_vanished_node_detaches(Config) ->
 
 test_terminating_detaches(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % Sanity check: no errors while attached
         edb:attach(#{node => Node, cookie => Cookie}),
@@ -584,7 +586,7 @@ test_terminating_detaches(Config) ->
 
 test_terminating_on_a_vanished_node_detaches(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         edb:attach(#{node => Node, cookie => Cookie}),
 
         % Sanity check: no errors while attached
@@ -601,7 +603,7 @@ test_terminating_on_a_vanished_node_detaches(Config) ->
 
 test_detaching_unsubscribes(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         edb:attach(#{node => Node, cookie => Cookie}),
         ok = edb_test_support:start_event_collector(),
 
@@ -618,7 +620,7 @@ test_detaching_unsubscribes(Config) ->
 
 test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ok = edb_test_support:start_event_collector(),
@@ -654,7 +656,7 @@ test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
 
 test_reattaching_to_same_node_doesnt_detach(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ?assertEqual(edb:attached_node(), Node),
@@ -689,11 +691,11 @@ test_reattaching_to_same_node_doesnt_detach(Config) ->
 test_reattaching_to_different_node_detaches_from_old_node(Config) ->
     on_debugger_node(Config, fun() ->
         Cookie = 'some_cookie',
-        {ok, _Peer1, Node1, Cookie} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{node := Node1}} = edb_test_support:start_peer_node(Config, #{
             node => {prefix, "debuggee_1"},
             cookie => Cookie
         }),
-        {ok, _Peer2, Node2, Cookie} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{node := Node2}} = edb_test_support:start_peer_node(Config, #{
             node => {prefix, "debuggee_2"},
             cookie => Cookie
         }),
@@ -720,7 +722,9 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
 
 test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
     on_debugger_node(Config, fun() ->
-        {ok, _Peer1, Node1, Cookie} = edb_test_support:start_peer_node(Config, #{node => {prefix, "debuggee_1"}}),
+        {ok, #{node := Node1, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{
+            node => {prefix, "debuggee_1"}
+        }),
 
         ok = edb:attach(#{node => Node1, cookie => Cookie}),
         ?assertEqual(edb:attached_node(), Node1),
@@ -734,7 +738,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
-        {ok, _Peer2, Node2, _Cookie2} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{node := Node2}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode]
         }),
         ok = wait_reverse_attach_notification(Ref),
@@ -753,7 +757,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
 -spec start_debugger_node(Config) -> Config when
     Config :: ct_suite:config().
 start_debugger_node(Config0) ->
-    {ok, Peer} = edb_test_support:start_peer_no_dist(Config0, #{
+    {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config0, #{
         copy_code_path => true
     }),
     Config1 = [{debugger_peer_key(), Peer} | Config0],

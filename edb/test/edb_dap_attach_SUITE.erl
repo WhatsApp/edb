@@ -57,7 +57,7 @@ end_per_testcase(_TestCase, _Config) ->
 %%--------------------------------------------------------------------
 test_attaches_if_node_is_alive(Config) ->
     % Start a debuggee node
-    {ok, _Peer, DebuggeeNode, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, #{node := DebuggeeNode, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
     % Start a client and connect
     {ok, Client} = edb_dap_test_support:start_test_client(Config),
@@ -91,7 +91,7 @@ test_fails_to_attach_if_node_is_down(Config) ->
 
 test_fails_to_attach_if_wrong_cookie_is_given(Config) ->
     % Start a debuggee node
-    {ok, _Peer, DebuggeeNode, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, #{node := DebuggeeNode, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
     % Start a client and connect
     {ok, Client} = edb_dap_test_support:start_test_client(Config),
@@ -118,7 +118,7 @@ test_fails_to_attach_if_wrong_cookie_is_given(Config) ->
 
 test_validates_input(Config) ->
     % Start a debuggee node
-    {ok, _Peer, DebuggeeNode, Cookie} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, #{node := DebuggeeNode, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
     % Start a client and connect
     {ok, Client} = edb_dap_test_support:start_test_client(Config),

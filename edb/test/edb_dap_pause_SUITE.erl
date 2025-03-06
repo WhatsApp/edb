@@ -52,18 +52,22 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_can_pause_and_continue(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
-    ModuleSource = erlang:iolist_to_binary([
-        ~"-module(foo).               %L01\n",
-        ~"-export([go/0]).            %L02\n",
-        ~"go() ->                     %L03\n",
-        ~"    timer:sleep(infinity),  %L04\n",
-        ~"    ok.                     %L05\n"
-    ]),
-    {ok, ThreadId, ST0} = edb_dap_test_support:ensure_process_in_bp(
-        Config, Client, Peer, {source, ModuleSource}, go, [], {line, 4}
-    ),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
+        edb_test_support:start_peer_node(
+            Config, #{
+                modules => [
+                    {source, [
+                        ~"-module(foo).               %L01\n",
+                        ~"-export([go/0]).            %L02\n",
+                        ~"go() ->                     %L03\n",
+                        ~"    timer:sleep(infinity),  %L04\n",
+                        ~"    ok.                     %L05\n"
+                    ]}
+                ]
+            }
+        ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, ThreadId, ST0} = edb_dap_test_support:ensure_process_in_bp(Client, Peer, FooSrc, go, [], {line, 4}),
 
     % Sanity-check: we are on line 4
     ?assertMatch([#{name := ~"foo:go/0", line := 4} | _], ST0),

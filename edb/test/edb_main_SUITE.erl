@@ -63,20 +63,19 @@ escript_executable(Config) ->
     end.
 
 escript_dap(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
+    Module = factorial,
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{Module := SourcePath}}} = edb_test_support:start_peer_node(
+        Config,
+        #{modules => [{filename, "factorial.erl"}]}
+    ),
+
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
 
     Response3 = edb_dap_test_client:threads(Client),
     ?assertMatch(#{request_seq := 3, type := response, success := true}, Response3),
 
     Line = 32,
-    {ok, Module, SourcePath} = edb_dap_test_support:load_file_and_set_breakpoints(
-        Config,
-        Peer,
-        Client,
-        {filename, "factorial.erl"},
-        [Line]
-    ),
+    ok = edb_dap_test_support:set_breakpoints(Client, SourcePath, [Line]),
 
     spawn(fun() -> 120 = peer:call(Peer, Module, fact, [5]) end),
     {ok, [StoppedEvent]} = edb_dap_test_client:wait_for_event(<<"stopped">>, Client),
@@ -101,7 +100,6 @@ escript_dap(Config) ->
     ),
     StackFrames = maps:get(stackFrames, maps:get(body, Response5)),
 
-    FactorialPath = <<Cwd/binary, "factorial.erl">>,
     ?assertMatch(
         [
             #{
@@ -109,7 +107,7 @@ escript_dap(Config) ->
                 line := 32,
                 name := <<"factorial:fact/1">>,
                 column := 0,
-                source := #{name := <<"factorial">>, path := FactorialPath}
+                source := #{name := <<"factorial">>, path := SourcePath}
             },
             #{
                 id := 2,

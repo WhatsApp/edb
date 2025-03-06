@@ -23,13 +23,15 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
--export_type([peer/0, start_peer_node_opts/0, start_peer_no_dist_opts/0]).
+-export_type([peer/0, start_peer_node_opts/0, start_peer_no_dist_opts/0, module_spec/0]).
 -export([start_peer_node/2, start_peer_no_dist/2, stop_peer/1, stop_all_peers/0]).
--export([compile_and_load_file_in_peer/1]).
 -export([random_node/1, random_node/2]).
 
 %% Event collection
 -export([start_event_collector/0, collected_events/0, stop_event_collector/0, event_collector_send_sync/0]).
+
+%% Conversions
+-export([file_name_all_to_string/1, file_name_all_to_binary/1, safe_string_to_binary/1]).
 
 %% --------------------------------------------------------------------
 %% Peer nodes
@@ -65,28 +67,34 @@ random_node_name(Prefix) when is_binary(Prefix) ->
 random_node_name(Prefix) ->
     list_to_atom(peer:random_name(Prefix)).
 
+-type module_spec() :: {filename, file:name_all()} | {filepath, file:filename_all()} | {source, iodata()}.
+
 -type start_peer_node_opts() ::
     #{
         node => node() | {prefix, binary() | string()},
         cookie => atom(),
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
-        extra_args => [binary() | string()]
+        extra_args => [binary() | string()],
+        modules => [module_spec()]
     }.
 
 -type start_peer_no_dist_opts() ::
     #{
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
-        extra_args => [binary() | string()]
+        extra_args => [binary() | string()],
+        modules => [module_spec()]
     }.
 
--spec start_peer_node(CtConfig, Opts) -> {ok, Peer, Node, Cookie} when
+-spec start_peer_node(CtConfig, Opts) -> {ok, Result} when
     CtConfig :: ct_suite:ct_config(),
     Opts :: start_peer_node_opts(),
     Peer :: peer(),
     Node :: node(),
-    Cookie :: atom().
+    Cookie :: atom(),
+    FilePath :: binary(),
+    Result :: #{peer := Peer, node := Node, cookie := Cookie, srcdir => FilePath, modules := #{module() => FilePath}}.
 start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
     Cookie =
         case Opts of
@@ -100,8 +108,10 @@ start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
                         DefaultCookie
                 end
         end,
-    {ok, Peer} = gen_start_peer(CtConfig, #{node => Node, cookie => Cookie}, maps:without([node, cookie], Opts)),
-    {ok, Peer, Node, Cookie};
+    {ok, Peer, Srcdir, Modules} = gen_start_peer(
+        CtConfig, #{node => Node, cookie => Cookie}, maps:without([node, cookie], Opts)
+    ),
+    {ok, #{peer => Peer, node => Node, cookie => Cookie, srcdir => Srcdir, modules => Modules}};
 start_peer_node(CtConfig, Opts0) ->
     {NamePrefix, Opts2} =
         case maps:take(node, Opts0) of
@@ -111,21 +121,26 @@ start_peer_node(CtConfig, Opts0) ->
     Node = random_node(NamePrefix),
     start_peer_node(CtConfig, Opts2#{node => Node}).
 
--spec start_peer_no_dist(CtConfig, Opts) -> {ok, Peer} when
+-spec start_peer_no_dist(CtConfig, Opts) -> {ok, Result} when
     CtConfig :: ct_suite:ct_config(),
     Opts :: start_peer_no_dist_opts(),
-    Peer :: peer().
+    Peer :: peer(),
+    FilePath :: binary(),
+    Result :: #{peer := Peer, srcdir := FilePath, modules := #{module() => FilePath}}.
 start_peer_no_dist(CtConfig, Opts) ->
-    {ok, Peer} = gen_start_peer(CtConfig, no_dist, Opts),
+    {ok, Peer, Workdir, Modules} = gen_start_peer(CtConfig, no_dist, Opts),
     % Sanity-check
-    nonode@nohost = peer:call(Peer, erlang, node, []),
-    {ok, Peer}.
+    #{started := no} = peer:call(Peer, net_kernel, get_state, []),
+    {ok, #{peer => Peer, srcdir => Workdir, modules => Modules}}.
 
--spec gen_start_peer(CtConfig, NodeInfo, Opts) -> {ok, Peer} when
+-spec gen_start_peer(CtConfig, NodeInfo, Opts) -> {ok, Peer, SrcDir, Modules} when
     CtConfig :: ct_suite:ct_config(),
     NodeInfo :: no_dist | #{node := node(), cookie := atom()},
     Opts :: start_peer_no_dist_opts(),
-    Peer :: peer().
+    Peer :: peer(),
+    SrcDir :: binary(),
+    FilePath :: binary(),
+    Modules :: #{module() => FilePath}.
 gen_start_peer(CtConfig, NodeInfo, Opts) ->
     CommonArgs = ["-connect_all", "false"],
     CookieArgs =
@@ -186,9 +201,50 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
             ok
     end,
     PrivDir = ?config(priv_dir, CtConfig),
-    ok = peer:call(Peer, code, add_pathsa, [PrivDir]),
+    WorkDir = filename:join(PrivDir, peer:call(Peer, os, getpid, [])),
+    SrcDir = filename:join(WorkDir, "src"),
+    EbinDir = filename:join(WorkDir, "ebin"),
+    ok = file:make_dir(WorkDir),
+    ok = file:make_dir(SrcDir),
+    ok = file:make_dir(EbinDir),
+    true = peer:call(Peer, code, add_patha, [EbinDir]),
 
-    {ok, Peer}.
+    Modules =
+        #{
+            Module => BeamFilePath
+         || ModuleSpec <- maps:get(modules, Opts, []),
+            {ok, Module, BeamFilePath} <- [compile_module(CtConfig, WorkDir, ModuleSpec)]
+        },
+
+    {ok, Peer, file_name_all_to_binary(SrcDir), Modules}.
+
+-spec compile_module(CtConfig, PeerWorkdir, ModuleSpec) -> {ok, Module, FilePath} when
+    CtConfig :: ct_suite:ct_config(),
+    PeerWorkdir :: file:filename_all(),
+    ModuleSpec :: module_spec(),
+    Module :: module(),
+    FilePath :: binary().
+compile_module(CtConfig, Workdir, {filename, FileName}) ->
+    DataDir = ?config(data_dir, CtConfig),
+    FilePath = filename:join(DataDir, FileName),
+    {ok, Contents} = file:read_file(FilePath),
+    compile_module(CtConfig, Workdir, {source, Contents});
+compile_module(CtConfig, PeerWorkdir, {source, Source}) ->
+    MatchModuleRegex = ~"-module\\(([^)]+)\\)\\.",
+    case re:run(Source, MatchModuleRegex, [{capture, all_but_first, list}]) of
+        {match, [ModuleName]} ->
+            FilePath = filename:join([PeerWorkdir, "src", ModuleName ++ ".erl"]),
+            file:write_file(FilePath, Source),
+            compile_module(CtConfig, PeerWorkdir, {filepath, FilePath});
+        nomatch ->
+            error(couldnt_parse_module_name)
+    end;
+compile_module(_CtConfig, PeerWorkdir, {filepath, FilePath}) ->
+    CompileOpts = [debug_info, beam_debug_info],
+    FilePathStr = file_name_all_to_string(FilePath),
+    Ebindir = filename:join(PeerWorkdir, "ebin"),
+    {ok, Module} = compile:file(FilePathStr, [{outdir, Ebindir} | CompileOpts]),
+    {ok, Module, safe_string_to_binary(FilePathStr)}.
 
 -spec stop_peer(Peer) -> ok when
     Peer :: peer().
@@ -227,26 +283,6 @@ stop_all_peers() ->
             erlang:erase(?PROC_DICT_PEERS_KEY),
             ok
     end.
-
--spec compile_and_load_file_in_peer(#{source := File, peer := Peer, ebin => Ebin}) -> {ok, Module} when
-    File :: string(),
-    Ebin :: string(),
-    Peer :: peer(),
-    Module :: module().
-compile_and_load_file_in_peer(Opts = #{source := File, peer := Peer}) ->
-    CompileOpts = [debug_info, beam_debug_info],
-    {module, Module1} =
-        case maps:get(ebin, Opts, undefined) of
-            undefined ->
-                DummyBeamFile = filename:rootname(File, ".erl") ++ ".beam",
-                {ok, Module, Bin} = compile:file(File, [binary | CompileOpts]),
-                {module, Module} = peer:call(Peer, code, load_binary, [Module, DummyBeamFile, Bin]);
-            EbinDir ->
-                BeamFile = filename:join(EbinDir, filename:basename(File, ".erl")),
-                {ok, Module} = compile:file(File, [{outdir, EbinDir} | CompileOpts]),
-                {module, Module} = peer:call(Peer, code, load_abs, [BeamFile])
-        end,
-    {ok, Module1}.
 
 %% ------------------------------------------------------------------
 %% Event collector helpers
@@ -350,4 +386,27 @@ event_collector_send_sync() ->
     receive
         {Ref, SyncRef} -> {ok, SyncRef}
     after 2_000 -> error(timeout_sync_event_collector)
+    end.
+
+%% -------------------------------------------------------------------
+%% Conversions
+%% -------------------------------------------------------------------
+-spec file_name_all_to_string(file:name_all()) -> string().
+file_name_all_to_string(FileNameAll) ->
+    case filename:flatten(FileNameAll) of
+        Bin when is_binary(Bin) -> binary_to_list(Bin);
+        Str -> Str
+    end.
+
+-spec file_name_all_to_binary(file:name_all()) -> binary().
+file_name_all_to_binary(FileNameAll) ->
+    case filename:flatten(FileNameAll) of
+        Bin when is_binary(Bin) -> Bin;
+        Str -> safe_string_to_binary(Str)
+    end.
+
+-spec safe_string_to_binary(string()) -> binary().
+safe_string_to_binary(String) ->
+    case unicode:characters_to_binary(String) of
+        Bin when is_binary(Bin) -> Bin
     end.

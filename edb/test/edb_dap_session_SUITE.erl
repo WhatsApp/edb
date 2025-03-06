@@ -134,8 +134,8 @@ test_fails_if_invalid_launch_config(Config) ->
 %%--------------------------------------------------------------------
 
 test_handles_disconnect_request(Config) ->
-    {ok, _Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
+    {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
 
     DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
     ?assertMatch(
@@ -146,8 +146,10 @@ test_handles_disconnect_request(Config) ->
     ok.
 
 test_terminates_when_node_goes_down(Config) ->
-    {ok, Peer, Node, Cookie} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client, _Cwd} = edb_dap_test_support:start_session(Config, Node, Cookie),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
+        Config, #{}
+    ),
+    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
 
     edb_test_support:stop_peer(Peer),
 
