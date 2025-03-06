@@ -46,7 +46,8 @@
             env => #{binary() => binary()}
         },
         targetNode := target_node(),
-        stripSourcePath => binary()
+        stripSourcePrefix => binary(),
+        timeout => non_neg_integer()
     }.
 -type target_node() :: #{
     name := node(),

@@ -34,13 +34,13 @@
 %%% not part of the DAP specification itself.
 
 -export_type([arguments/0, config/0]).
--type arguments() :: config() | #{config => config()}.
+-type arguments() :: config() | #{config := config()}.
 
 -type config() :: #{
     node := node(),
     cookie => atom(),
     cwd := binary(),
-    stripSourcePath => binary()
+    stripSourcePrefix => binary()
 }.
 
 -spec arguments_template() -> edb_dap_parse:template().
@@ -63,7 +63,7 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: config().
 handle(State0 = #{state := initialized}, Args) ->
-    AttachArgs = maps:without([cwd, stripSourcePath], Args),
+    AttachArgs = maps:without([cwd, stripSourcePrefix], Args),
     case edb:attach(AttachArgs) of
         ok ->
             ok = edb:pause(),
