@@ -44,9 +44,9 @@
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason} when Reason :: binary().
 parse_arguments(Args) ->
-    {ok, Args}.
+    edb_dap_request:parse_empty_arguments(Args).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(threads()) when
     State :: edb_dap_server:state(),

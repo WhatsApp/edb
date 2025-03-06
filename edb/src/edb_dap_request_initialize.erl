@@ -167,7 +167,7 @@ handle(_InvalidState, _Args) ->
 -spec capabilities() -> capabilities().
 capabilities() ->
     #{
-        supportsConfigurationDoneRequest => false,
+        supportsConfigurationDoneRequest => true,
         supportsFunctionBreakpoints => false,
         supportsConditionalBreakpoints => false,
         supportsHitConditionalBreakpoints => false,

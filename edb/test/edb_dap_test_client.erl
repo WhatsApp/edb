@@ -32,11 +32,11 @@
 
 -export([
     initialize/2,
-    wait_for_event/2,
     attach/2,
     launch/2,
     set_breakpoints/2,
     set_exception_breakpoints/2,
+    configuration_done/1,
     threads/1,
     stack_trace/2,
     pause/2,
@@ -47,6 +47,7 @@
     variables/2,
     disconnect/2
 ]).
+-export([wait_for_event/2]).
 
 %% gen_server callbacks
 -export([
@@ -79,11 +80,6 @@ initialize(Client, Args) ->
     Request = #{type => request, command => ~"initialize", arguments => Args},
     call(Client, Request).
 
--spec wait_for_event(edb_dap:event_type(), client()) -> ok.
-wait_for_event(Type, Client) ->
-    WaitTimeoutSecs = 10_000,
-    call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
-
 -spec attach(client(), edb_dap_request_attach:arguments()) -> edb_dap:response().
 attach(Client, Args) ->
     Request = #{type => request, command => ~"attach", arguments => Args},
@@ -102,6 +98,11 @@ set_exception_breakpoints(Client, Args) ->
 -spec set_breakpoints(client(), edb_dap_request_set_breakpoints:arguments()) -> edb_dap:response().
 set_breakpoints(Client, Args) ->
     Request = #{type => request, command => ~"setBreakpoints", arguments => Args},
+    call(Client, Request).
+
+-spec configuration_done(client()) -> edb_dap:response().
+configuration_done(Client) ->
+    Request = #{type => request, command => ~"configurationDone", arguments => #{}},
     call(Client, Request).
 
 -spec threads(client()) -> edb_dap:response().
@@ -148,6 +149,11 @@ variables(Client, Args) ->
 disconnect(Client, Args) ->
     Request = #{type => request, command => ~"disconnect", arguments => Args},
     call(Client, Request).
+
+-spec wait_for_event(edb_dap:event_type(), client()) -> ok.
+wait_for_event(Type, Client) ->
+    WaitTimeoutSecs = 10_000,
+    call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
 
 -spec init(#{executable := file:filename_all(), args := [string()]}) -> {ok, state()}.
 init(#{executable := Executable, args := Args}) ->

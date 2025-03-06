@@ -90,8 +90,7 @@ configure(Client, BreakpointSpecs) ->
         ok = set_breakpoints(Client, ModPath, [Line || {line, Line} <- Lines])
      || {ModPath, Lines} <- BreakpointSpecs
     ],
-    #{success := true, body := #{breakpoints := []}} =
-        edb_dap_test_client:set_exception_breakpoints(Client, #{filters => []}),
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
     ok.
 
 -spec set_breakpoints(Client, FilePath, Lines) -> ok when

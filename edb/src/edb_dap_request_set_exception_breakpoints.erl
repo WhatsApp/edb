@@ -126,15 +126,17 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State0 = #{state := configuring}, #{filters := []}) ->
-    {ok, Subscription} = edb:subscribe(),
-    {ok, resumed} = edb:continue(),
-    #{
-        new_state => State0#{
-            state => attached,
-            subscription => Subscription
-        },
-        response => edb_dap_request:success(#{breakpoints => []})
-    };
+handle(#{state := configuring}, Args) ->
+    set_exception_breakpoints(Args);
+handle(#{state := attached}, Args) ->
+    set_exception_breakpoints(Args);
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
+
+%% ------------------------------------------------------------------
+%% Helpers
+%% ------------------------------------------------------------------
+-spec set_exception_breakpoints(Args) -> edb_dap_request:reaction(response()) when Args :: arguments().
+set_exception_breakpoints(#{filters := []}) ->
+    % No exception breakpoints supported atm
+    #{response => edb_dap_request:success(#{breakpoints => []})}.

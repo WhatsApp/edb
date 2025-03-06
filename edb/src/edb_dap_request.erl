@@ -35,6 +35,8 @@
 -export([precondition_violation/1]).
 -export([unsupported/1]).
 
+-export([parse_empty_arguments/1]).
+
 -include("edb_dap.hrl").
 
 %% ------------------------------------------------------------------
@@ -103,6 +105,7 @@ dispatch(#{command := Method} = Request, State) ->
 known_handlers() ->
     #{
         ~"attach" => edb_dap_request_attach,
+        ~"configurationDone" => edb_dap_request_configuration_done,
         ~"continue" => edb_dap_request_continue,
         ~"disconnect" => edb_dap_request_disconnect,
         ~"initialize" => edb_dap_request_initialize,
@@ -121,6 +124,7 @@ known_handlers() ->
 %% ------------------------------------------------------------------
 %% Helpers for behaviour implementations
 %% ------------------------------------------------------------------
+
 -spec success() -> response(none()).
 success() ->
     #{success => true}.
@@ -159,3 +163,10 @@ not_paused(_Pid) ->
 -spec unsupported(Msg) -> reaction() when Msg :: iodata().
 unsupported(Msg) ->
     #{error => {user_error, ?ERROR_NOT_SUPPORTED, Msg}}.
+
+-spec parse_empty_arguments(Arguments) -> {ok, #{}} | {error, Reason} when
+    Arguments :: edb_dap:arguments(),
+    Reason :: binary().
+parse_empty_arguments(Args) ->
+    Template = #{},
+    edb_dap_parse:parse(Template, Args, reject_unknown).

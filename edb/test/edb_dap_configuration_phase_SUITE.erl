@@ -58,7 +58,7 @@ test_queries_fail_until_configured(Config) ->
     #{success := false, body := #{error := #{format := ~"Request sent when it was not expected"}}} =
         edb_dap_test_client:threads(Client),
 
-    configuration_done_via_set_exception_breakpoints(Client),
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
 
     % Same request succeeds now that we are configured
     #{success := true} = edb_dap_test_client:threads(Client),
@@ -88,7 +88,7 @@ test_setting_breakpoints_work_before_and_after_configuration(Config) ->
     ok = edb_dap_test_support:set_breakpoints(Client, FooSrc, [5]),
 
     % Finish configuration
-    configuration_done_via_set_exception_breakpoints(Client),
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
 
     % Launch a process and check the breakpoint works
     {ok, ThreadId, [#{line := 5, name := ~"foo:go/0"} | _]} =
@@ -99,14 +99,4 @@ test_setting_breakpoints_work_before_and_after_configuration(Config) ->
     #{success := true} = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     {ok, ThreadId, [#{line := 8, name := ~"foo:keep_going/0"} | _]} = edb_dap_test_support:wait_for_bp(Client),
 
-    ok.
-
-%%--------------------------------------------------------------------
-%% Helpers
-%%--------------------------------------------------------------------
--spec configuration_done_via_set_exception_breakpoints(Client) -> ok when
-    Client :: edb_dap_test_client:client().
-configuration_done_via_set_exception_breakpoints(Client) ->
-    #{success := true, body := #{breakpoints := []}} =
-        edb_dap_test_client:set_exception_breakpoints(Client, #{filters => []}),
     ok.
