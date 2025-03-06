@@ -65,10 +65,12 @@
 -export([test_step_over_progresses_from_breakpoint/1]).
 -export([test_breakpoint_consumes_step/1]).
 -export([test_multiprocess_parallel_steps/1]).
+-export([test_step_over_in_unbreakpointable_code/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
 -export([test_step_out_into_caller_handler/1]).
+-export([test_step_out_with_unbreakpointable_caller/1]).
 
 %% Test cases for the test_code_inspection group
 -export([test_fetch_fun_block_surrounding/1]).
@@ -131,11 +133,13 @@ groups() ->
             test_step_over_into_caller_handler,
             test_step_over_progresses_from_breakpoint,
             test_breakpoint_consumes_step,
-            test_multiprocess_parallel_steps
+            test_multiprocess_parallel_steps,
+            test_step_over_in_unbreakpointable_code
         ]},
         {test_step_out, [], [
             test_step_out_of_external_closure,
-            test_step_out_into_caller_handler
+            test_step_out_into_caller_handler,
+            test_step_out_with_unbreakpointable_caller
         ]},
         {test_code_inspection, [], [
             test_fetch_fun_block_surrounding
@@ -185,6 +189,7 @@ init_per_group(Group, Config0) ->
     PrivDir = proplists:get_value(priv_dir, Config0),
 
     CompileOpts = [{outdir, PrivDir}, debug_info, beam_debug_info],
+    CompileNoDebugOpts = [{outdir, PrivDir}, debug_info],
 
     % Compile and load all the `$GROUP*.erl` files in the data dir
 
@@ -194,7 +199,12 @@ init_per_group(Group, Config0) ->
     Config1 = lists:foldl(
         fun(SrcFileName, AccConfig) ->
             TestSupportModule = list_to_atom(filename:basename(SrcFileName, ".erl")),
-            {ok, _} = compile:file(SrcFileName, CompileOpts),
+            ActualCompileOpts =
+                case string:find(SrcFileName, "no_beam_debug_info.erl") of
+                    nomatch -> CompileOpts;
+                    _ -> CompileNoDebugOpts
+                end,
+            {ok, _} = compile:file(SrcFileName, ActualCompileOpts),
             BinFileName = filename:join(PrivDir, atom_to_list(TestSupportModule)),
             {module, TestSupportModule} = code:load_abs(BinFileName),
             [{erl_source, SrcFileName} | AccConfig]
@@ -1892,6 +1902,34 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     ok.
 
+test_step_over_in_unbreakpointable_code(_Config) ->
+    % To do this test, we must first manage to stop on a line that is not breakable
+    % This is done by starting a process that will loop forever in unbreakable code
+    % and setting a breakpoint on code executed in a different process.
+    ok = edb:add_breakpoint(test_step_over, 118),
+
+    Pid = erlang:spawn(test_step_over, spawn_loop, [self()]),
+    {ok, paused} = edb:wait(),
+
+    % Sanity check that we hit the breakpoint
+    ?assertEqual(
+        #{Pid => #{line => 118, module => test_step_over}},
+        edb:get_breakpoints_hit()
+    ),
+    ChildPid =
+        receive
+            {unbreakpointable_child_pid, Pid2} -> Pid2
+        end,
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_over_no_beam_debug_info, loop, 0}, line := 23}
+        ]},
+        edb:stack_frames(ChildPid)
+    ),
+    {error, {cannot_breakpoint, test_step_over_no_beam_debug_info}} = edb:step_over(ChildPid),
+
+    ok.
+
 test_breakpoint_consumes_step(_Config) ->
     % Add a breakpoint to start stepping from
     ok = edb:add_breakpoint(test_step_over, 20),
@@ -2159,6 +2197,41 @@ test_step_out_into_caller_handler(_Config) ->
         ],
         edb_test_support:collected_events()
     ),
+
+    ok.
+
+test_step_out_with_unbreakpointable_caller(_Config) ->
+    % Check that we get a sane error if a step out exits to caller, and the caller is an OTP function
+    % (which is not supported by the debugger)
+
+    % Add a breakpoint to start stepping from
+    ok = edb:add_breakpoint(test_step_out, 101),
+
+    % Spawn one process that will hit the breakpoint
+    Pid = erlang:spawn(test_step_out, call_closure_from_unbreakpointable_fun, [self()]),
+    {ok, paused} = edb:wait(),
+
+    ?ASSERT_SYNC_RECEIVED_FROM_LINE(104, Pid),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Sanity check that we hit the breakpoint
+    ?assertEqual(
+        #{Pid => #{line => 101, module => test_step_out}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Check that we are inside the closure, called from forward_call
+    ?assertMatch(
+        {ok, [
+            #{mfa := {test_step_out, '-call_closure_from_unbreakpointable_fun/1-fun-0-', 2}, line := 101},
+            #{mfa := {test_step_out_no_beam_debug_info, forward_call, 2}},
+            #{mfa := {test_step_out, call_closure_from_unbreakpointable_fun, 1}, line := 105}
+        ]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Step out of the closure
+    {error, {cannot_breakpoint, test_step_out_no_beam_debug_info}} = edb:step_out(Pid),
 
     ok.
 

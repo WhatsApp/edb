@@ -179,27 +179,48 @@ is_process_trapped(Pid, Breakpoints) ->
     maps:is_key(Pid, ResumeActions).
 
 -spec add_steps_on_stack_frames(pid(), [edb:stack_frame()], breakpoints()) -> {ok, breakpoints()} | {error, Error} when
-    Error :: no_abstract_code | {beam_analysis, term()}.
-add_steps_on_stack_frames(_Pid, [], Breakpoints0) ->
-    {ok, Breakpoints0};
+    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
 add_steps_on_stack_frames(Pid, [#{mfa := {Module, _, _}, line := Line} | StackTail], Breakpoints0) when
+    is_integer(Line)
+->
+    %% Proper MFA and line: try to put steps on the surrounding function
+    case add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints0) of
+        {ok, Breakpoints1} when Breakpoints0 =/= Breakpoints1 ->
+            %% Steps were set successfully, proceed with the rest of the stack
+            add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints1);
+        {ok, _Breakpoints1} ->
+            %% We cannot claim success if no breakpoints were added
+            {error, {cannot_breakpoint, Module}};
+        {error, Error} ->
+            {error, Error}
+    end;
+add_steps_on_stack_frames(_Pid, [_ | _], _Breakpoints0) ->
+    {error, no_abstract_code}.
+
+-spec add_steps_on_remaining_stack_frames(pid(), [edb:stack_frame()], breakpoints()) ->
+    {ok, breakpoints()} | {error, Error}
+when
+    Error :: no_abstract_code | {beam_analysis, term()}.
+add_steps_on_remaining_stack_frames(_Pid, [], Breakpoints0) ->
+    {ok, Breakpoints0};
+add_steps_on_remaining_stack_frames(Pid, [#{mfa := {Module, _, _}, line := Line} | StackTail], Breakpoints0) when
     is_integer(Line)
 ->
     %% Proper MFA and line: try to put steps on the surrounding function
     case add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints0) of
         {ok, Breakpoints1} ->
             %% Steps were set successfully, proceed with the rest of the stack
-            add_steps_on_stack_frames(Pid, StackTail, Breakpoints1);
+            add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints1);
         {error, Error} ->
             %% Steps could not be set, fail
             {error, Error}
     end;
-add_steps_on_stack_frames(Pid, [#{mfa := unknown} | StackTail], Breakpoints0) ->
+add_steps_on_remaining_stack_frames(Pid, [#{mfa := unknown} | StackTail], Breakpoints0) ->
     %% Unknown MFA for some reason -- do nothing
-    add_steps_on_stack_frames(Pid, StackTail, Breakpoints0);
-add_steps_on_stack_frames(Pid, [#{line := undefined} | StackTail], Breakpoints0) ->
+    add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints0);
+add_steps_on_remaining_stack_frames(Pid, [#{line := undefined} | StackTail], Breakpoints0) ->
     %% Line is not available -- do nothing
-    add_steps_on_stack_frames(Pid, StackTail, Breakpoints0).
+    add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints0).
 
 -spec add_steps_on_function_surrounding(pid(), module(), line(), breakpoints()) ->
     {ok, breakpoints()} | {error, Error}

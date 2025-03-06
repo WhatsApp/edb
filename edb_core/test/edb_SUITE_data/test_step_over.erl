@@ -2,7 +2,7 @@
 
 -compile([warn_missing_spec_all]).
 
--export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, awaiting_steps/0]).
+-export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, awaiting_steps/0, spawn_loop/1]).
 
 %% Utility function to check executed lines
 
@@ -108,3 +108,13 @@ await() ->
     receive
         continue -> ok
     end.
+
+-spec spawn_loop(Controller :: pid()) -> ok.
+spawn_loop(Controller) ->
+    spawn(test_step_over_no_beam_debug_info, loop_starter, [self()]),
+    receive
+        {started_loop, Child} ->
+                Controller ! {unbreakpointable_child_pid, Child},
+                ok
+    end,
+    ok.

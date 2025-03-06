@@ -2,7 +2,7 @@
 
 -compile([warn_missing_spec_all]).
 
--export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1]).
+-export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, call_closure_from_unbreakpointable_fun/1]).
 
 %% Utility function to check executed lines
 
@@ -94,3 +94,14 @@ raise_exception(Controller) ->
     sync(Controller, ?LINE),
     error(oops),
     unreachable.
+
+-spec call_closure_from_unbreakpointable_fun(Controller :: pid()) -> ok.
+call_closure_from_unbreakpointable_fun(Controller) ->
+    Fun = fun(X) -> 
+        sync(Controller, ?LINE),
+        X
+    end,
+    sync(Controller, ?LINE),
+    [ok] = test_step_out_no_beam_debug_info:forward_call(Fun, ok),
+    sync(Controller, ?LINE),
+    ok.

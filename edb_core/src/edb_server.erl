@@ -518,7 +518,7 @@ step_out_impl(Pid, State0) ->
     StackFrames :: [edb:stack_frame()],
     State0 :: state(),
     State1 :: state(),
-    Error :: no_abstract_code | {beam_analysis, term()}.
+    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
 step_in_stack_frames(Pid, StackFrames, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     case edb_server_break:add_steps_on_stack_frames(Pid, StackFrames, Breakpoints0) of

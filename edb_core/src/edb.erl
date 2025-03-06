@@ -81,6 +81,7 @@
 -type step_error() ::
     no_abstract_code
     | not_paused
+    | {cannot_breakpoint, module()}
     | {beam_analysis, term()}.
 
 -export_type([step_over_error/0]).
