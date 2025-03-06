@@ -121,7 +121,7 @@
 -type error() ::
     {method_not_found, edb_dap:command()}
     | {invalid_params, Reason :: binary()}
-    | {user_error, Id :: integer(), Msg :: binary() | io_lib:chars()}
+    | {user_error, Id :: integer(), Msg :: iodata()}
     | {internal_error, #{class := error | exit | throw, reason := term(), stacktrace := erlang:stacktrace()}}.
 -export_type([error/0]).
 
@@ -284,17 +284,12 @@ format_exception(Class, Reason, StackTrace) ->
         _ -> ~"Error converting error to binary"
     end.
 
--spec build_error_response(number(), binary() | io_lib:chars()) -> edb_dap:error_response().
-build_error_response(Id, Message) when is_binary(Message) ->
+-spec build_error_response(number(), iodata()) -> edb_dap:error_response().
+build_error_response(Id, Message) ->
     #{
         success => false,
-        body => #{error => #{id => Id, format => Message}}
-    };
-build_error_response(Id, Chars) ->
-    case unicode:characters_to_binary(Chars) of
-        Binary when is_binary(Binary) ->
-            build_error_response(Id, Binary)
-    end.
+        body => #{error => #{id => Id, format => erlang:iolist_to_binary(Message)}}
+    }.
 
 -spec log_error(IsHandlingRequest, Error) -> ok when
     IsHandlingRequest :: boolean(),

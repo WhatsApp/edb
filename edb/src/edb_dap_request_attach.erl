@@ -114,16 +114,12 @@ handle_error({bootstrap_failed, BootstrapFailure}) ->
 
 -spec handle_bootstrap_failure(edb:bootstrap_failure()) -> edb_dap_request:reaction().
 handle_bootstrap_failure({no_debugger_support, not_enabled}) ->
-    #{
-        error =>
-            {user_error, ?ERROR_NOT_SUPPORTED,
-                ~"Debugging was not enabled on the node: the +D emu flag was not used to start the node"}
-    };
+    edb_dap_request:unsupported(
+        ~"Debugging was not enabled on the node: the +D emu flag was not used to start the node"
+    );
 handle_bootstrap_failure({no_debugger_support, {missing, erl_debugger}}) ->
-    #{
-        error =>
-            {user_error, ?ERROR_NOT_SUPPORTED,
-                ~"Node is running unsupported OTP version: the erl_debugger module is not available"}
-    };
+    edb_dap_request:unsupported(
+        ~"Node is running unsupported OTP version: the erl_debugger module is not available"
+    );
 handle_bootstrap_failure(Unexpected = {module_injection_failed, _Module, _Reason}) ->
     throw(Unexpected).

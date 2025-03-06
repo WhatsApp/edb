@@ -26,8 +26,6 @@
 
 -export([stepper/3]).
 
--include("edb_dap.hrl").
-
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -83,10 +81,11 @@ stepper(#{state := attached}, ThreadId, StepType) ->
                 {error, not_paused} ->
                     edb_dap_request:not_paused(Pid);
                 {error, no_abstract_code} ->
-                    #{error => {user_error, ?ERROR_NOT_SUPPORTED, ~"Module not compiled with debug_info"}};
+                    edb_dap_request:unsupported(~"Module not compiled with debug_info");
                 {error, {cannot_breakpoint, ModuleName}} ->
-                    String = io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName]),
-                    #{error => {user_error, ?ERROR_NOT_SUPPORTED, list_to_binary(String)}};
+                    edb_dap_request:unsupported(
+                        io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName])
+                    );
                 {error, {beam_analysis, Err}} ->
                     throw({beam_analysis, Err})
             end;

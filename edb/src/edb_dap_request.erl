@@ -32,6 +32,8 @@
 -export([unexpected_request/0]).
 -export([unknown_resource/2]).
 -export([not_paused/1]).
+-export([precondition_violation/1]).
+-export([unsupported/1]).
 
 -include("edb_dap.hrl").
 
@@ -127,9 +129,13 @@ success() ->
 success(Body) ->
     #{success => true, body => Body}.
 
+-spec precondition_violation(Msg) -> reaction() when Msg :: iodata().
+precondition_violation(Msg) ->
+    #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, Msg}}.
+
 -spec unexpected_request() -> reaction().
 unexpected_request() ->
-    #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, ~"Request sent when it was not expected"}}.
+    precondition_violation(~"Request sent when it was not expected").
 
 -spec unknown_resource(Type, Id) -> reaction() when
     Type :: resource(),
@@ -148,4 +154,8 @@ unknown_resource_1(Name, Id) ->
 not_paused(_Pid) ->
     % Not including the Pid in the message, since it will be displayed in the context of the wrong node
     % but useful to have here for troubleshooting
-    #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, "Process is not paused"}}.
+    precondition_violation(~"Process is not paused").
+
+-spec unsupported(Msg) -> reaction() when Msg :: iodata().
+unsupported(Msg) ->
+    #{error => {user_error, ?ERROR_NOT_SUPPORTED, Msg}}.
