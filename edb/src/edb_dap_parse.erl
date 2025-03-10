@@ -24,6 +24,9 @@
 
 -export([parse/3]).
 -export([
+    choice/1,
+    null/0,
+    boolean/0,
     non_neg_integer/0,
     atom/0,
     atom/1,
@@ -31,6 +34,7 @@
     binary/0,
     empty_list/0,
     list/1,
+    nonempty_list/1,
     map/2
 ]).
 
@@ -47,7 +51,7 @@
 %% Public API
 %% --------------------------------------------------------------------
 -spec parse(template(), term(), allow_unknown | reject_unknown) ->
-    {ok, dynamic()} | {error, HumarReadableReason :: binary()}.
+    {ok, map()} | {error, HumarReadableReason :: binary()}.
 parse(Template, Map0, allow_unknown) when is_map(Map0) ->
     Map1 = maps:with(maps:keys(Template), Map0),
     parse(Template, Map1, reject_unknown);
@@ -59,6 +63,32 @@ parse(Template, Term, _) ->
             {error, human_readable_error(Reason)}
     end.
 
+-spec choice([parser(T)]) -> parser(T).
+choice(Options) ->
+    fun(X) ->
+        TryInOrder = fun F([P | Ps]) ->
+            try P(X) of
+                Res = {ok, _} -> Res;
+                _ -> F(Ps)
+            catch
+                _:_ -> F(Ps)
+            end
+        end,
+        TryInOrder(Options)
+    end.
+
+%% THe json library treats JSON NULL as the atom 'null'
+-spec null() -> parser(null).
+null() ->
+    fun(null) -> {ok, null} end.
+
+-spec boolean() -> parser(boolean()).
+boolean() ->
+    fun
+        (true) -> {ok, true};
+        (false) -> {ok, false}
+    end.
+
 -spec non_neg_integer() -> parser(non_neg_integer()).
 non_neg_integer() ->
     fun(N) when is_integer(N) andalso N >= 0 -> {ok, N} end.
@@ -66,23 +96,20 @@ non_neg_integer() ->
 -spec atom() -> parser(atom()).
 atom() ->
     fun
-        (A) when is_atom(A) -> {ok, A};
+        (A) when is_atom(A), A /= true, A /= false, A /= null -> {ok, A};
         (B) when is_binary(B) -> {ok, binary_to_atom(B)}
     end.
 
 -spec atom(A) -> parser(A) when A :: atom().
 atom(A) when is_atom(A) ->
-    atoms([A]).
+    fun
+        F(X) when X =:= A -> {ok, A};
+        F(X) when is_binary(X) -> F(binary_to_atom(X))
+    end.
 
 -spec atoms(A) -> parser(atom()) when A :: [atom()].
 atoms(As) when is_list(As) ->
-    fun
-        F(B) when is_binary(B) -> F(binary_to_atom(B));
-        F(A) when is_atom(A) ->
-            case lists:member(A, As) of
-                true -> {ok, A}
-            end
-    end.
+    choice([atom(A) || A <- As]).
 
 -spec binary() -> parser(binary()).
 binary() ->
@@ -98,10 +125,23 @@ list(Parser) ->
         {ok, [run_parser(Parser, Raw) || Raw <- L]}
     end.
 
+-spec nonempty_list(parser(T)) -> parser(nonempty_list(T)).
+nonempty_list(Parser) ->
+    fun(L = [_ | _]) ->
+        {ok, [run_parser(Parser, Raw) || Raw <- L]}
+    end.
+
 -spec map(parser(K), parser(V)) -> parser(#{K => V}).
 map(KParser, VParser) ->
+    %% HACK! In edb_dap:unframe/1, we convert all map keys from binary to atom,
+    %% which makes sense as most messages are "shapes", but breaks when we pass
+    %% things like "environments". So here we need to undo that conversion.
+    UnparseAtom = fun
+        (A) when is_atom(A) -> atom_to_binary(A);
+        (X) -> X
+    end,
     fun(M) when is_map(M) ->
-        {ok, #{run_parser(KParser, RawK) => run_parser(VParser, RawV) || RawK := RawV <- M}}
+        {ok, #{run_parser(KParser, UnparseAtom(RawK)) => run_parser(VParser, RawV) || RawK := RawV <- M}}
     end.
 
 %% --------------------------------------------------------------------
@@ -177,7 +217,7 @@ human_readable_error_1({invalid, _X}) ->
 human_readable_error_1({missing, Field}) when is_atom(Field) ->
     io_lib:format("mandatory field missing '~s'", [Field]);
 human_readable_error_1({unexpected, [Field | _]}) when is_atom(Field) ->
-    io_lib:format("unexpected field: ~s", [Field]);
+    io_lib:format("unexpected field: '~s'", [Field]);
 human_readable_error_1({fields, Fields, Error}) when is_list(Fields) ->
     FieldsPath = string:join([atom_to_list(Field) || Field <- Fields, is_atom(Field)], "."),
     [io_lib:format("on field '~s': ", [FieldsPath]), human_readable_error_1(Error)].
