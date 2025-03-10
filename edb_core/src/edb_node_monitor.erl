@@ -496,9 +496,7 @@ bootstrap_edb(Node, PauseAction) ->
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
             % elp:ignore W0014 - Debugging tool, expected.
-            Result = erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), PauseAction]),
-            % eqwalizer:fixme -- eqwalizer should infer the type from the callee
-            Result;
+            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), PauseAction]);
         {error, badfile} ->
             {error, {module_injection_failed, edb_bootstrap, incompatible_beam}}
     end.

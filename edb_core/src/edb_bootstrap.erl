@@ -85,9 +85,7 @@ inject_edb_modules(Debugger) ->
     Debugger :: module().
 get_object_code(Debugger) ->
     % elp:ignore W0014 -- debugger relies on dist
-    Modules = erpc:call(Debugger, fun get_object_code__debugger_side/0),
-    % eqwalizer:fixme -- erpc:call() ought to return the type of the callee
-    Modules.
+    erpc:call(Debugger, fun get_object_code__debugger_side/0).
 
 -spec load_module(Module, Binary, Filename) -> ok when
     Module :: module(), Binary :: binary(), Filename :: file:filename().
