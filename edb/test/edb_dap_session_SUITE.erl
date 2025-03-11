@@ -41,7 +41,8 @@
     test_fails_if_invalid_launch_config/1,
 
     %% Shutdown
-    test_handles_disconnect_request/1,
+    test_handles_disconnect_request_via_attach/1,
+    test_handles_disconnect_request_via_launch/1,
     test_terminates_when_node_goes_down/1,
     test_terminates_when_node_goes_down_while_configuring/1
 ]).
@@ -60,7 +61,8 @@ groups() ->
             test_fails_if_invalid_launch_config
         ]},
         {shutdown, [
-            test_handles_disconnect_request,
+            test_handles_disconnect_request_via_attach,
+            test_handles_disconnect_request_via_launch,
             test_terminates_when_node_goes_down,
             test_terminates_when_node_goes_down_while_configuring
         ]}
@@ -135,7 +137,7 @@ test_fails_if_invalid_launch_config(Config) ->
 %% TEST CASES -- Shutdown
 %%--------------------------------------------------------------------
 
-test_handles_disconnect_request(Config) ->
+test_handles_disconnect_request_via_attach(Config) ->
     {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(Config, #{}),
     {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
@@ -147,11 +149,19 @@ test_handles_disconnect_request(Config) ->
 
     ok.
 
-test_terminates_when_node_goes_down(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
-        Config, #{}
+test_handles_disconnect_request_via_launch(Config) ->
+    {ok, Client, #{}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
+
+    DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
+    ?assertMatch(
+        #{command := <<"disconnect">>, success := true},
+        DisconnectResponse
     ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+
+    ok.
+
+test_terminates_when_node_goes_down(Config) ->
+    {ok, Client, #{peer := Peer}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
     ok = edb_dap_test_support:configure(Client, []),
 
     edb_test_support:stop_peer(Peer),
@@ -165,10 +175,7 @@ test_terminates_when_node_goes_down(Config) ->
     ok.
 
 test_terminates_when_node_goes_down_while_configuring(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
-        Config, #{}
-    ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
 
     edb_test_support:stop_peer(Peer),
 

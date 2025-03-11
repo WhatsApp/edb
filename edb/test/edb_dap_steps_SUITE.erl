@@ -58,31 +58,28 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_next_works(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
-        edb_test_support:start_peer_node(
-            Config, #{
-                modules => [
-                    {source, [
-                        ~"-module(foo).             %L01\n",
-                        ~"-export([go/0]).          %L02\n",
-                        ~"go() ->                   %L03\n",
-                        ~"    X = f(23),            %L04\n",
-                        ~"    Y = h(                %L05\n",
-                        ~"         Z = f(X),        %L06\n",
-                        ~"        [foo, bar]        %L07\n",
-                        ~"    ),                    %L08\n",
-                        ~"    Y + Z.                %L09\n",
-                        ~"                          %L10\n",
-                        ~"f(X) ->                   %L11\n",
-                        ~"    X * 3 + 1.            %L12\n",
-                        ~"                          %L13\n",
-                        "h(X, Y) ->                 %L14\n",
-                        ~"    X + 2 * length(Y).    %L15\n"
-                    ]}
-                ]
-            }
-        ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).             %L01\n",
+                    ~"-export([go/0]).          %L02\n",
+                    ~"go() ->                   %L03\n",
+                    ~"    X = f(23),            %L04\n",
+                    ~"    Y = h(                %L05\n",
+                    ~"         Z = f(X),        %L06\n",
+                    ~"        [foo, bar]        %L07\n",
+                    ~"    ),                    %L08\n",
+                    ~"    Y + Z.                %L09\n",
+                    ~"                          %L10\n",
+                    ~"f(X) ->                   %L11\n",
+                    ~"    X * 3 + 1.            %L12\n",
+                    ~"                          %L13\n",
+                    "h(X, Y) ->                 %L14\n",
+                    ~"    X + 2 * length(Y).    %L15\n"
+                ]}
+            ]
+        }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
@@ -113,30 +110,27 @@ test_next_works(Config) ->
     ok.
 
 test_step_out_works(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
-        edb_test_support:start_peer_node(
-            Config, #{
-                modules => [
-                    {source, [
-                        ~"-module(foo).             %L01\n",
-                        ~"-export([go/0]).          %L02\n",
-                        ~"go() ->                   %L03\n",
-                        ~"    X = f(23),            %L04\n",
-                        ~"    X + 42.               %L05\n",
-                        ~"                          %L06\n",
-                        ~"f(X) ->                   %L07\n",
-                        ~"    Y = g(X * 3 + 1),     %L08\n",
-                        ~"    Y * X.                %L09\n",
-                        ~"                          %L10\n",
-                        "g(X) ->                    %L11\n",
-                        ~"    Y = X + 2,            %L12\n",
-                        ~"    Y * 3.                %L13\n",
-                        ~""
-                    ]}
-                ]
-            }
-        ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).             %L01\n",
+                    ~"-export([go/0]).          %L02\n",
+                    ~"go() ->                   %L03\n",
+                    ~"    X = f(23),            %L04\n",
+                    ~"    X + 42.               %L05\n",
+                    ~"                          %L06\n",
+                    ~"f(X) ->                   %L07\n",
+                    ~"    Y = g(X * 3 + 1),     %L08\n",
+                    ~"    Y * X.                %L09\n",
+                    ~"                          %L10\n",
+                    "g(X) ->                    %L11\n",
+                    ~"    Y = X + 2,            %L12\n",
+                    ~"    Y * 3.                %L13\n",
+                    ~""
+                ]}
+            ]
+        }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 12}]}]),
     {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 
@@ -160,22 +154,19 @@ test_step_out_works(Config) ->
     ok.
 
 test_stepping_errors_if_process_not_paused(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
-        edb_test_support:start_peer_node(
-            Config, #{
-                modules => [
-                    {source, [
-                        ~"-module(foo).             %L01\n",
-                        ~"-export([go/0]).          %L02\n",
-                        ~"go() ->                   %L03\n",
-                        ~"    receive               %L04\n",
-                        ~"        _ -> ok           %L05\n",
-                        ~"    end.                  %L06\n"
-                    ]}
-                ]
-            }
-        ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).             %L01\n",
+                    ~"-export([go/0]).          %L02\n",
+                    ~"go() ->                   %L03\n",
+                    ~"    receive               %L04\n",
+                    ~"        _ -> ok           %L05\n",
+                    ~"    end.                  %L06\n"
+                ]}
+            ]
+        }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, ThreadId, _ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 

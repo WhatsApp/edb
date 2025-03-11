@@ -64,12 +64,8 @@ escript_executable(Config) ->
 
 escript_dap(Config) ->
     Module = factorial,
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{Module := SourcePath}}} = edb_test_support:start_peer_node(
-        Config,
-        #{modules => [{filename, "factorial.erl"}]}
-    ),
-
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer, modules := #{Module := SourcePath}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{modules => [{filename, "factorial.erl"}]}),
 
     Module = factorial,
     ok = edb_dap_test_support:configure(Client, [{SourcePath, [{line, 32}]}]),

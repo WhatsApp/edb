@@ -52,21 +52,18 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_can_pause_and_continue(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
-        edb_test_support:start_peer_node(
-            Config, #{
-                modules => [
-                    {source, [
-                        ~"-module(foo).               %L01\n",
-                        ~"-export([go/0]).            %L02\n",
-                        ~"go() ->                     %L03\n",
-                        ~"    timer:sleep(infinity),  %L04\n",
-                        ~"    ok.                     %L05\n"
-                    ]}
-                ]
-            }
-        ),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).               %L01\n",
+                    ~"-export([go/0]).            %L02\n",
+                    ~"go() ->                     %L03\n",
+                    ~"    timer:sleep(infinity),  %L04\n",
+                    ~"    ok.                     %L05\n"
+                ]}
+            ]
+        }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 

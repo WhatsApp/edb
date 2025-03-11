@@ -50,9 +50,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_queries_fail_until_configured(Config) ->
-    {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} =
-        edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+    {ok, Client, _PeerInfo} = edb_dap_test_support:start_session_via_launch(Config, #{}),
 
     % At this point we are not configured, so querying should fail
     #{success := false, body := #{error := #{format := ~"Request sent when it was not expected"}}} =
@@ -66,8 +64,8 @@ test_queries_fail_until_configured(Config) ->
     ok.
 
 test_setting_breakpoints_work_before_and_after_configuration(Config) ->
-    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd, modules := #{foo := FooSrc}}} =
-        edb_test_support:start_peer_node(Config, #{
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [
                     ~"-module(foo).         % L01\n",
@@ -81,8 +79,6 @@ test_setting_breakpoints_work_before_and_after_configuration(Config) ->
                 ]}
             ]
         }),
-
-    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     % Set an initial breakpoint during configuration
     ok = edb_dap_test_support:set_breakpoints(Client, FooSrc, [5]),
