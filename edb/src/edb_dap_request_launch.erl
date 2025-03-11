@@ -34,23 +34,17 @@
 %%% Notice that, since launching is debugger/runtime specific, the arguments for this request are
 %%% not part of the DAP specification itself.
 
--export_type([arguments/0, run_in_terminal/0, config/0, target_node/0]).
+-export_type([arguments/0, run_in_terminal/0, config/0]).
 -type arguments() :: #{
     runInTerminal := run_in_terminal(),
     config := config()
 }.
 
 -type run_in_terminal() :: edb_dap_reverse_request_run_in_terminal:arguments().
--type config() ::
-    #{
-        targetNode := target_node(),
-        stripSourcePrefix => binary(),
-        timeout => non_neg_integer()
-    }.
--type target_node() :: #{
-    name := node(),
-    cookie := atom(),
-    type => longnames | shortnames
+-type config() :: #{
+    nameDomain := shortnames | longnames,
+    stripSourcePrefix => binary(),
+    timeout => non_neg_integer()
 }.
 
 -spec arguments_template() -> edb_dap_parse:template().
@@ -69,14 +63,9 @@ arguments_template() ->
                     )},
             argsCanBeInterpretedByShell => {optional, edb_dap_parse:boolean()}
         },
-
         config =>
             #{
-                targetNode => #{
-                    name => edb_dap_parse:atom(),
-                    cookie => edb_dap_parse:atom(),
-                    type => {optional, edb_dap_parse:atoms([longnames, shortnames])}
-                },
+                nameDomain => edb_dap_parse:atoms([shortnames, longnames]),
                 stripSourcePrefix => {optional, edb_dap_parse:binary()},
                 timeout => {optional, edb_dap_parse:non_neg_integer()}
             },
@@ -145,36 +134,47 @@ handle(_InvalidState, _Args) ->
     Config :: config(),
     State :: edb_dap_server:state().
 do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
-    #{targetNode := #{name := Node, cookie := Cookie}} = Config,
+    #{nameDomain := NameDomain} = Config,
     AttachTimeoutInSecs = maps:get(timeout, Config, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
+
+    #{erl_code_to_inject := CodeToInject, notification_ref := NotificationRef} =
+        case edb:reverse_attach(#{name_domain => NameDomain, timeout => AttachTimeoutInSecs * 1000}) of
+            {ok, ReverseAttachResult} -> ReverseAttachResult;
+            {error, attachment_in_progress} -> throw(attachment_in_progress)
+        end,
+
     StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
 
-    RunInTerminal1 = update_erl_flags_env(RunInTerminal0),
+    Env0 = maps:get(env, RunInTerminal0, #{}),
+    Env1 = update_erl_flags_env(Env0),
+    Env2 = update_code_to_inject_info_in_env(CodeToInject, Env1),
+    RunInTerminal1 = RunInTerminal0#{env => Env2},
 
     Cwd = maps:get(cwd, RunInTerminal1),
     RunInTerminalRequest = edb_dap_reverse_request_run_in_terminal:make_request(RunInTerminal1),
-
-    State1 = State0#{
-        state => launching,
-        node => Node,
-        cookie => Cookie,
-        timeout => AttachTimeoutInSecs,
-        cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
-    },
     #{
-        response => edb_dap_request:success(),
         actions => [{reverse_request, RunInTerminalRequest}],
-        new_state => State1
+        new_state => State0#{
+            state => launching,
+            notification_ref => NotificationRef,
+            cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
+        },
+        response => edb_dap_request:success()
     }.
 
--spec update_erl_flags_env(RunInTerminal) -> RunInTerminal when RunInTerminal :: run_in_terminal().
-update_erl_flags_env(RunInTerminal0 = #{env := Env = #{~"ERL_FLAGS" := ERL_FLAGS0}}) when is_binary(ERL_FLAGS0) ->
+-spec update_erl_flags_env(Env) -> Env when
+    Env :: #{binary() => binary() | null}.
+update_erl_flags_env(Env = #{~"ERL_FLAGS" := ERL_FLAGS0}) when ERL_FLAGS0 /= null ->
     ERL_FLAGS1 = <<ERL_FLAGS0/binary, ~" "/binary, ?ERL_FLAGS/binary>>,
-    RunInTerminal0#{env => Env#{~"ERL_FLAGS" => ERL_FLAGS1}};
-update_erl_flags_env(RunInTerminal0 = #{env := Env}) ->
-    RunInTerminal0#{env => Env#{~"ERL_FLAGS" => ?ERL_FLAGS}};
-update_erl_flags_env(RunInTerminal0) ->
-    RunInTerminal0#{env => #{~"ERL_FLAGS" => ?ERL_FLAGS}}.
+    Env#{~"ERL_FLAGS" => ERL_FLAGS1};
+update_erl_flags_env(Env) ->
+    Env#{~"ERL_FLAGS" => ?ERL_FLAGS}.
+
+-spec update_code_to_inject_info_in_env(CodeToInject, Env) -> Env when
+    CodeToInject :: binary(),
+    Env :: #{binary() => binary() | null}.
+update_code_to_inject_info_in_env(CodeToInject, Env) ->
+    Env#{~"EDB_DAP_DEBUGGEE_INIT" => CodeToInject}.
 
 -spec unsupported_by_client(What, ClientInfo) -> edb_dap_request:error_reaction() when
     What :: binary(),

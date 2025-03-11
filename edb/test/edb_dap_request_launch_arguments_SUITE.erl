@@ -47,10 +47,7 @@ test_validate(_Config) ->
             cwd => ~"/blah"
         },
         config => #{
-            targetNode => #{
-                name => ~"some_node@localhost",
-                cookie => ~"connect_cookie"
-            }
+            nameDomain => ~"shortnames"
         }
     },
 
@@ -60,10 +57,7 @@ test_validate(_Config) ->
             cwd => ~"/blah"
         },
         config => #{
-            targetNode => #{
-                name => 'some_node@localhost',
-                cookie => connect_cookie
-            }
+            nameDomain => shortnames
         }
     },
 
@@ -92,11 +86,7 @@ test_validate(_Config) ->
             argsCanBeInterpretedByShell => true
         },
         config => #{
-            targetNode => #{
-                name => ~"test42-123-atn@localhost",
-                cookie => ~"connect_cookie",
-                type => ~"shortnames"
-            },
+            nameDomain => ~"shortnames",
             timeout => 300,
             stripSourcePrefix => ~"blah/blah"
         }
@@ -119,11 +109,7 @@ test_validate(_Config) ->
             argsCanBeInterpretedByShell => true
         },
         config => #{
-            targetNode => #{
-                name => 'test42-123-atn@localhost',
-                cookie => connect_cookie,
-                type => shortnames
-            },
+            nameDomain => shortnames,
             timeout => 300,
             stripSourcePrefix => ~"blah/blah"
         }

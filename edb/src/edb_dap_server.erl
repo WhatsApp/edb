@@ -63,9 +63,7 @@
         % A `launch` request was received and we are waiting for the debuggee node to be up
         state := launching,
         client_info := client_info(),
-        node := node(),
-        cookie := atom(),
-        timeout := non_neg_integer(),
+        notification_ref := reference(),
         cwd := binary()
     }
     | #{
@@ -195,7 +193,16 @@ handle_cast(terminate, State) ->
     {stop, normal, State}.
 
 -spec handle_info(Event, state()) -> {noreply, state()} when
-    Event :: edb:event_envelope(edb:event()).
+    Event :: {reference(), edb_dap_internal_events:reverse_attach_result()} | edb:event_envelope(edb:event()).
+handle_info(
+    {NotificationRef, ReverseAttachResult}, State0 = #{state := launching, notification_ref := NotificationRef}
+) ->
+    ?LOG_DEBUG("Handle reverse attach result: ~p", [ReverseAttachResult]),
+    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(
+        fun edb_dap_internal_events:handle_reverse_attach_result/2, ReverseAttachResult, State0
+    ),
+    State1 = react(Reaction, State0),
+    {noreply, State1};
 handle_info(Event = {edb_event, _, _}, State) ->
     handle_edb_event(Event, State);
 handle_info(Unexpected, State) ->
@@ -206,7 +213,7 @@ handle_info(Unexpected, State) ->
     Event :: edb:event_envelope(edb:event()).
 handle_edb_event({edb_event, Subscription, Event}, State0 = #{subscription := Subscription}) ->
     ?LOG_DEBUG("Handle event: ~p", [Event]),
-    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle/2, Event, State0),
+    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle_edb_event/2, Event, State0),
     State1 = react(Reaction, State0),
     {noreply, State1};
 handle_edb_event(_UnexpectedEvent, State0) ->

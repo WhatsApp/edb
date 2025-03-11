@@ -23,9 +23,11 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
--export([handle/2]).
+-export([handle_reverse_attach_result/2]).
+-export([handle_edb_event/2]).
 
 -include_lib("kernel/include/logger.hrl").
+-include("edb_dap.hrl").
 
 %%%---------------------------------------------------------------------------------
 %%% Types
@@ -33,22 +35,54 @@
 
 -type reaction() :: #{
     actions => [{event, edb_dap_event:event()}],
-    new_state => edb_dap_server:state()
+    new_state => edb_dap_server:state(),
+    error => edb_dap_server:error()
 }.
 -export_type([reaction/0]).
+
+-type reverse_attach_result() :: ok | timeout | {error, {bootstrap_failed, edb:bootstrap_failure()}}.
+-export_type([reverse_attach_result/0]).
 
 %%%---------------------------------------------------------------------------------
 %%% Public API
 %%%---------------------------------------------------------------------------------
--spec handle(EdbEvent, State) -> Reaction when
+
+-spec handle_reverse_attach_result(Result, State) -> Reaction when
+    Result :: reverse_attach_result(),
+    State :: edb_dap_server:state(),
+    Reaction :: reaction().
+handle_reverse_attach_result(ok, State0 = #{state := launching}) ->
+    State1 = maps:remove(notification_ref, State0),
+    #{
+        actions => [{event, edb_dap_event:initialized()}],
+        new_state => State1#{
+            state => configuring,
+            node => edb:attached_node()
+        }
+    };
+handle_reverse_attach_result(timeout, #{state := launching}) ->
+    #{
+        new_state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}],
+        error => {user_error, ?ERROR_TIMED_OUT, ~"Timed out waiting for node to be up"}
+    };
+handle_reverse_attach_result({error, {bootstrap_failed, BootstrapFailure}}, #{state := launching}) ->
+    #{
+        new_state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}],
+        error =>
+            {user_error, ?ERROR_NOT_SUPPORTED, io_lib:format("EDB bootstrap failed on node: ~p", [BootstrapFailure])}
+    }.
+
+-spec handle_edb_event(EdbEvent, State) -> Reaction when
     EdbEvent :: edb:event(),
     State :: edb_dap_server:state(),
-    Reaction :: edb_dap_internal_events:reaction().
-handle({paused, PausedEvent}, State) ->
+    Reaction :: reaction().
+handle_edb_event({paused, PausedEvent}, State) ->
     paused_impl(State, PausedEvent);
-handle({nodedown, Node, Reason}, State) ->
+handle_edb_event({nodedown, Node, Reason}, State) ->
     nodedown_impl(State, Node, Reason);
-handle(Event, _State) ->
+handle_edb_event(Event, _State) ->
     ?LOG_DEBUG("Skipping event: ~p", [Event]),
     #{}.
 

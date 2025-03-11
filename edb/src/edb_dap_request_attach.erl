@@ -23,6 +23,7 @@
 -behaviour(edb_dap_request).
 
 -export([parse_arguments/1, handle/2]).
+-export([handle_bootstrap_failure/1]).
 
 -include("edb_dap.hrl").
 

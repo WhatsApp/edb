@@ -36,7 +36,9 @@
     test_run_in_terminal_requires_client_support/1,
     test_passes_run_in_terminal_stuff_to_client/1,
     test_respects_whatever_was_given_in_erl_zflags_env/1,
-    test_checks_client_supports_argsCanBeInterpretedByShell/1
+    test_checks_client_supports_argsCanBeInterpretedByShell/1,
+    test_the_code_it_injects_works/1,
+    test_it_honors_the_timeout/1
 ]).
 
 all() ->
@@ -44,7 +46,9 @@ all() ->
         test_run_in_terminal_requires_client_support,
         test_passes_run_in_terminal_stuff_to_client,
         test_respects_whatever_was_given_in_erl_zflags_env,
-        test_checks_client_supports_argsCanBeInterpretedByShell
+        test_checks_client_supports_argsCanBeInterpretedByShell,
+        test_the_code_it_injects_works,
+        test_it_honors_the_timeout
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -61,7 +65,7 @@ test_run_in_terminal_requires_client_support(Config) ->
     % Common "launch" args for "runInTerminal"
     LaunchArgs = #{
         runInTerminal => #{cwd => ~"/tmp/blah", args => [~"erl"]},
-        config => #{targetNode => #{name => 'foo@bar', cookie => some_cookie}}
+        config => #{nameDomain => shortnames}
     },
 
     % CASE 1: supportsRunInTerminal not given, no client name given either
@@ -105,23 +109,31 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
     },
     #{success := true} = edb_dap_test_client:launch(Client, #{
         runInTerminal => RunInTerminal,
-        config => #{targetNode => #{name => 'foo@bar', cookie => some_cookie}}
+        config => #{nameDomain => longnames}
     }),
 
-    Expected = RunInTerminal#{
-        kind => ~"external",
-        env => #{
-            'MY_VAR' => ~"my_value",
-            'ERL_ZFLAGS' => null,
-
-            % ERL_FLAGS is PATCHED
-            'ERL_FLAGS' => ~"+D"
-        }
-    },
     {ok, [#{arguments := Actual}]} =
         edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
 
-    ?assertEqual(Expected, Actual),
+    ?assertMatch(
+        #{
+            kind := ~"external",
+            title := ~"My debugging session",
+            cwd := ~"/tmp/blah",
+            args := [~"erl"],
+            env := #{
+                'MY_VAR' := ~"my_value",
+                'ERL_ZFLAGS' := null,
+
+                % ERL_FLAGS is PATCHED
+                'ERL_FLAGS' := ~"+D",
+
+                % Added by DAP server
+                'EDB_DAP_DEBUGGEE_INIT' := _
+            }
+        },
+        Actual
+    ),
     ok.
 
 test_respects_whatever_was_given_in_erl_zflags_env(Config) ->
@@ -140,18 +152,23 @@ test_respects_whatever_was_given_in_erl_zflags_env(Config) ->
     },
     #{success := true} = edb_dap_test_client:launch(Client, #{
         runInTerminal => RunInTerminal,
-        config => #{targetNode => #{name => 'foo@bar', cookie => some_cookie}}
+        config => #{nameDomain => shortnames}
     }),
 
-    Expected = RunInTerminal#{
-        env => #{
-            'ERL_FLAGS' => ~"+foo -bar baz +D"
-        }
-    },
     {ok, [#{arguments := Actual}]} =
         edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
 
-    ?assertEqual(Expected, Actual),
+    ?assertMatch(
+        #{
+            cwd := ~"/tmp/blah",
+            args := [~"erl"],
+            env := #{
+                'ERL_FLAGS' := ~"+foo -bar baz +D",
+                'EDB_DAP_DEBUGGEE_INIT' := _
+            }
+        },
+        Actual
+    ),
     ok.
 
 test_checks_client_supports_argsCanBeInterpretedByShell(Config) ->
@@ -162,7 +179,7 @@ test_checks_client_supports_argsCanBeInterpretedByShell(Config) ->
             args => [~"erl", ~"--foo=$FOO_VAL"],
             argsCanBeInterpretedByShell => true
         },
-        config => #{targetNode => #{name => 'foo@bar', cookie => some_cookie}}
+        config => #{nameDomain => longnames}
     },
 
     {ok, Client1} = edb_dap_test_support:start_test_client(Config),
@@ -173,4 +190,69 @@ test_checks_client_supports_argsCanBeInterpretedByShell(Config) ->
     #{success := false, body := #{error := #{format := ~"argsCanBeInterpretedByShell is not supported by the client"}}} =
         edb_dap_test_client:launch(Client1, LaunchArgsWithArgsCanBeInterpretedByShell),
 
+    ok.
+
+test_the_code_it_injects_works(Config) ->
+    % Start client
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode",
+        supportsRunInTerminalRequest => true
+    }),
+
+    % Send "launch" request, and wait for "runInTerminal" request
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        runInTerminal => #{
+            cwd => ~"/tmp/blah",
+            args => [~"erl"]
+        },
+        config => #{
+            nameDomain => shortnames,
+            timeout => 20
+        }
+    }),
+    {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
+    edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
+
+    % Get the init code, and use it to start the debuggee
+    #{arguments := #{env := #{'EDB_DAP_DEBUGGEE_INIT' := InitCode}}} = RunInTerminalReq,
+    {ok, _PeerInfo} = edb_test_support:start_peer_node(Config, #{
+        extra_args => ["-eval", InitCode]
+    }),
+    % As the debuggee is up and ran the InitCode, the DAP server should send us an "initialized" event
+    {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
+
+    % Let's skip the configuration phase
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
+
+    % Sanity-check: we get some processes
+    #{success := true, body := #{threads := [_ | _]}} = edb_dap_test_client:threads(Client),
+
+    ok.
+
+test_it_honors_the_timeout(Config) ->
+    % Start client
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode",
+        supportsRunInTerminalRequest => true
+    }),
+
+    % Send "launch" request, and wait for "runInTerminal" request
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        runInTerminal => #{
+            cwd => ~"/tmp/blah",
+            args => [~"erl"]
+        },
+        config => #{
+            nameDomain => shortnames,
+            % ! ms
+            timeout => 1
+        }
+    }),
+    {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
+    edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
+
+    % We DONT start the debuggee, so the DAP server should send us a "terminated" event
+    {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
     ok.

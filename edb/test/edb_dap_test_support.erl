@@ -60,25 +60,18 @@ start_session(Config, Node, Cookie, Cwd) ->
 
     AdapterID = atom_to_binary(?MODULE),
     Response1 = edb_dap_test_client:initialize(Client, #{
-        adapterID => AdapterID,
-        supportsRunInTerminalRequest => true
+        adapterID => AdapterID
     }),
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
-    RunInTerminal = #{
-        cwd => Cwd,
-        args => [~"dummy"]
-    },
-    Response2 = edb_dap_test_client:launch(Client, #{
-        runInTerminal => RunInTerminal,
+    Response2 = edb_dap_test_client:attach(Client, #{
         config => #{
-            targetNode => #{name => Node, cookie => Cookie}
+            node => Node,
+            cookie => Cookie,
+            cwd => Cwd
         }
     }),
     ?assertMatch(#{request_seq := 2, type := response, success := true}, Response2),
-
-    {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
-    edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
 
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
