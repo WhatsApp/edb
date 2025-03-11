@@ -52,6 +52,7 @@
 
 -export_type([id/0]).
 -export_type([pid_frame/0]).
+-export_type([frame_scope/0]).
 
 %% @doc An integer that fits in a 64-bit float
 %%

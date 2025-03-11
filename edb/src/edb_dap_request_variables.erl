@@ -188,51 +188,43 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := attached, node := Node}, #{variablesReference := VariablesReference}) ->
-    case edb_dap_id_mappings:var_reference_to_frame_scope(VariablesReference) of
-        {ok, #{frame := FrameId, scope := Scope}} ->
-            case edb_dap_id_mappings:frame_id_to_pid_frame(FrameId) of
-                {ok, #{pid := Pid, frame_no := FrameNo}} ->
-                    case Scope of
-                        messages ->
-                            % elp:ignore W0014 (cross_node_eval)
-                            case erpc:call(Node, erlang, process_info, [Pid, messages]) of
-                                {messages, Messages0} when is_list(Messages0) ->
-                                    % Ideally we'd have a `erl_debugger:peek_message/1` function
-                                    % which would allow us to peek at the message queue and return
-                                    % a too_large entry if the message is too large.
-                                    Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
-                                    #{
-                                        response => edb_dap_request:success(#{
-                                            variables => unnamed_variables(~"", Messages)
-                                        })
-                                    };
-                                _ ->
-                                    throw({failed_to_get_messages, {Pid, FrameNo}})
-                            end;
-                        _ ->
-                            case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
-                                not_paused ->
-                                    edb_dap_request:not_paused(Pid);
-                                undefined ->
-                                    throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
-                                {ok, Result} ->
-                                    Variables =
-                                        case Scope of
-                                            locals ->
-                                                [variable(Name, Value) || Name := Value <- maps:get(vars, Result, #{})];
-                                            registers ->
-                                                XRegs = unnamed_variables(~"X", maps:get(xregs, Result, [])),
-                                                YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
-                                                XRegs ++ YRegs
-                                        end,
-                                    #{response => edb_dap_request:success(#{variables => Variables})}
-                            end
-                    end;
-                {error, not_found} ->
-                    throw({cant_resolve_pid_frame, FrameId})
+    #{frame := FrameId, scope := Scope} = variable_ref_to_frame_scope(VariablesReference),
+    #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
+    case Scope of
+        messages ->
+            % elp:ignore W0014 (cross_node_eval)
+            case erpc:call(Node, erlang, process_info, [Pid, messages]) of
+                {messages, Messages0} when is_list(Messages0) ->
+                    % Ideally we'd have a `erl_debugger:peek_message/1` function
+                    % which would allow us to peek at the message queue and return
+                    % a too_large entry if the message is too large.
+                    Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
+                    #{
+                        response => edb_dap_request:success(#{
+                            variables => unnamed_variables(~"", Messages)
+                        })
+                    };
+                _ ->
+                    throw({failed_to_get_messages, {Pid, FrameNo}})
             end;
-        {error, not_found} ->
-            edb_dap_request:unknown_resource(variables_ref, VariablesReference)
+        _ ->
+            case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
+                not_paused ->
+                    edb_dap_request:not_paused(Pid);
+                undefined ->
+                    throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
+                {ok, Result} ->
+                    Variables =
+                        case Scope of
+                            locals ->
+                                [variable(Name, Value) || Name := Value <- maps:get(vars, Result, #{})];
+                            registers ->
+                                XRegs = unnamed_variables(~"X", maps:get(xregs, Result, [])),
+                                YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
+                                XRegs ++ YRegs
+                        end,
+                    #{response => edb_dap_request:success(#{variables => Variables})}
+            end
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
@@ -240,6 +232,22 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
+-spec variable_ref_to_frame_scope(VarRef) -> edb_dap_id_mappings:frame_scope() when
+    VarRef :: edb_dap_id_mappings:id().
+variable_ref_to_frame_scope(VarRef) ->
+    case edb_dap_id_mappings:var_reference_to_frame_scope(VarRef) of
+        {ok, FrameScope} -> FrameScope;
+        {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
+    end.
+
+-spec frame_id_to_pid_frame(FrameId) -> edb_dap_id_mappings:pid_frame() when
+    FrameId :: edb_dap_id_mappings:id().
+frame_id_to_pid_frame(FrameId) ->
+    case edb_dap_id_mappings:frame_id_to_pid_frame(FrameId) of
+        {ok, PidFrame} -> PidFrame;
+        {error, not_found} -> throw({cant_resolve_pid_frame, FrameId})
+    end.
+
 -spec cap_by_size(term(), non_neg_integer()) -> edb:value().
 cap_by_size(Term, MaxSize) ->
     Size = erts_debug:flat_size(Term),

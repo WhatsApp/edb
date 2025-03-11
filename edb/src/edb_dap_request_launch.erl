@@ -110,27 +110,28 @@ handle(
     SupportsArgsCanBeInterpretedByShell = maps:get(supportsArgsCanBeInterpretedByShell, ClientInfo, false),
     case {WantsArgsCanBeInterpretedByShell, SupportsArgsCanBeInterpretedByShell} of
         {true, false} ->
-            unsupported_by_client(~"argsCanBeInterpretedByShell", ClientInfo);
+            edb_dap_request:abort(unsupported_by_client(~"argsCanBeInterpretedByShell", ClientInfo));
         _ ->
-            %% TODO(T217166034) -- REMOVE ONCE VSCODE EXTENSIONS ARE UPDATED
-            RunInTerminal1 =
-                case Args of
-                    #{launchCommand := #{arguments := ExtraArgsComingFromVsCodeExtension}} ->
-                        #{args := Args0} = RunInTerminal0,
-                        Args1 = Args0 ++ ExtraArgsComingFromVsCodeExtension,
-                        RunInTerminal0#{args := Args1};
-                    _ ->
-                        RunInTerminal0
-                end,
-            RunInTerminal2 =
-                case Args of
-                    #{launchCommand := #{cwd := CwdOverridenByVsCodeExtension}} ->
-                        RunInTerminal1#{cwd := CwdOverridenByVsCodeExtension};
-                    _ ->
-                        RunInTerminal1
-                end,
-            do_run_in_terminal(RunInTerminal2, Config, State)
-    end;
+            ok
+    end,
+    %% TODO(T217166034) -- REMOVE ONCE VSCODE EXTENSIONS ARE UPDATED
+    RunInTerminal1 =
+        case Args of
+            #{launchCommand := #{arguments := ExtraArgsComingFromVsCodeExtension}} ->
+                #{args := Args0} = RunInTerminal0,
+                Args1 = Args0 ++ ExtraArgsComingFromVsCodeExtension,
+                RunInTerminal0#{args := Args1};
+            _ ->
+                RunInTerminal0
+        end,
+    RunInTerminal2 =
+        case Args of
+            #{launchCommand := #{cwd := CwdOverridenByVsCodeExtension}} ->
+                RunInTerminal1#{cwd := CwdOverridenByVsCodeExtension};
+            _ ->
+                RunInTerminal1
+        end,
+    do_run_in_terminal(RunInTerminal2, Config, State);
 handle(#{state := initialized, client_info := ClientInfo}, #{runInTerminal := _}) ->
     unsupported_by_client(~"runInTerminal", ClientInfo);
 handle(_InvalidState, _Args) ->
@@ -175,7 +176,7 @@ update_erl_flags_env(RunInTerminal0 = #{env := Env}) ->
 update_erl_flags_env(RunInTerminal0) ->
     RunInTerminal0#{env => #{~"ERL_FLAGS" => ?ERL_FLAGS}}.
 
--spec unsupported_by_client(What, ClientInfo) -> edb_dap_request:reaction() when
+-spec unsupported_by_client(What, ClientInfo) -> edb_dap_request:error_reaction() when
     What :: binary(),
     ClientInfo :: edb_dap_server:client_info().
 unsupported_by_client(What, ClientInfo) ->

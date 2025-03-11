@@ -133,17 +133,13 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State0 = #{state := attached}, #{threadId := ThreadId}) ->
-    case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
-        {ok, Pid} ->
-            case edb:stack_frames(Pid) of
-                not_paused ->
-                    edb_dap_request:not_paused(Pid);
-                {ok, Frames} ->
-                    StackFrames = [stack_frame(State0, Pid, Frame) || Frame <- Frames],
-                    #{response => edb_dap_request:success(#{stackFrames => StackFrames})}
-            end;
-        {error, not_found} ->
-            edb_dap_request:unknown_resource(thread_id, ThreadId)
+    Pid = edb_dap_request:thread_id_to_pid(ThreadId),
+    case edb:stack_frames(Pid) of
+        not_paused ->
+            edb_dap_request:not_paused(Pid);
+        {ok, Frames} ->
+            StackFrames = [stack_frame(State0, Pid, Frame) || Frame <- Frames],
+            #{response => edb_dap_request:success(#{stackFrames => StackFrames})}
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().

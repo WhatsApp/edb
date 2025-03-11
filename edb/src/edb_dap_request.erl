@@ -29,11 +29,14 @@
 
 %% Helpers for behaviour implementations
 -export([success/0, success/1]).
+-export([abort/1]).
 -export([unexpected_request/0]).
 -export([unknown_resource/2]).
 -export([not_paused/1]).
 -export([precondition_violation/1]).
 -export([unsupported/1]).
+
+-export([thread_id_to_pid/1]).
 
 -export([parse_empty_arguments/1]).
 
@@ -42,9 +45,15 @@
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
--export_type([reaction/0, reaction/1, response/1, resource/0]).
+-export_type([reaction/0, reaction/1, error_reaction/0, response/1, resource/0]).
 
 -type reaction() :: reaction(none()).
+
+-type error_reaction() :: #{
+    error := edb_dap_server:error(),
+    actions => [edb_dap_server:action()],
+    new_state => edb_dap_server:state()
+}.
 
 -type reaction(T) ::
     #{
@@ -52,11 +61,7 @@
         actions => [edb_dap_server:action()],
         new_state => edb_dap_server:state()
     }
-    | #{
-        error := edb_dap_server:error(),
-        actions => [edb_dap_server:action()],
-        new_state => edb_dap_server:state()
-    }.
+    | error_reaction().
 
 -type response(T) :: #{
     success := boolean(),
@@ -93,7 +98,11 @@ dispatch(#{command := Method} = Request, State) ->
             Arguments = maps:get(arguments, Request, #{}),
             case Handler:parse_arguments(Arguments) of
                 {ok, ParsedArguments} ->
-                    Handler:handle(State, ParsedArguments);
+                    try
+                        Handler:handle(State, ParsedArguments)
+                    catch
+                        throw:{'__$abort$__', Error} -> Error
+                    end;
                 {error, Reason} when is_binary(Reason) ->
                     #{error => {invalid_params, Reason}}
             end;
@@ -133,36 +142,47 @@ success() ->
 success(Body) ->
     #{success => true, body => Body}.
 
--spec precondition_violation(Msg) -> reaction() when Msg :: iodata().
+-spec abort(Error) -> no_return() when Error :: error_reaction().
+abort(Error) ->
+    throw({'__$abort$__', Error}).
+
+-spec precondition_violation(Msg) -> error_reaction() when Msg :: iodata().
 precondition_violation(Msg) ->
     #{error => {user_error, ?ERROR_PRECONDITION_VIOLATION, Msg}}.
 
--spec unexpected_request() -> reaction().
+-spec unexpected_request() -> error_reaction().
 unexpected_request() ->
     precondition_violation(~"Request sent when it was not expected").
 
--spec unknown_resource(Type, Id) -> reaction() when
+-spec unknown_resource(Type, Id) -> error_reaction() when
     Type :: resource(),
     Id :: number().
 unknown_resource(thread_id, Id) -> unknown_resource_1(~"threadId", Id);
 unknown_resource(variables_ref, Id) -> unknown_resource_1(~"variablesReference", Id).
 
--spec unknown_resource_1(Name, Id) -> reaction() when
+-spec unknown_resource_1(Name, Id) -> error_reaction() when
     Name :: binary(),
     Id :: number().
 unknown_resource_1(Name, Id) ->
     Msg = io_lib:format("Unknown ~s: ~p", [Name, Id]),
     #{error => {user_error, ?JSON_RPC_ERROR_INVALID_PARAMS, Msg}}.
 
--spec not_paused(Pid) -> reaction() when Pid :: pid().
+-spec not_paused(Pid) -> error_reaction() when Pid :: pid().
 not_paused(_Pid) ->
     % Not including the Pid in the message, since it will be displayed in the context of the wrong node
     % but useful to have here for troubleshooting
     precondition_violation(~"Process is not paused").
 
--spec unsupported(Msg) -> reaction() when Msg :: iodata().
+-spec unsupported(Msg) -> error_reaction() when Msg :: iodata().
 unsupported(Msg) ->
     #{error => {user_error, ?ERROR_NOT_SUPPORTED, Msg}}.
+
+-spec thread_id_to_pid(ThreadId) -> pid() when ThreadId :: edb_dap:thread_id().
+thread_id_to_pid(ThreadId) ->
+    case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
+        {ok, Pid} -> Pid;
+        {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(thread_id, ThreadId))
+    end.
 
 -spec parse_empty_arguments(Arguments) -> {ok, #{}} | {error, Reason} when
     Arguments :: edb_dap:arguments(),

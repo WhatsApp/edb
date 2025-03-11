@@ -67,30 +67,26 @@ handle(State, #{threadId := ThreadId}) ->
     ThreadId :: edb_dap:thread_id(),
     StepType :: 'step-over' | 'step-out'.
 stepper(#{state := attached}, ThreadId, StepType) ->
+    Pid = edb_dap_request:thread_id_to_pid(ThreadId),
     StepFun =
         case StepType of
             'step-over' -> fun edb:step_over/1;
             'step-out' -> fun edb:step_out/1
         end,
-    case edb_dap_id_mappings:thread_id_to_pid(ThreadId) of
-        {ok, Pid} ->
-            case StepFun(Pid) of
-                ok ->
-                    edb_dap_id_mappings:reset(),
-                    #{response => edb_dap_request:success()};
-                {error, not_paused} ->
-                    edb_dap_request:not_paused(Pid);
-                {error, no_abstract_code} ->
-                    edb_dap_request:unsupported(~"Module not compiled with debug_info");
-                {error, {cannot_breakpoint, ModuleName}} ->
-                    edb_dap_request:unsupported(
-                        io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName])
-                    );
-                {error, {beam_analysis, Err}} ->
-                    throw({beam_analysis, Err})
-            end;
-        {error, not_found} ->
-            edb_dap_request:unknown_resource(thread_id, ThreadId)
+    case StepFun(Pid) of
+        ok ->
+            edb_dap_id_mappings:reset(),
+            #{response => edb_dap_request:success()};
+        {error, not_paused} ->
+            edb_dap_request:not_paused(Pid);
+        {error, no_abstract_code} ->
+            edb_dap_request:unsupported(~"Module not compiled with debug_info");
+        {error, {cannot_breakpoint, ModuleName}} ->
+            edb_dap_request:unsupported(
+                io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName])
+            );
+        {error, {beam_analysis, Err}} ->
+            throw({beam_analysis, Err})
     end;
 stepper(_UnexpectedState, _, _) ->
     edb_dap_request:unexpected_request().
