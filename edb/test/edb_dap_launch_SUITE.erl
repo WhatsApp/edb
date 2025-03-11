@@ -37,7 +37,8 @@
     test_passes_run_in_terminal_stuff_to_client/1,
     test_respects_whatever_was_given_in_erl_zflags_env/1,
     test_checks_client_supports_argsCanBeInterpretedByShell/1,
-    test_the_code_it_injects_works/1,
+    test_can_inject_code_automatically/1,
+    test_can_return_the_code_to_inject_in_an_env_var/1,
     test_it_honors_the_timeout/1
 ]).
 
@@ -47,7 +48,8 @@ all() ->
         test_passes_run_in_terminal_stuff_to_client,
         test_respects_whatever_was_given_in_erl_zflags_env,
         test_checks_client_supports_argsCanBeInterpretedByShell,
-        test_the_code_it_injects_works,
+        test_can_inject_code_automatically,
+        test_can_return_the_code_to_inject_in_an_env_var,
         test_it_honors_the_timeout
     ].
 
@@ -109,7 +111,10 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
     },
     #{success := true} = edb_dap_test_client:launch(Client, #{
         runInTerminal => RunInTerminal,
-        config => #{nameDomain => longnames}
+        config => #{
+            nameDomain => longnames,
+            nodeInitCodeInEnvVar => ~"EDB_DAP_DEBUGGEE_INIT"
+        }
     }),
 
     {ok, [#{arguments := Actual}]} =
@@ -125,8 +130,8 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
                 'MY_VAR' := ~"my_value",
                 'ERL_ZFLAGS' := null,
 
-                % ERL_FLAGS is PATCHED
-                'ERL_FLAGS' := ~"+D",
+                % ERL_AFLAGS is PATCHED
+                'ERL_AFLAGS' := ~"+D",
 
                 % Added by DAP server
                 'EDB_DAP_DEBUGGEE_INIT' := _
@@ -147,12 +152,15 @@ test_respects_whatever_was_given_in_erl_zflags_env(Config) ->
         cwd => ~"/tmp/blah",
         args => [~"erl"],
         env => #{
-            ~"ERL_FLAGS" => ~"+foo -bar baz"
+            ~"ERL_AFLAGS" => ~"+foo -bar baz"
         }
     },
     #{success := true} = edb_dap_test_client:launch(Client, #{
         runInTerminal => RunInTerminal,
-        config => #{nameDomain => shortnames}
+        config => #{
+            nameDomain => shortnames,
+            nodeInitCodeInEnvVar => ~"EDB_DAP_DEBUGGEE_INIT"
+        }
     }),
 
     {ok, [#{arguments := Actual}]} =
@@ -163,7 +171,7 @@ test_respects_whatever_was_given_in_erl_zflags_env(Config) ->
             cwd := ~"/tmp/blah",
             args := [~"erl"],
             env := #{
-                'ERL_FLAGS' := ~"+foo -bar baz +D",
+                'ERL_AFLAGS' := ~"+D +foo -bar baz",
                 'EDB_DAP_DEBUGGEE_INIT' := _
             }
         },
@@ -192,7 +200,7 @@ test_checks_client_supports_argsCanBeInterpretedByShell(Config) ->
 
     ok.
 
-test_the_code_it_injects_works(Config) ->
+test_can_inject_code_automatically(Config) ->
     % Start client
     {ok, Client} = edb_dap_test_support:start_test_client(Config),
     #{success := true} = edb_dap_test_client:initialize(Client, #{
@@ -208,6 +216,45 @@ test_the_code_it_injects_works(Config) ->
         },
         config => #{
             nameDomain => shortnames,
+            timeout => 20
+        }
+    }),
+    {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
+    edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
+
+    % Get the init code, and use it to start the debuggee
+    #{arguments := #{env := Env}} = RunInTerminalReq,
+    {ok, _PeerInfo} = edb_test_support:start_peer_node(Config, #{
+        env => #{atom_to_binary(K) => V || K := V <- Env}
+    }),
+    % As the debuggee is up and ran the InitCode, the DAP server should send us an "initialized" event
+    {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
+
+    % Let's skip the configuration phase
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
+
+    % Sanity-check: we get some processes
+    #{success := true, body := #{threads := [_ | _]}} = edb_dap_test_client:threads(Client),
+
+    ok.
+
+test_can_return_the_code_to_inject_in_an_env_var(Config) ->
+    % Start client
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode",
+        supportsRunInTerminalRequest => true
+    }),
+
+    % Send "launch" request, and wait for "runInTerminal" request
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        runInTerminal => #{
+            cwd => ~"/tmp/blah",
+            args => [~"erl"]
+        },
+        config => #{
+            nameDomain => shortnames,
+            nodeInitCodeInEnvVar => ~"EDB_DAP_DEBUGGEE_INIT",
             timeout => 20
         }
     }),

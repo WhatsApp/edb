@@ -87,6 +87,7 @@ test_validate(_Config) ->
         },
         config => #{
             nameDomain => ~"shortnames",
+            nodeInitCodeInEnvVar => ~"EDB_DAP_INIT_CODE",
             timeout => 300,
             stripSourcePrefix => ~"blah/blah"
         }
@@ -110,6 +111,7 @@ test_validate(_Config) ->
         },
         config => #{
             nameDomain => shortnames,
+            nodeInitCodeInEnvVar => ~"EDB_DAP_INIT_CODE",
             timeout => 300,
             stripSourcePrefix => ~"blah/blah"
         }

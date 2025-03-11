@@ -25,7 +25,6 @@
 -export([parse_arguments/1, handle/2]).
 
 -define(DEFAULT_ATTACH_TIMEOUT_IN_SECS, 60).
--define(ERL_FLAGS, ~"+D").
 
 %% ------------------------------------------------------------------
 %% Types
@@ -43,6 +42,7 @@
 -type run_in_terminal() :: edb_dap_reverse_request_run_in_terminal:arguments().
 -type config() :: #{
     nameDomain := shortnames | longnames,
+    nodeInitCodeInEnvVar => binary(),
     stripSourcePrefix => binary(),
     timeout => non_neg_integer()
 }.
@@ -66,6 +66,7 @@ arguments_template() ->
         config =>
             #{
                 nameDomain => edb_dap_parse:atoms([shortnames, longnames]),
+                nodeInitCodeInEnvVar => {optional, edb_dap_parse:binary()},
                 stripSourcePrefix => {optional, edb_dap_parse:binary()},
                 timeout => {optional, edb_dap_parse:non_neg_integer()}
             },
@@ -146,8 +147,8 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
     StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
 
     Env0 = maps:get(env, RunInTerminal0, #{}),
-    Env1 = update_erl_flags_env(Env0),
-    Env2 = update_code_to_inject_info_in_env(CodeToInject, Env1),
+    Env1 = update_code_to_inject_info_in_env(CodeToInject, Config, Env0),
+    Env2 = prepend_to_env(~"ERL_AFLAGS", ~"+D", Env1),
     RunInTerminal1 = RunInTerminal0#{env => Env2},
 
     Cwd = maps:get(cwd, RunInTerminal1),
@@ -162,19 +163,39 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
         response => edb_dap_request:success()
     }.
 
--spec update_erl_flags_env(Env) -> Env when
+-spec prepend_to_env(Key, Val, Env) -> Env when
+    Key :: binary(),
+    Val :: iodata(),
     Env :: #{binary() => binary() | null}.
-update_erl_flags_env(Env = #{~"ERL_FLAGS" := ERL_FLAGS0}) when ERL_FLAGS0 /= null ->
-    ERL_FLAGS1 = <<ERL_FLAGS0/binary, ~" "/binary, ?ERL_FLAGS/binary>>,
-    Env#{~"ERL_FLAGS" => ERL_FLAGS1};
-update_erl_flags_env(Env) ->
-    Env#{~"ERL_FLAGS" => ?ERL_FLAGS}.
+prepend_to_env(Key, Val, Env) ->
+    case Env of
+        #{Key := PrevVal} when PrevVal /= null ->
+            NewVal = io_lib:format("~s ~s", [Val, PrevVal]),
+            Env#{Key => erlang:iolist_to_binary(NewVal)};
+        _ ->
+            Env#{Key => erlang:iolist_to_binary(Val)}
+    end.
 
--spec update_code_to_inject_info_in_env(CodeToInject, Env) -> Env when
+-spec update_code_to_inject_info_in_env(CodeToInject, Config, Env) -> Env when
     CodeToInject :: binary(),
+    Config :: config(),
     Env :: #{binary() => binary() | null}.
-update_code_to_inject_info_in_env(CodeToInject, Env) ->
-    Env#{~"EDB_DAP_DEBUGGEE_INIT" => CodeToInject}.
+update_code_to_inject_info_in_env(CodeToInject, #{nodeInitCodeInEnvVar := Dest}, Env) ->
+    case Env of
+        #{Dest := _} ->
+            edb_dap_request:abort(
+                edb_dap_request:precondition_violation(~"'config.nodeInitCodeInEnvVar' conflicts with 'config.env'")
+            );
+        _ ->
+            Env#{Dest => CodeToInject}
+    end;
+update_code_to_inject_info_in_env(CodeToInject, _Config, Env) ->
+    % In ERL_FLAGS/ERL_AFLAGS, words are split by whitespace, subject to extra rules:
+    %   - Things between single/double quotes are considered a single word (without the quotes)
+    %   - The character that comes after a `\` is added verbatim to the current word.
+    % So we use `\` to escape whatespace and quotes
+    CodeToInjectEscaped = re:replace(CodeToInject, ~"[\s'\"]", ~"\\\\&", [global]),
+    prepend_to_env(~"ERL_AFLAGS", io_lib:format(~"-eval ~s", [CodeToInjectEscaped]), Env).
 
 -spec unsupported_by_client(What, ClientInfo) -> edb_dap_request:error_reaction() when
     What :: binary(),

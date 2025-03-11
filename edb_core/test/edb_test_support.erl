@@ -75,6 +75,7 @@ random_node_name(Prefix) ->
         cookie => atom(),
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
+        env => #{binary() => binary()},
         extra_args => [binary() | string()],
         modules => [module_spec()]
     }.
@@ -83,6 +84,7 @@ random_node_name(Prefix) ->
     #{
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
+        env => #{binary() => binary()},
         extra_args => [binary() | string()],
         modules => [module_spec()]
     }.
@@ -163,7 +165,8 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     PeerOpts0 = #{
         % TCP port, 0 stands for "automatic selection"
         connection => 0,
-        args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args]
+        args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args],
+        env => [{binary_to_list(K), binary_to_list(V)} || K := V <- maps:get(env, Opts, #{})]
     },
     PeerOpts1 =
         case NodeInfo of
