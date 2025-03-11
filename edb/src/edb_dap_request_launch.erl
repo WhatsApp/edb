@@ -169,11 +169,19 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
     Env :: #{binary() => binary() | null}.
 prepend_to_env(Key, Val, Env) ->
     case Env of
+        #{Key := null} ->
+            Env#{Key => erlang:iolist_to_binary(Val)};
         #{Key := PrevVal} when PrevVal /= null ->
             NewVal = io_lib:format("~s ~s", [Val, PrevVal]),
             Env#{Key => erlang:iolist_to_binary(NewVal)};
         _ ->
-            Env#{Key => erlang:iolist_to_binary(Val)}
+            % @fb-only
+            case os:getenv(binary_to_list(Key)) of
+                false ->
+                    prepend_to_env(Key, Val, Env#{Key => null});
+                EnvVal ->
+                    prepend_to_env(Key, Val, Env#{Key => erlang:list_to_binary(EnvVal)})
+            end
     end.
 
 -spec update_code_to_inject_info_in_env(CodeToInject, Config, Env) -> Env when
