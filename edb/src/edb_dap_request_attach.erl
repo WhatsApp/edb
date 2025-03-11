@@ -34,7 +34,7 @@
 %%% not part of the DAP specification itself.
 
 -export_type([arguments/0, config/0]).
--type arguments() :: config() | #{config := config()}.
+-type arguments() :: #{config := config()}.
 
 -type config() :: #{
     node := node(),
@@ -46,32 +46,36 @@
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
     #{
-        node => edb_dap_parse:atom(),
-        cookie => {optional, edb_dap_parse:atom()},
-        cwd => edb_dap_parse:binary(),
-        stripSourcePrefix => {optional, edb_dap_parse:binary()}
+        config => #{
+            node => edb_dap_parse:atom(),
+            cookie => {optional, edb_dap_parse:atom()},
+            cwd => edb_dap_parse:binary(),
+            stripSourcePrefix => {optional, edb_dap_parse:binary()}
+        }
     }.
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, config()} | {error, Reason :: binary()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    parse(Args).
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, allow_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: config().
 handle(State0 = #{state := initialized}, Args) ->
-    AttachArgs = maps:without([cwd, stripSourcePrefix], Args),
+    #{config := Config} = Args,
+    AttachArgs = maps:without([cwd, stripSourcePrefix], Config),
     case edb:attach(AttachArgs) of
         ok ->
             ok = edb:pause(),
-            Cwd = maps:get(cwd, Args),
-            StripSourcePrefix = maps:get(stripSourcePrefix, Args, ~""),
+            Cwd = maps:get(cwd, Config),
+            StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
             State1 = State0#{
                 state => configuring,
-                node => maps:get(node, Args),
+                node => maps:get(node, Config),
                 cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
             },
             #{
@@ -88,18 +92,6 @@ handle(_InvalidState, _Args) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec parse(term()) -> {ok, config()} | {error, HumarReadableReason :: binary()}.
-parse(RobustConfig = #{config := _}) ->
-    Template = #{config => arguments_template()},
-    Filtered = maps:with([config], RobustConfig),
-    case edb_dap_parse:parse(Template, Filtered, reject_unknown) of
-        {ok, #{config := Parsed}} -> {ok, Parsed};
-        Error = {error, _} -> Error
-    end;
-parse(FlatConfig) ->
-    Template = arguments_template(),
-    edb_dap_parse:parse(Template, FlatConfig, allow_unknown).
-
 -spec handle_error(Reason) -> edb_dap_request:reaction() when
     Reason ::
         attachment_in_progress

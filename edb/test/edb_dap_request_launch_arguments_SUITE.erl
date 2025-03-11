@@ -28,13 +28,11 @@
 
 %% Test cases
 -export([
-    test_validate_old_style/1,
     test_validate/1
 ]).
 
 all() ->
     [
-        test_validate_old_style,
         test_validate
     ].
 
@@ -42,115 +40,58 @@ all() ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 
-test_validate_old_style(_Config) ->
-    Minimal = #{
-        launchCommand => #{
-            command => ~"foo",
-            cwd => ~"/blah"
-        },
-        targetNode => #{
-            name => ~"some_node@localhost"
-        }
-    },
-    ExpectedMinimal = #{
-        launchCommand => #{
-            command => ~"foo",
-            cwd => ~"/blah"
-        },
-        targetNode => #{
-            name => 'some_node@localhost'
-        }
-    },
-
-    ?assertEqual(
-        {ok, ExpectedMinimal},
-        edb_dap_request_launch:parse_arguments(Minimal)
-    ),
-
-    Maximal = #{
-        irrelevantStuff => true,
-
-        launchCommand => #{
-            cwd => ~"/foo/bar",
-            command => ~"run-stuff.sh",
-            arguments => [
-                ~"arg1",
-                ~"arg2",
-                ~"arg3"
-            ]
-        },
-        targetNode => #{
-            name => ~"test42-123-atn@localhost",
-            cookie => ~"connect_cookie",
-            type => ~"shortnames"
-        },
-        timeout => 300,
-        stripSourcePrefix => ~"blah/blah"
-    },
-
-    ExpectedMaximal = #{
-        launchCommand => #{
-            cwd => ~"/foo/bar",
-            command => ~"run-stuff.sh",
-            arguments => [
-                ~"arg1",
-                ~"arg2",
-                ~"arg3"
-            ]
-        },
-        targetNode => #{
-            name => 'test42-123-atn@localhost',
-            cookie => connect_cookie,
-            type => shortnames
-        },
-        timeout => 300,
-        stripSourcePrefix => ~"blah/blah"
-    },
-
-    ?assertEqual(
-        {ok, ExpectedMaximal},
-        edb_dap_request_launch:parse_arguments(Maximal)
-    ).
-
 test_validate(_Config) ->
     Minimal = #{
+        runInTerminal => #{
+            args => [~"foo"],
+            cwd => ~"/blah"
+        },
         config => #{
-            launchCommand => #{
-                command => ~"foo",
-                cwd => ~"/blah"
-            },
             targetNode => #{
-                name => ~"some_node@localhost"
+                name => ~"some_node@localhost",
+                cookie => ~"connect_cookie"
             }
         }
     },
+
     ExpectedMinimal = #{
-        launchCommand => #{
-            command => ~"foo",
+        runInTerminal => #{
+            args => [~"foo"],
             cwd => ~"/blah"
         },
-        targetNode => #{
-            name => 'some_node@localhost'
+        config => #{
+            targetNode => #{
+                name => 'some_node@localhost',
+                cookie => connect_cookie
+            }
         }
     },
+
     ?assertEqual(
         {ok, ExpectedMinimal},
-        edb_dap_request_launch:parse_arguments(Minimal)
+        edb_dap_request_launch:parse_arguments(Minimal#{})
     ),
 
     Maximal = #{
-        irrelevantStuff => true,
+        irrelevantStuff => ~"blah",
 
-        config => #{
-            launchCommand => #{
-                cwd => ~"/foo/bar",
-                command => ~"run-stuff.sh",
-                arguments => [
-                    ~"arg1",
-                    ~"arg2",
-                    ~"arg3"
-                ]
+        runInTerminal => #{
+            kind => ~"integrated",
+            title => ~"Some title",
+            cwd => ~"/foo/bar",
+            args => [
+                ~"run-stuff.sh",
+                ~"arg1",
+                ~"arg2",
+                ~"arg3"
+            ],
+            env => #{
+                ~"SOME_ENV" => ~"some value",
+                ~"ANOTHER_ENV" => null
             },
+            argsCanBeInterpretedByShell => true
+        },
+        config => #{
             targetNode => #{
                 name => ~"test42-123-atn@localhost",
                 cookie => ~"connect_cookie",
@@ -160,25 +101,34 @@ test_validate(_Config) ->
             stripSourcePrefix => ~"blah/blah"
         }
     },
-
     ExpectedMaximal = #{
-        launchCommand => #{
+        runInTerminal => #{
+            kind => integrated,
+            title => ~"Some title",
             cwd => ~"/foo/bar",
-            command => ~"run-stuff.sh",
-            arguments => [
+            args => [
+                ~"run-stuff.sh",
                 ~"arg1",
                 ~"arg2",
                 ~"arg3"
-            ]
+            ],
+            env => #{
+                ~"SOME_ENV" => ~"some value",
+                ~"ANOTHER_ENV" => null
+            },
+            argsCanBeInterpretedByShell => true
         },
-        targetNode => #{
-            name => 'test42-123-atn@localhost',
-            cookie => connect_cookie,
-            type => shortnames
-        },
-        timeout => 300,
-        stripSourcePrefix => ~"blah/blah"
+        config => #{
+            targetNode => #{
+                name => 'test42-123-atn@localhost',
+                cookie => connect_cookie,
+                type => shortnames
+            },
+            timeout => 300,
+            stripSourcePrefix => ~"blah/blah"
+        }
     },
+
     ?assertEqual(
         {ok, ExpectedMaximal},
         edb_dap_request_launch:parse_arguments(Maximal)

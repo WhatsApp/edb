@@ -91,7 +91,7 @@
         state := terminating
     }.
 
--export_type([state/0]).
+-export_type([state/0, client_info/0]).
 
 -type action() ::
     {event, edb_dap_event:event()}

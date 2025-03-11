@@ -65,9 +65,11 @@ test_attaches_if_node_is_alive(Config) ->
 
     % Attach to the node
     #{success := true} = edb_dap_test_client:attach(Client, #{
-        node => DebuggeeNode,
-        cookie => Cookie,
-        cwd => cwd(Config)
+        config => #{
+            node => DebuggeeNode,
+            cookie => Cookie,
+            cwd => cwd(Config)
+        }
     }),
 
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
@@ -83,8 +85,10 @@ test_fails_to_attach_if_node_is_down(Config) ->
 
     % Attaching fails
     #{success := false, body := #{error := #{format := ~"Node not found"}}} = edb_dap_test_client:attach(Client, #{
-        node => DownNode,
-        cwd => cwd(Config)
+        config => #{
+            node => DownNode,
+            cwd => cwd(Config)
+        }
     }),
 
     Config.
@@ -101,16 +105,20 @@ test_fails_to_attach_if_wrong_cookie_is_given(Config) ->
 
     % Attach to the node
     #{success := false, body := #{error := #{format := ~"Node not found"}}} = edb_dap_test_client:attach(Client, #{
-        node => DebuggeeNode,
-        cookie => WrongCookie,
-        cwd => cwd(Config)
+        config => #{
+            node => DebuggeeNode,
+            cookie => WrongCookie,
+            cwd => cwd(Config)
+        }
     }),
 
     % But we can still succeed if we use the right cookie
     #{success := true} = edb_dap_test_client:attach(Client, #{
-        node => DebuggeeNode,
-        cookie => Cookie,
-        cwd => cwd(Config)
+        config => #{
+            node => DebuggeeNode,
+            cookie => Cookie,
+            cwd => cwd(Config)
+        }
     }),
 
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
@@ -127,14 +135,16 @@ test_validates_input(Config) ->
     % Try to attach with bad arguments
     #{
         success := false,
-        body := #{error := #{format := ~"Invalid parameters: on field 'stripSourcePrefix': invalid value"}}
+        body := #{error := #{format := ~"Invalid parameters: on field 'config.stripSourcePrefix': invalid value"}}
     } =
         % eqwalizer:ignore: We are actually trying to send a request with the wrong type
         edb_dap_test_client:attach(Client, #{
-            node => DebuggeeNode,
-            cookie => Cookie,
-            cwd => cwd(Config),
-            stripSourcePrefix => 42
+            config => #{
+                node => DebuggeeNode,
+                cookie => Cookie,
+                cwd => cwd(Config),
+                stripSourcePrefix => 42
+            }
         }),
 
     ok.

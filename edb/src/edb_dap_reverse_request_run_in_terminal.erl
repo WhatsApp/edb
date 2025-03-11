@@ -33,21 +33,24 @@
 -type arguments() :: #{
     %%  What kind of terminal to launch. Defaults to `integrated` if not specified.
     %% Values: 'integrated', 'external'
-    kind => binary(),
+    kind => integrated | external,
 
     %% Title of the terminal.
     title => binary(),
 
     %% Working directory for the command. For non-empty, valid paths this
     %% typically results in execution of a change directory command.
-    cwd => binary(),
+    cwd := binary(),
 
     %% List of arguments. The first argument is the command to run.
     args := [binary()],
 
     %% Environment key-value pairs that are added to or removed from the default
     %% environment.
-    env => #{binary() => binary()},
+    %%
+    %% NB. The atom `null` has a special meaning in the `json` module, so it will get
+    %% encoded/decoded as a JSON `null` (instead of the json string `"null"`)
+    env => #{binary() => binary() | null},
 
     %% This property should only be set if the corresponding capability
     %% `supportsArgsCanBeInterpretedByShell` is true. If the client uses an
