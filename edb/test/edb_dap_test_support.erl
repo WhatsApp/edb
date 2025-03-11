@@ -23,7 +23,7 @@
 
 %% Public API
 -export([start_test_client/1]).
--export([start_session/4]).
+-export([start_session_via_attach/4, start_session_via_launch/2]).
 -export([set_breakpoints/3]).
 -export([spawn_and_wait_for_bp/3, wait_for_bp/1]).
 -export([configure/2]).
@@ -50,12 +50,12 @@ start_test_client(Config) ->
     Args = ["dap"],
     edb_dap_test_client:start_link(Executable, Args).
 
--spec start_session(Config, Node, Cookie, Cwd) -> {ok, client()} when
+-spec start_session_via_attach(Config, Node, Cookie, Cwd) -> {ok, client()} when
     Config :: ct_suite:ct_config(),
     Node :: node(),
     Cookie :: atom() | no_cookie,
     Cwd :: binary().
-start_session(Config, Node, Cookie, Cwd) ->
+start_session_via_attach(Config, Node, Cookie, Cwd) ->
     {ok, Client} = start_test_client(Config),
 
     AdapterID = atom_to_binary(?MODULE),
@@ -76,6 +76,45 @@ start_session(Config, Node, Cookie, Cwd) ->
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
     {ok, Client}.
+
+-spec start_session_via_launch(Config, StartPeerOpts) -> {ok, Client, PeerInfo} when
+    Config :: ct_suite:ct_config(),
+    StartPeerOpts :: edb_test_support:start_peer_node_opts(),
+    Client :: client(),
+    PeerInfo :: edb_test_support:start_peer_result().
+start_session_via_launch(Config, StartPeerOpts) ->
+    {ok, Client} = start_test_client(Config),
+
+    AdapterID = atom_to_binary(?MODULE),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => AdapterID,
+        supportsRunInTerminalRequest => true
+    }),
+
+    RunInTerminal0 = #{
+        cwd => edb_test_support:random_srcdir(Config),
+        args => [~"erl"]
+    },
+    RunInTerminal1 =
+        case StartPeerOpts of
+            #{env := PeerEnv} -> RunInTerminal0#{env => PeerEnv};
+            _ -> RunInTerminal0
+        end,
+
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        runInTerminal => RunInTerminal1,
+        config => #{
+            nameDomain => shortnames
+        }
+    }),
+    {ok, [#{arguments := #{env := Env}}]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
+    {ok, PeerInfo} = edb_test_support:start_peer_node(Config, StartPeerOpts#{
+        env => #{atom_to_binary(K) => V || K := V <- Env}
+    }),
+
+    {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
+
+    {ok, Client, PeerInfo}.
 
 -spec configure(Client, [BreakpointSpec]) -> ok when
     Client :: client(),

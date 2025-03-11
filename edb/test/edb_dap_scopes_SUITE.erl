@@ -69,7 +69,7 @@ test_reports_locals_scope(Config) ->
                 ]
             }
         ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
@@ -113,7 +113,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
                 ]
             }
         ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
@@ -160,7 +160,7 @@ test_reports_messages_scope(Config) ->
                 ]
             }
         ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of

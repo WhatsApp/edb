@@ -69,7 +69,7 @@ escript_dap(Config) ->
         #{modules => [{filename, "factorial.erl"}]}
     ),
 
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     Module = factorial,
     ok = edb_dap_test_support:configure(Client, [{SourcePath, [{line, 32}]}]),

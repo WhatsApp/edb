@@ -52,7 +52,7 @@ end_per_testcase(_TestCase, _Config) ->
 test_queries_fail_until_configured(Config) ->
     {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} =
         edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     % At this point we are not configured, so querying should fail
     #{success := false, body := #{error := #{format := ~"Request sent when it was not expected"}}} =
@@ -82,7 +82,7 @@ test_setting_breakpoints_work_before_and_after_configuration(Config) ->
             ]
         }),
 
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     % Set an initial breakpoint during configuration
     ok = edb_dap_test_support:set_breakpoints(Client, FooSrc, [5]),

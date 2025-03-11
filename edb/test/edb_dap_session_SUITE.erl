@@ -137,7 +137,7 @@ test_fails_if_invalid_launch_config(Config) ->
 
 test_handles_disconnect_request(Config) ->
     {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(Config, #{}),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
     ?assertMatch(
@@ -151,7 +151,7 @@ test_terminates_when_node_goes_down(Config) ->
     {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
         Config, #{}
     ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
     ok = edb_dap_test_support:configure(Client, []),
 
     edb_test_support:stop_peer(Peer),
@@ -168,7 +168,7 @@ test_terminates_when_node_goes_down_while_configuring(Config) ->
     {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
         Config, #{}
     ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     edb_test_support:stop_peer(Peer),
 

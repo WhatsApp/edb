@@ -66,7 +66,7 @@ test_can_pause_and_continue(Config) ->
                 ]
             }
         ),
-    {ok, Client} = edb_dap_test_support:start_session(Config, Node, Cookie, Cwd),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
     {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
 

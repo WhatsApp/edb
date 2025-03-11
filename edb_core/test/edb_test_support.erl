@@ -23,9 +23,11 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% Peer nodes
--export_type([peer/0, start_peer_node_opts/0, start_peer_no_dist_opts/0, module_spec/0]).
+-export_type([peer/0, start_peer_node_opts/0, start_peer_result/0]).
+-export_type([start_peer_no_dist_opts/0, start_peer_no_dist_result/0, module_spec/0]).
 -export([start_peer_node/2, start_peer_no_dist/2, stop_peer/1, stop_all_peers/0]).
 -export([random_node/1, random_node/2]).
+-export([random_srcdir/1]).
 
 %% Event collection
 -export([start_event_collector/0, collected_events/0, stop_event_collector/0, event_collector_send_sync/0]).
@@ -67,6 +69,18 @@ random_node_name(Prefix) when is_binary(Prefix) ->
 random_node_name(Prefix) ->
     list_to_atom(peer:random_name(Prefix)).
 
+-spec random_srcdir(CtConfig) -> Dir when
+    CtConfig :: ct_suite:ct_config(),
+    Dir :: binary().
+random_srcdir(CtConfig) ->
+    PrivDir = ?config(priv_dir, CtConfig),
+    UniqName = lists:concat([os:getpid(), "-", erlang:unique_integer([positive])]),
+    WorkDir = filename:join(PrivDir, UniqName),
+    SrcDir = filename:join(WorkDir, "src"),
+    ok = file:make_dir(WorkDir),
+    ok = file:make_dir(SrcDir),
+    file_name_all_to_binary(SrcDir).
+
 -type module_spec() :: {filename, file:name_all()} | {filepath, file:filename_all()} | {source, iodata()}.
 
 -type start_peer_node_opts() ::
@@ -77,8 +91,17 @@ random_node_name(Prefix) ->
         enable_debugging_mode => boolean(),
         env => #{binary() => binary()},
         extra_args => [binary() | string()],
+        srcdir => binary(),
         modules => [module_spec()]
     }.
+
+-type start_peer_result() :: #{
+    peer := peer(),
+    node := node(),
+    cookie := atom(),
+    srcdir => binary(),
+    modules := #{module() => FilePath :: binary()}
+}.
 
 -type start_peer_no_dist_opts() ::
     #{
@@ -86,17 +109,20 @@ random_node_name(Prefix) ->
         enable_debugging_mode => boolean(),
         env => #{binary() => binary()},
         extra_args => [binary() | string()],
+        srcdir => binary(),
         modules => [module_spec()]
     }.
+
+-type start_peer_no_dist_result() :: #{
+    peer := peer(),
+    srcdir := binary(),
+    modules := #{module() => FilePath :: binary()}
+}.
 
 -spec start_peer_node(CtConfig, Opts) -> {ok, Result} when
     CtConfig :: ct_suite:ct_config(),
     Opts :: start_peer_node_opts(),
-    Peer :: peer(),
-    Node :: node(),
-    Cookie :: atom(),
-    FilePath :: binary(),
-    Result :: #{peer := Peer, node := Node, cookie := Cookie, srcdir => FilePath, modules := #{module() => FilePath}}.
+    Result :: start_peer_result().
 start_peer_node(CtConfig, Opts = #{node := Node}) when is_atom(Node) ->
     Cookie =
         case Opts of
@@ -126,9 +152,7 @@ start_peer_node(CtConfig, Opts0) ->
 -spec start_peer_no_dist(CtConfig, Opts) -> {ok, Result} when
     CtConfig :: ct_suite:ct_config(),
     Opts :: start_peer_no_dist_opts(),
-    Peer :: peer(),
-    FilePath :: binary(),
-    Result :: #{peer := Peer, srcdir := FilePath, modules := #{module() => FilePath}}.
+    Result :: start_peer_no_dist_result().
 start_peer_no_dist(CtConfig, Opts) ->
     {ok, Peer, Workdir, Modules} = gen_start_peer(CtConfig, no_dist, Opts),
     % Sanity-check
@@ -203,12 +227,15 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         false ->
             ok
     end,
-    PrivDir = ?config(priv_dir, CtConfig),
-    WorkDir = filename:join(PrivDir, peer:call(Peer, os, getpid, [])),
-    SrcDir = filename:join(WorkDir, "src"),
+    SrcDir =
+        case Opts of
+            #{srcdir := GivenSrcDir} ->
+                GivenSrcDir;
+            _ ->
+                random_srcdir(CtConfig)
+        end,
+    WorkDir = file_name_all_to_string(filename:dirname(SrcDir)),
     EbinDir = filename:join(WorkDir, "ebin"),
-    ok = file:make_dir(WorkDir),
-    ok = file:make_dir(SrcDir),
     ok = file:make_dir(EbinDir),
     true = peer:call(Peer, code, add_patha, [EbinDir]),
 
@@ -219,7 +246,7 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
             {ok, Module, BeamFilePath} <- [compile_module(CtConfig, WorkDir, ModuleSpec)]
         },
 
-    {ok, Peer, file_name_all_to_binary(SrcDir), Modules}.
+    {ok, Peer, SrcDir, Modules}.
 
 -spec compile_module(CtConfig, PeerWorkdir, ModuleSpec) -> {ok, Module, FilePath} when
     CtConfig :: ct_suite:ct_config(),
