@@ -48,6 +48,7 @@
     disconnect/2
 ]).
 -export([wait_for_event/2]).
+-export([wait_for_reverse_request/2, respond_success/3]).
 
 %% gen_server callbacks
 -export([
@@ -57,13 +58,16 @@
     handle_info/2
 ]).
 
+-type awaitable_key() :: {event, edb_dap:event_type()} | {reverse_request, edb_dap:command()}.
+-type awaitable() :: edb_dap:event() | edb_dap:request().
+
 -type state() :: #{
     io := port(),
     buffer := binary(),
     requests := [{pos_integer(), gen_server:from()}],
     seq := pos_integer(),
-    waiting := #{binary() => [gen_server:from()]},
-    events := #{binary() => [edb_dap:event()]}
+    waiting := #{awaitable_key() => [gen_server:from()]},
+    received := #{awaitable_key() => [awaitable()]}
 }.
 
 -export_type([client/0]).
@@ -150,10 +154,22 @@ disconnect(Client, Args) ->
     Request = #{type => request, command => ~"disconnect", arguments => Args},
     call(Client, Request).
 
--spec wait_for_event(edb_dap:event_type(), client()) -> ok.
+-spec wait_for_event(edb_dap:event_type(), client()) -> {ok, [edb_dap:event()]}.
 wait_for_event(Type, Client) ->
     WaitTimeoutSecs = 10_000,
-    call(Client, {'$wait_for_event', Type}, WaitTimeoutSecs).
+    call(Client, {wait_for, {event, Type}}, WaitTimeoutSecs).
+
+-spec wait_for_reverse_request(edb_dap:command(), client()) -> {ok, [edb_dap:request()]}.
+wait_for_reverse_request(Type, Client) ->
+    WaitTimeoutSecs = 10_000,
+    call(Client, {wait_for, {reverse_request, Type}}, WaitTimeoutSecs).
+
+-spec respond_success(Client, ReverseRequest, ResponseBody) -> ok when
+    Client :: client(),
+    ReverseRequest :: edb_dap:request(),
+    ResponseBody :: edb_dap:body().
+respond_success(Client, ReverseRequest, ResponseBody) ->
+    call(Client, {respond, true, ReverseRequest, ResponseBody}).
 
 -spec init(#{executable := file:filename_all(), args := [string()]}) -> {ok, state()}.
 init(#{executable := Executable, args := Args}) ->
@@ -165,16 +181,19 @@ init(#{executable := Executable, args := Args}) ->
         requests => [],
         seq => 1,
         waiting => #{},
-        events => #{}
+        received => #{}
     },
     {ok, State}.
 
 -type call_request() ::
-    {'$wait_for_event', edb_dap:event_type()} | request_no_seq().
+    {wait_for, awaitable_key()}
+    | {respond, Success :: boolean(), edb_dap:request(), edb_dap:body()}
+    | request_no_seq().
 
 -spec call
     (client(), request_no_seq()) -> edb_dap:response();
-    (client(), {'$wait_for_event', edb_dap:event_type()}) -> {ok, [edb_dap:event()]}.
+    (client(), {wait_for, awaitable_key(), edb_dap:event_type()}) -> {ok, [awaitable()]};
+    (client(), {respond, Success :: boolean(), edb_dap:request(), edb_dap:body()}) -> ok.
 call(Client, Request) ->
     gen_server:call(Client, Request).
 
@@ -184,14 +203,22 @@ call(Client, Request, Timeout) ->
 
 -spec handle_call(call_request(), gen_server:from(), state()) ->
     {noreply, state()} | {stop | reply, term(), state()}.
-handle_call({'$wait_for_event', Type}, From, #{waiting := Waiting, events := EventsReceived} = State) ->
-    case maps:get(Type, EventsReceived, []) of
-        [] ->
-            NewWaiting = Waiting#{Type => [From | maps:get(Type, Waiting, [])]},
-            {noreply, State#{waiting => NewWaiting}};
-        Events ->
-            {reply, {ok, Events}, State#{events := EventsReceived#{Type => []}}}
-    end;
+handle_call({wait_for, Key}, From, State0) ->
+    something_wanted(Key, From, State0);
+handle_call({respond, Success, Request, Body}, _From, #{io := IO, seq := StateSeq} = State0) ->
+    #{seq := Seq, command := Command} = Request,
+    Response = #{
+        type => response,
+        command => Command,
+        success => Success,
+        body => Body,
+        request_seq => Seq,
+        seq => StateSeq
+    },
+    Data = edb_dap:encode_frame(edb_dap:frame(Response)),
+    send(IO, Data),
+    State1 = State0#{seq => StateSeq + 1},
+    {reply, ok, State1};
 handle_call(#{command := _Command} = Request, From, #{io := IO, requests := Requests, seq := Seq} = State) ->
     Data = edb_dap:encode_frame(edb_dap:frame(Request#{seq => Seq})),
     send(IO, Data),
@@ -207,24 +234,10 @@ cast(Client, Request) ->
     gen_server:cast(Client, Request).
 
 -spec handle_cast(cast_request(), state()) -> {noreply, state()}.
-handle_cast({event_received, #{event := Type} = Event}, #{waiting := Waiting, events := Events} = State) ->
-    case maps:get(Type, Waiting, []) of
-        [] ->
-            NewEvents = Events#{Type => [Event | maps:get(Type, Events, [])]},
-            {noreply, State#{events => NewEvents}};
-        WaitingForEvent ->
-            [gen_server:reply(Client, {ok, [Event]}) || Client <- WaitingForEvent],
-            {noreply, State#{waiting => Waiting#{Type => []}}}
-    end;
-handle_cast({request_received, Request}, #{io := IO, seq := StateSeq} = State) ->
-    #{seq := Seq, command := Command} = Request,
-    % Just send empty responses to reverse requests for now
-    Response = #{
-        type => response, command => Command, success => true, body => #{}, request_seq => Seq, seq => StateSeq
-    },
-    Data = edb_dap:encode_frame(edb_dap:frame(Response)),
-    send(IO, Data),
-    {noreply, State};
+handle_cast({event_received, Event}, State) ->
+    something_received(Event, State);
+handle_cast({request_received, Request}, State) ->
+    something_received(Request, State);
 handle_cast({response_received, Response}, #{requests := Requests} = State) ->
     #{request_seq := Seq} = Response,
     {value, {Seq, Client}, NewRequests} = lists:keytake(Seq, 1, Requests),
@@ -256,3 +269,38 @@ handle_message_async(#{type := response} = Message) ->
     cast(self(), {response_received, Message});
 handle_message_async(#{type := event} = Message) ->
     cast(self(), {event_received, Message}).
+
+-spec something_received(What, state()) -> {noreply, state()} when
+    What :: awaitable().
+something_received(What, State0) ->
+    Key =
+        case What of
+            #{type := event, event := Type} -> {event, Type};
+            #{type := request, command := Type} -> {reverse_request, Type}
+        end,
+
+    #{waiting := Waiting, received := Received} = State0,
+    State1 =
+        case maps:get(Key, Waiting, []) of
+            [] ->
+                NewReceived = Received#{Key => [What | maps:get(Key, Received, [])]},
+                State0#{received => NewReceived};
+            WaitingForThis ->
+                [gen_server:reply(Client, {ok, [What]}) || Client <- WaitingForThis],
+                State0#{waiting => Waiting#{Key => []}}
+        end,
+    {noreply, State1}.
+
+-spec something_wanted(Key, From, state()) -> {noreply, state()} | {reply, {ok, [What]}, state()} when
+    Key :: awaitable_key(),
+    From :: gen_server:from(),
+    What :: awaitable().
+something_wanted(Key, From, State0) ->
+    #{waiting := Waiting, received := Received} = State0,
+    case maps:get(Key, Received, []) of
+        [] ->
+            NewWaiting = Waiting#{Key => [From | maps:get(Key, Waiting, [])]},
+            {noreply, State0#{waiting => NewWaiting}};
+        AlreadyReceived ->
+            {reply, {ok, AlreadyReceived}, State0#{received := Received#{Key => []}}}
+    end.

@@ -75,7 +75,7 @@ escript_dap(Config) ->
     ok = edb_dap_test_support:configure(Client, [{SourcePath, [{line, 32}]}]),
 
     Response3 = edb_dap_test_client:threads(Client),
-    ?assertMatch(#{request_seq := 5, type := response, success := true}, Response3),
+    ?assertMatch(#{request_seq := 6, type := response, success := true}, Response3),
 
     Line = 32,
     ok = edb_dap_test_support:set_breakpoints(Client, SourcePath, [Line]),
@@ -94,7 +94,7 @@ escript_dap(Config) ->
     Response5 = edb_dap_test_client:stack_trace(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
-            request_seq := 7,
+            request_seq := 8,
             type := response,
             success := true,
             body := #{stackFrames := _}
@@ -140,7 +140,7 @@ escript_dap(Config) ->
                     }
                 ]
             },
-            request_seq := 8
+            request_seq := 9
         },
         Response6
     ),
@@ -162,7 +162,7 @@ escript_dap(Config) ->
             body := #{
                 variables := _
             },
-            request_seq := 9
+            request_seq := 10
         },
         Response7
     ),
@@ -172,7 +172,7 @@ escript_dap(Config) ->
     Response8 = edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
-            request_seq := 11,
+            request_seq := 12,
             type := response,
             success := true,
             body := #{allThreadsContinued := true}
@@ -185,7 +185,7 @@ escript_dap(Config) ->
         #{
             command := ~"disconnect",
             type := response,
-            request_seq := 12,
+            request_seq := 13,
             success := true
         },
         Response9

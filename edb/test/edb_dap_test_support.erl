@@ -75,8 +75,10 @@ start_session(Config, Node, Cookie, Cwd) ->
     }),
     ?assertMatch(#{request_seq := 2, type := response, success := true}, Response2),
 
-    {ok, InitializedEvent} = edb_dap_test_client:wait_for_event(~"initialized", Client),
-    ?assertMatch([#{event := ~"initialized"}], InitializedEvent),
+    {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
+    edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
+
+    {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
     {ok, Client}.
 
