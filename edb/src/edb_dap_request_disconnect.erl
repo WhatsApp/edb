@@ -24,6 +24,8 @@
 
 -export([parse_arguments/1, handle/2]).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -45,7 +47,7 @@
     % If unspecified, the debuggee should resume execution.
     % The attribute is only honored by a debug adapter if the corresponding
     % capability `supportSuspendDebuggee` is true.
-    supportSuspendDebuggee => boolean()
+    suspendDebuggee => boolean()
 }.
 
 -export_type([arguments/0]).
@@ -60,10 +62,124 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(_State, _Args) ->
-    % TODO(T206222651) make the behaviour compliant
+handle(State, _Args) ->
     ok = edb:terminate(),
+
+    case shouldTerminateDebuggee(State) of
+        true ->
+            Victims = get_victims(State),
+            kill_victims(Victims);
+        false ->
+            ok
+    end,
+
     #{
         response => edb_dap_request:success(),
         actions => [terminate]
     }.
+
+%% ------------------------------------------------------------------
+%% Helpers
+%% ------------------------------------------------------------------
+
+-type victims() ::
+    none
+    | #{
+        node := node(),
+        process_id := number(),
+        shell_process_id => number()
+    }.
+
+-spec shouldTerminateDebuggee(State) -> boolean() when
+    State :: edb_dap_server:state().
+shouldTerminateDebuggee(#{type := #{request := launch}}) ->
+    true;
+shouldTerminateDebuggee(_) ->
+    false.
+
+-spec get_victims(State) -> Victims when
+    State :: edb_dap_server:state(),
+    Victims :: victims().
+get_victims(#{node := Node, type := AttachType}) ->
+    Victims0 = maps:with([process_id, shell_process_id], AttachType),
+    Victims1 = Victims0#{node => Node},
+    Victims1;
+get_victims(_State) ->
+    none.
+
+-spec kill_victims(Victims) -> ok when
+    Victims :: victims().
+kill_victims(none) ->
+    ok;
+kill_victims(Victims = #{node := Node, process_id := ProcessId}) ->
+    KillReqTimeout = 5,
+    case try_async(fun() -> kill_node(Node) end, KillReqTimeout * 1_000) of
+        ok ->
+            ok;
+        timeout ->
+            ?LOG_WARNING("erlang:halt() on debuggee timed out after ~p secs", [KillReqTimeout]),
+            try_async(fun() -> kill_os_process(ProcessId, force) end, 1_000)
+    end,
+
+    case Victims of
+        #{shell_process_id := ShellProcessId} ->
+            case try_async(fun() -> kill_os_process(ShellProcessId, dont_force) end, KillReqTimeout * 1_000) of
+                ok ->
+                    ok;
+                timeout ->
+                    ?LOG_WARNING("Killing shell process ~p timed-out after ~p secs", [ShellProcessId, KillReqTimeout])
+            end,
+            try_async(fun() -> kill_os_process(ShellProcessId, force) end, 1_000);
+        #{} ->
+            ok
+    end,
+    ok.
+
+-spec try_async(Fun, Timeout) -> ok | timeout when
+    Fun :: fun(() -> ok),
+    Timeout :: timeout().
+try_async(Fun, Timeout) ->
+    Ref = erlang:make_ref(),
+    Me = self(),
+    erlang:spawn(fun() ->
+        Fun(),
+        Me ! Ref
+    end),
+    receive
+        Ref -> ok
+    after Timeout -> timeout
+    end.
+
+-spec kill_node(Node) -> ok when Node :: node().
+kill_node(Node) ->
+    % elp:ignore W0014 -- debugger relies on dist
+    catch erpc:call(Node, erlang, halt, [0]),
+    ok.
+
+-spec kill_os_process(ProcessId, force | dont_force) -> ok when
+    ProcessId :: number().
+kill_os_process(ProcessId, ForceOrNot) ->
+    case os:type() of
+        {unix, _} -> kill_unix_process(ProcessId, ForceOrNot);
+        {win32, _} -> kill_win_process(ProcessId, ForceOrNot)
+    end.
+
+-spec kill_unix_process(ProcessId, ForceOrNot) -> ok when
+    ProcessId :: number(),
+    ForceOrNot :: force | dont_force.
+kill_unix_process(ProcessId, force) ->
+    os:cmd("kill -9 " ++ integer_to_list(ProcessId)),
+    ok;
+kill_unix_process(ProcessId, dont_force) ->
+    os:cmd("kill " ++ integer_to_list(ProcessId)),
+    ok.
+
+-spec kill_win_process(ProcessId, ForceOrNot) -> ok when
+    ProcessId :: number(),
+    ForceOrNot :: force | dont_force.
+kill_win_process(ProcessId, force) ->
+    os:cmd("taskkill /F /PID " ++ integer_to_list(ProcessId)),
+    ok;
+kill_win_process(ProcessId, dont_force) ->
+    os:cmd("taskkill /PID " ++ integer_to_list(ProcessId)),
+    ok.

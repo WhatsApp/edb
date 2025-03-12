@@ -74,9 +74,16 @@ handle(State0 = #{state := initialized}, Args) ->
             ok = edb:pause(),
             Cwd = maps:get(cwd, Config),
             StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
+            Node = maps:get(node, Config),
+            % elp:ignore W0014 -- debugger relies on dist
+            ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
             State1 = State0#{
                 state => configuring,
-                node => maps:get(node, Config),
+                type => #{
+                    request => attach,
+                    process_id => ProcessId
+                },
+                node => Node,
                 cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
             },
             #{

@@ -52,12 +52,20 @@
     State :: edb_dap_server:state(),
     Reaction :: reaction().
 handle_reverse_attach_result(ok, State0 = #{state := launching}) ->
-    State1 = maps:remove(notification_ref, State0),
+    State1 = maps:without([notification_ref, shell_process_id], State0),
+
+    Node = edb:attached_node(),
+    % elp:ignore W0014 -- debugger relies on dist
+    ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
+
+    AttachType0 = maps:with([shell_process_id], State0),
+    AttachType1 = AttachType0#{request => launch, process_id => ProcessId},
     #{
         actions => [{event, edb_dap_event:initialized()}],
         new_state => State1#{
             state => configuring,
-            node => edb:attached_node()
+            type => AttachType1,
+            node => Node
         }
     };
 handle_reverse_attach_result(timeout, #{state := launching}) ->

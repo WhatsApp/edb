@@ -49,6 +49,17 @@
 %%%---------------------------------------------------------------------------------
 -type client_info() :: edb_dap_request_initialize:arguments().
 
+-type attach_type() ::
+    #{
+        request := attach,
+        process_id := number()
+    }
+    | #{
+        request := launch,
+        process_id := number(),
+        shell_process_id => number()
+    }.
+
 -type state() ::
     #{
         % Server is up, waiting for an `initialize` request from the client
@@ -63,6 +74,7 @@
         % A `launch` request was received and we are waiting for the debuggee node to be up
         state := launching,
         client_info := client_info(),
+        shell_process_id => number(),
         notification_ref := reference(),
         cwd := binary()
     }
@@ -72,6 +84,7 @@
         % waiting for the client to send all the initial configuration
         % requests (setBreakpoints, etc)
         state := configuring,
+        type := attach_type(),
         client_info := client_info(),
         node := node(),
         cwd := binary()
@@ -79,6 +92,7 @@
     | #{
         % We are attached to the debuggee node, and debugging is in progress
         state := attached,
+        type := attach_type(),
         client_info := client_info(),
         node := node(),
         cwd := binary(),
@@ -89,7 +103,7 @@
         state := terminating
     }.
 
--export_type([state/0, client_info/0]).
+-export_type([state/0, attach_type/0, client_info/0]).
 
 -type action() ::
     {event, edb_dap_event:event()}

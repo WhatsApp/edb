@@ -189,6 +189,10 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     PeerOpts0 = #{
         % TCP port, 0 stands for "automatic selection"
         connection => 0,
+
+        % The control process stays up when the connection is lost,
+        % so we can query the node state, etc
+        peer_down => continue,
         args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args],
         env => [{binary_to_list(K), binary_to_list(V)} || K := V <- maps:get(env, Opts, #{})]
     },

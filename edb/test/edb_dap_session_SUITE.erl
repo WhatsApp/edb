@@ -138,7 +138,9 @@ test_fails_if_invalid_launch_config(Config) ->
 %%--------------------------------------------------------------------
 
 test_handles_disconnect_request_via_attach(Config) ->
-    {ok, #{node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(Config, #{}),
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
+        Config, #{}
+    ),
     {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
 
     DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
@@ -147,16 +149,24 @@ test_handles_disconnect_request_via_attach(Config) ->
         DisconnectResponse
     ),
 
+    % Node is still up
+    running = peer:get_state(Peer),
+
     ok.
 
 test_handles_disconnect_request_via_launch(Config) ->
-    {ok, Client, #{}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
+    {ok, Client, #{peer := Peer}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
+
+    running = peer:get_state(Peer),
 
     DisconnectResponse = edb_dap_test_client:disconnect(Client, #{}),
     ?assertMatch(
         #{command := <<"disconnect">>, success := true},
         DisconnectResponse
     ),
+
+    % Node was killed
+    {down, _} = peer:get_state(Peer),
 
     ok.
 

@@ -80,5 +80,12 @@ make_request(Args) ->
     #{command => ~"runInTerminal", arguments => Args}.
 
 -spec handle_response(edb_dap_server:state(), response_body()) -> edb_dap_reverse_request:reaction().
+handle_response(State0 = #{state := launching}, Body) ->
+    State1 =
+        case Body of
+            #{shellProcessId := ShellProcessId} -> State0#{shell_process_id => ShellProcessId};
+            _ -> State0
+        end,
+    #{new_state => State1};
 handle_response(_State, _Body) ->
     #{}.
