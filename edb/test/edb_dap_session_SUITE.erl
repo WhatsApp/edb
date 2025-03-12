@@ -42,7 +42,9 @@
 
     %% Shutdown
     test_handles_disconnect_request_via_attach/1,
+    test_handles_disconnect_request_via_attach_can_terminate_debuggee/1,
     test_handles_disconnect_request_via_launch/1,
+    test_handles_disconnect_request_via_launch_can_spare_debuggee/1,
     test_terminates_when_node_goes_down/1,
     test_terminates_when_node_goes_down_while_configuring/1
 ]).
@@ -62,7 +64,9 @@ groups() ->
         ]},
         {shutdown, [
             test_handles_disconnect_request_via_attach,
+            test_handles_disconnect_request_via_attach_can_terminate_debuggee,
             test_handles_disconnect_request_via_launch,
+            test_handles_disconnect_request_via_launch_can_spare_debuggee,
             test_terminates_when_node_goes_down,
             test_terminates_when_node_goes_down_while_configuring
         ]}
@@ -154,6 +158,25 @@ test_handles_disconnect_request_via_attach(Config) ->
 
     ok.
 
+test_handles_disconnect_request_via_attach_can_terminate_debuggee(Config) ->
+    {ok, #{peer := Peer, node := Node, cookie := Cookie, srcdir := Cwd}} = edb_test_support:start_peer_node(
+        Config, #{}
+    ),
+    {ok, Client} = edb_dap_test_support:start_session_via_attach(Config, Node, Cookie, Cwd),
+
+    DisconnectResponse = edb_dap_test_client:disconnect(Client, #{
+        terminateDebuggee => true
+    }),
+    ?assertMatch(
+        #{command := <<"disconnect">>, success := true},
+        DisconnectResponse
+    ),
+
+    % Node was killed
+    {down, _} = peer:get_state(Peer),
+
+    ok.
+
 test_handles_disconnect_request_via_launch(Config) ->
     {ok, Client, #{peer := Peer}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
 
@@ -167,6 +190,24 @@ test_handles_disconnect_request_via_launch(Config) ->
 
     % Node was killed
     {down, _} = peer:get_state(Peer),
+
+    ok.
+
+test_handles_disconnect_request_via_launch_can_spare_debuggee(Config) ->
+    {ok, Client, #{peer := Peer}} = edb_dap_test_support:start_session_via_launch(Config, #{}),
+
+    running = peer:get_state(Peer),
+
+    DisconnectResponse = edb_dap_test_client:disconnect(Client, #{
+        terminateDebuggee => false
+    }),
+    ?assertMatch(
+        #{command := <<"disconnect">>, success := true},
+        DisconnectResponse
+    ),
+
+    % Node is still up
+    running = peer:get_state(Peer),
 
     ok.
 

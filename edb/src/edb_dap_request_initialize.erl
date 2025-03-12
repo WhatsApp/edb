@@ -27,6 +27,14 @@
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
+%%
+-export_type([arguments/0, capabilities/0]).
+-export_type([
+    breakpointMode/0,
+    breakpointModeApplicability/0,
+    columnDescriptor/0,
+    exceptionBreakpointsFilter/0
+]).
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize
 -type arguments() :: #{
@@ -70,6 +78,29 @@
     %% Capabilities.supportsANSIStyling` is also enabled
     supportsANSIStyling => boolean()
 }.
+
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        clientID => {optional, edb_dap_parse:binary()},
+        clientName => {optional, edb_dap_parse:binary()},
+        adapterID => {optional, edb_dap_parse:binary()},
+        locale => {optional, edb_dap_parse:binary()},
+        linesStartAt1 => {optional, edb_dap_parse:boolean()},
+        columnsStartAt1 => {optional, edb_dap_parse:boolean()},
+        pathFormat => {optional, edb_dap_parse:atoms([path, uri])},
+        supportsVariableType => {optional, edb_dap_parse:boolean()},
+        supportsVariablePaging => {optional, edb_dap_parse:boolean()},
+        supportsRunInTerminalRequest => {optional, edb_dap_parse:boolean()},
+        supportsMemoryReferences => {optional, edb_dap_parse:boolean()},
+        supportsProgressReporting => {optional, edb_dap_parse:boolean()},
+        supportsInvalidatedEvent => {optional, edb_dap_parse:boolean()},
+        supportsMemoryEvent => {optional, edb_dap_parse:boolean()},
+        supportsArgsCanBeInterpretedByShell => {optional, edb_dap_parse:boolean()},
+        supportsStartDebuggingRequest => {optional, edb_dap_parse:boolean()},
+        supportsANSIStyling => {optional, edb_dap_parse:boolean()}
+    }.
+
 -type capabilities() :: #{
     supportsConfigurationDoneRequest => boolean(),
     supportsFunctionBreakpoints => boolean(),
@@ -135,20 +166,13 @@
     conditionDescription => binary()
 }.
 
--export_type([arguments/0, capabilities/0]).
--export_type([
-    breakpointMode/0,
-    breakpointModeApplicability/0,
-    columnDescriptor/0,
-    exceptionBreakpointsFilter/0
-]).
-
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, allow_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(capabilities()) when
     State :: edb_dap_server:state(),
@@ -187,7 +211,7 @@ capabilities() ->
         supportsExceptionOptions => false,
         supportsValueFormattingOptions => false,
         supportsExceptionInfoRequest => false,
-        supportTerminateDebuggee => false,
+        supportTerminateDebuggee => true,
         supportSuspendDebuggee => false,
         supportsDelayedStackTraceLoading => false,
         supportsLoadedSourcesRequest => false,

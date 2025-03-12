@@ -52,20 +52,29 @@
 
 -export_type([arguments/0]).
 
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        restart => {optional, edb_dap_parse:boolean()},
+        terminateDebuggee => {optional, edb_dap_parse:boolean()},
+        suspendDebuggee => {optional, edb_dap_parse:boolean()}
+    }.
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, allow_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State, _Args) ->
+handle(State, Args) ->
     ok = edb:terminate(),
 
-    case shouldTerminateDebuggee(State) of
+    case shouldTerminateDebuggee(State, Args) of
         true ->
             Victims = get_victims(State),
             kill_victims(Victims);
@@ -90,11 +99,14 @@ handle(State, _Args) ->
         shell_process_id => number()
     }.
 
--spec shouldTerminateDebuggee(State) -> boolean() when
-    State :: edb_dap_server:state().
-shouldTerminateDebuggee(#{type := #{request := launch}}) ->
+-spec shouldTerminateDebuggee(State, Args) -> boolean() when
+    State :: edb_dap_server:state(),
+    Args :: arguments().
+shouldTerminateDebuggee(_State, #{terminateDebuggee := ShouldTerminateIt}) ->
+    ShouldTerminateIt;
+shouldTerminateDebuggee(#{type := #{request := launch}}, _Args) ->
     true;
-shouldTerminateDebuggee(_) ->
+shouldTerminateDebuggee(_, _) ->
     false.
 
 -spec get_victims(State) -> Victims when
