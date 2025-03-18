@@ -110,7 +110,7 @@ escript_dap(Config) ->
             },
             #{
                 id := 2,
-                line := 1548,
+                line := _,
                 name := ~"peer:'-do_call/4-fun-0-'/5",
                 column := 0,
                 source := #{name := ~"peer", path := _}

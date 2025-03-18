@@ -131,8 +131,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
                 #{
                     ~"Y0" := #{name := ~"Y0", value := _, variablesReference := 0},
                     ~"Y1" := #{name := ~"Y1", value := _, variablesReference := 0},
-                    ~"Y2" := #{name := ~"Y2", value := _, variablesReference := 0},
-                    ~"Y3" := #{name := ~"Y3", value := _, variablesReference := 0}
+                    ~"Y2" := #{name := ~"Y2", value := _, variablesReference := 0}
                 },
                 RegVars
             )

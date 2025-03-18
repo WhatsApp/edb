@@ -937,8 +937,7 @@ process_status(Pid, State) ->
 -spec try_suspend_process(Pid :: pid()) -> boolean().
 try_suspend_process(Pid) ->
     try
-        % @fb-only
-        erlang:suspend_process(Pid, [pause_proc_timer]) % @oss-only
+        erlang:suspend_process(Pid)
     catch
         error:badarg:ST ->
             case erlang:is_process_alive(Pid) of
@@ -950,8 +949,7 @@ try_suspend_process(Pid) ->
 -spec try_resume_process(Pid :: pid()) -> boolean().
 try_resume_process(Pid) ->
     try
-        % @fb-only
-        true = erlang:resume_process(Pid, [resume_proc_timer]) % @oss-only
+        true = erlang:resume_process(Pid)
     catch
         error:bardarg:ST ->
             case erlang:is_process_alive(Pid) of
@@ -964,9 +962,3 @@ try_resume_process(Pid) ->
 -spec is_relevant_pid(Pid :: pid()) -> boolean().
 is_relevant_pid(Pid) ->
     ?is_internal_pid(Pid) andalso is_process_alive(Pid).
-
-% @fb-only
-% @fb-only
-% @fb-only
-% @fb-only
-% @fb-only
