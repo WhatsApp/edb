@@ -767,7 +767,8 @@ stack_frames(Pid, State0) ->
         not_paused ->
             not_paused;
         RawFrames ->
-            {ok, edb_server_inspect:format_stack_frames(RawFrames)}
+            Formatter = fun edb_server_inspect:format_as_stack_frame/1,
+            {ok, edb_server_inspect:format_stack_frames(Formatter, RawFrames)}
     end.
 
 -spec stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
