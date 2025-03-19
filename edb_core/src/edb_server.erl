@@ -322,6 +322,11 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                                 explicit ->
                                     {breakpoint, Pid, MFA, {line, Line}};
                                 step ->
+                                    % Pid was already suspended when processing the step breakpoint, so
+                                    % resume it here to balance the suspension count. Notice the process will
+                                    % remain suspended, resume_process here is cheap as it is just decreasing
+                                    % a counter.
+                                    try_resume_process(Pid),
                                     {step, Pid}
                             end,
                         ok = edb_events:broadcast(
