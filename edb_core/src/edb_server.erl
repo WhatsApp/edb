@@ -767,9 +767,28 @@ stack_frames(Pid, State0) ->
         not_paused ->
             not_paused;
         RawFrames ->
-            Formatter = fun edb_server_inspect:format_as_stack_frame/1,
-            {ok, edb_server_inspect:format_stack_frames(Formatter, RawFrames)}
+            RelevantFrames = edb_server_inspect:without_bottom_terminator_frame(
+                edb_server_inspect:user_frames_only(RawFrames)
+            ),
+            {ok, [format_frame(RawFrame) || RawFrame <- RelevantFrames]}
     end.
+
+-spec format_frame(RawFrame :: erl_debugger:stack_frame()) -> edb:stack_frame().
+format_frame({FrameNo, 'unknown function', _}) ->
+    #{
+        id => FrameNo,
+        mfa => unknown,
+        source => undefined,
+        line => undefined
+    };
+format_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
+    #{
+        id => FrameNo,
+        mfa => MFA,
+        % TODO(T204197553) take md5 sum into account once it is available in the raw frame
+        source => edb_server_inspect:module_source(M),
+        line => Line
+    }.
 
 -spec stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
     {reply, Response, State1}

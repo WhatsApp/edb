@@ -25,10 +25,9 @@
 -ignore_xref([{code, get_debug_info, 1}]).
 
 -export([get_top_frame_id/1]).
--export([format_stack_frames/2, format_as_stack_frame/1]).
+-export([user_frames_only/1, without_bottom_terminator_frame/1]).
 -export([stack_frame_vars/5]).
-
--export_type([frame_formatter/1]).
+-export([module_source/1]).
 
 %% Inspecting stack frames
 
@@ -49,45 +48,34 @@ get_top_frame_id_1(_, [{_, '<breakpoint>', _}, {FrameId, _, _} | _]) ->
 get_top_frame_id_1(CandidateId, [_ | OtherRawFrames]) ->
     get_top_frame_id_1(CandidateId, OtherRawFrames).
 
--type frame_formatter(Formatted) :: fun((erl_debugger:stack_frame()) -> Formatted).
+%% @doc Remove frames that are introduced due to handling of breakpoints, etc.
+-spec user_frames_only(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].
+user_frames_only(RawFrames) ->
+    lists:nthtail(non_user_frames_count(RawFrames, 0), RawFrames).
 
--spec format_as_stack_frame(RawFrame :: erl_debugger:stack_frame()) -> edb:stack_frame().
-format_as_stack_frame({FrameNo, 'unknown function', _}) ->
-    #{
-        id => FrameNo,
-        mfa => unknown,
-        source => undefined,
-        line => undefined
-    };
-format_as_stack_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
-    #{
-        id => FrameNo,
-        mfa => MFA,
-        % TODO(T204197553) take md5 sum into account once it is available in the raw frame
-        source => module_source(M),
-        line => Line
-    }.
+-spec non_user_frames_count(RawFrames, Count) -> Count when
+    RawFrames :: [erl_debugger:stack_frame()],
+    Count :: non_neg_integer().
+non_user_frames_count([], _Count) ->
+    % We've scanned all frames and didn't find a `<breakpoint>' frame, so they are all user frames
+    0;
+non_user_frames_count([{_FrameNo, '<breakpoint>', _} | _RawFrames], Count) ->
+    Count + 1;
+non_user_frames_count([_ | RawFrames], Count) ->
+    non_user_frames_count(RawFrames, Count + 1).
 
--spec format_stack_frames(Formatter, RawFrames) -> [Formatted] when
-    Formatter :: frame_formatter(Formatted),
+%% @doc The "bottom" frame a terminator like `<terminate process normally>', usually not useful to the user
+-spec without_bottom_terminator_frame(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].
+without_bottom_terminator_frame(RawFrames) ->
+    without_bottom_terminator_frame(RawFrames, []).
+
+-spec without_bottom_terminator_frame(RawFrames, Acc) -> RawFrames when
+    Acc :: RawFrames,
     RawFrames :: [erl_debugger:stack_frame()].
-format_stack_frames(Formatter, RawFrames) ->
-    format_stack_frames_1(Formatter, RawFrames, []).
-
--spec format_stack_frames_1(Formatter, [RawFrame], Acc) -> Acc when
-    Formatter :: frame_formatter(Formatted),
-    RawFrame :: erl_debugger:stack_frame(),
-    Acc :: [Formatted].
-format_stack_frames_1(_Formatter, [{_FrameNo, Terminator, #{slots := []}}], Acc) when is_atom(Terminator) ->
-    % Stuff like '<terminate process normally>' are not useful to the user
+without_bottom_terminator_frame([{_FrameNo, Terminator, #{slots := []}}], Acc) when is_atom(Terminator) ->
     lists:reverse(Acc);
-format_stack_frames_1(Formatter, [{_FrameNo, '<breakpoint>', _} | Rest], _Acc) ->
-    % Everything after the breakpoint frame are implementation details
-    % of the debugger that we hide from the user
-    format_stack_frames_1(Formatter, Rest, []);
-format_stack_frames_1(Formatter, [RawFrame | RawFrames], Acc) ->
-    FormattedFrame = Formatter(RawFrame),
-    format_stack_frames_1(Formatter, RawFrames, [FormattedFrame | Acc]).
+without_bottom_terminator_frame([RawFrame | RawFrames], Acc) ->
+    without_bottom_terminator_frame(RawFrames, [RawFrame | Acc]).
 
 -spec stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
     undefined | {ok, Result}
