@@ -24,29 +24,11 @@
 -dialyzer({nowarn_function, [get_debug_info/2]}).
 -ignore_xref([{code, get_debug_info, 1}]).
 
--export([get_top_frame_id/1]).
 -export([user_frames_only/1, without_bottom_terminator_frame/1]).
 -export([stack_frame_vars/5]).
 -export([module_source/1]).
 
 %% Inspecting stack frames
-
--spec get_top_frame_id(RawFrames) -> edb:frame_id() when
-    RawFrames :: [erl_debugger:stack_frame()].
-get_top_frame_id([{_, '<breakpoint>', _}, {FrameId, _, _} | _]) ->
-    FrameId;
-get_top_frame_id([{CandidateId, _, _} | OtherFrames]) ->
-    get_top_frame_id_1(CandidateId, OtherFrames).
-
--spec get_top_frame_id_1(CandidateId, OtherRawFrames) -> edb:frame_id() when
-    CandidateId :: edb:frame_id(),
-    OtherRawFrames :: [erl_debugger:stack_frame()].
-get_top_frame_id_1(CandidateId, []) ->
-    CandidateId;
-get_top_frame_id_1(_, [{_, '<breakpoint>', _}, {FrameId, _, _} | _]) ->
-    FrameId;
-get_top_frame_id_1(CandidateId, [_ | OtherRawFrames]) ->
-    get_top_frame_id_1(CandidateId, OtherRawFrames).
 
 %% @doc Remove frames that are introduced due to handling of breakpoints, etc.
 -spec user_frames_only(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].

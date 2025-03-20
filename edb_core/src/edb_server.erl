@@ -768,7 +768,7 @@ stack_frames_impl(Pid, State0) ->
     State0 :: state(),
     Result :: not_paused | {ok, [edb:stack_frame()]}.
 stack_frames(Pid, State0) ->
-    case get_raw_stack_frames(Pid, State0) of
+    case raw_stack_frames(Pid, State0) of
         not_paused ->
             not_paused;
         RawFrames ->
@@ -807,24 +807,28 @@ when
     State1 :: state().
 stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
     Result =
-        case get_raw_stack_frames(Pid, State0) of
+        case raw_stack_frames(Pid, State0) of
             not_paused ->
                 not_paused;
             RawFrames ->
                 ResolveLocalVars =
-                    edb_server_break:is_process_trapped(Pid, State0#state.breakpoints) andalso
-                        FrameId =:= edb_server_inspect:get_top_frame_id(RawFrames),
+                    case edb_server_inspect:user_frames_only(RawFrames) of
+                        [{TopFrameId, _, _} | _] when FrameId =:= TopFrameId ->
+                            edb_server_break:is_process_trapped(Pid, State0#state.breakpoints);
+                        _ ->
+                            false
+                    end,
                 edb_server_inspect:stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, #{
                     resolve_local_vars => ResolveLocalVars
                 })
         end,
     {reply, Result, State0}.
 
--spec get_raw_stack_frames(Pid, State) -> RawStackFrames when
+-spec raw_stack_frames(Pid, State) -> RawStackFrames when
     Pid :: pid(),
     State :: state(),
     RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
-get_raw_stack_frames(Pid, State) ->
+raw_stack_frames(Pid, State) ->
     #state{suspended_procs = SuspendedProcs} = State,
     % get immediate values, as they are free to transfer
     MaxTermSize = 1,
