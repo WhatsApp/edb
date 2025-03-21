@@ -78,17 +78,12 @@
 -export_type([set_breakpoints_result/0]).
 -type set_breakpoints_result() :: [{line(), Result :: ok | {error, add_breakpoint_error()}}].
 
+-export_type([step_error/0]).
 -type step_error() ::
     no_abstract_code
     | not_paused
     | {cannot_breakpoint, module()}
     | {beam_analysis, term()}.
-
--export_type([step_over_error/0]).
--type step_over_error() :: step_error().
-
--export_type([step_out_error/0]).
--type step_out_error() :: step_error().
 
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.
@@ -384,11 +379,11 @@ pause() ->
 continue() ->
     call_server(continue).
 
--spec step_over(pid()) -> ok | {error, step_over_error()}.
+-spec step_over(pid()) -> ok | {error, step_error()}.
 step_over(Pid) ->
     call_server({step_over, Pid}).
 
--spec step_out(pid()) -> ok | {error, step_out_error()}.
+-spec step_out(pid()) -> ok | {error, step_error()}.
 step_out(Pid) ->
     call_server({step_out, Pid}).
 

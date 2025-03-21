@@ -27,8 +27,8 @@
     add_explicits/3,
     clear_explicits/2,
     clear_explicit/3,
-    resume_processes/2,
-    add_steps_on_stack_frames/3
+    prepare_for_stepping/3,
+    resume_processes/2
 ]).
 
 -compile(warn_missing_spec_all).
@@ -179,6 +179,25 @@ register_resume_action(Pid, Resume, Breakpoints) ->
 is_process_trapped(Pid, Breakpoints) ->
     #breakpoints{resume_actions = ResumeActions} = Breakpoints,
     maps:is_key(Pid, ResumeActions).
+
+-spec prepare_for_stepping(StepType, Pid, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
+    StepType :: step_over | step_out,
+    Pid :: pid(),
+    Error :: edb:step_error().
+prepare_for_stepping(StepType, Pid, Breakpoints0) ->
+    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
+        not_paused ->
+            {error, not_paused};
+        StackFrames when is_list(StackFrames) ->
+            StackFramesToInstrument =
+                case StepType of
+                    step_over ->
+                        StackFrames;
+                    step_out ->
+                        tl(StackFrames)
+                end,
+            add_steps_on_stack_frames(Pid, StackFramesToInstrument, Breakpoints0)
+    end.
 
 -spec add_steps_on_stack_frames(Pid, Frames, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
     Pid :: pid(),

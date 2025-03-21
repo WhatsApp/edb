@@ -266,9 +266,9 @@ dispatch_call({stack_frames, Pid}, _From, State0) ->
 dispatch_call({stack_frame_vars, Pid, FrameId, MaxTermSize}, _From, State0) ->
     stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0);
 dispatch_call({step_over, Pid}, _From, State0) ->
-    step_over_impl(Pid, State0);
+    step_impl(step_over, Pid, State0);
 dispatch_call({step_out, Pid}, _From, State0) ->
-    step_out_impl(Pid, State0).
+    step_impl(step_out, Pid, State0).
 
 -spec handle_info(Info, State :: state()) -> {noreply, state()} when
     Info :: erl_debugger:event_message() | {'DOWN', reference(), process, pid(), term()}.
@@ -491,42 +491,15 @@ continue_impl(State0) ->
         end,
     {reply, {ok, Result}, State1}.
 
--spec step_over_impl(Pid, State0) -> {reply, ok | {error, edb:step_over_error()}, State1} when
+-spec step_impl(StepType, Pid, State0) -> {reply, ok | {error, Error}, State1} when
+    StepType :: step_over | step_out,
     Pid :: pid(),
-    State0 :: state(),
-    State1 :: state().
-step_over_impl(Pid, State0) ->
-    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
-        StackFrames when is_list(StackFrames) ->
-            step_in_stack_frames(Pid, StackFrames, State0);
-        not_paused ->
-            {reply, {error, not_paused}, State0}
-    end.
-
--spec step_out_impl(Pid, State0) -> {reply, ok | {error, edb:step_out_error()}, State1} when
-    Pid :: pid(),
-    State0 :: state(),
-    State1 :: state().
-step_out_impl(Pid, State0) ->
-    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
-        StackFrames when is_list(StackFrames) ->
-            % Step in all frames but the most recent one
-            [_ | StackTail] = StackFrames,
-            step_in_stack_frames(Pid, StackTail, State0);
-        not_paused ->
-            {reply, {error, not_paused}, State0}
-    end.
-
-%% Perform an execution step that can only end up in one of the specified stack frames
--spec step_in_stack_frames(Pid, StackFrames, State0) -> {reply, ok | {error, Error}, State1} when
-    Pid :: pid(),
-    StackFrames :: [erl_debugger:stack_frame()],
     State0 :: state(),
     State1 :: state(),
-    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
-step_in_stack_frames(Pid, StackFrames, State0) ->
+    Error :: edb:step_error().
+step_impl(StepType, Pid, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    case edb_server_break:add_steps_on_stack_frames(Pid, StackFrames, Breakpoints0) of
+    case edb_server_break:prepare_for_stepping(StepType, Pid, Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {ok, _, State2} = resume_processes(all, continue, State1),
