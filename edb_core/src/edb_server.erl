@@ -496,8 +496,8 @@ continue_impl(State0) ->
     State0 :: state(),
     State1 :: state().
 step_over_impl(Pid, State0) ->
-    case stack_frames(Pid, State0) of
-        {ok, StackFrames} ->
+    case raw_user_stack_frames(Pid, State0) of
+        StackFrames when is_list(StackFrames) ->
             step_in_stack_frames(Pid, StackFrames, State0);
         not_paused ->
             {reply, {error, not_paused}, State0}
@@ -508,8 +508,8 @@ step_over_impl(Pid, State0) ->
     State0 :: state(),
     State1 :: state().
 step_out_impl(Pid, State0) ->
-    case stack_frames(Pid, State0) of
-        {ok, StackFrames} ->
+    case raw_user_stack_frames(Pid, State0) of
+        StackFrames when is_list(StackFrames) ->
             % Step in all frames but the most recent one
             [_ | StackTail] = StackFrames,
             step_in_stack_frames(Pid, StackTail, State0);
@@ -520,7 +520,7 @@ step_out_impl(Pid, State0) ->
 %% Perform an execution step that can only end up in one of the specified stack frames
 -spec step_in_stack_frames(Pid, StackFrames, State0) -> {reply, ok | {error, Error}, State1} when
     Pid :: pid(),
-    StackFrames :: [edb:stack_frame()],
+    StackFrames :: [erl_debugger:stack_frame()],
     State0 :: state(),
     State1 :: state(),
     Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
@@ -760,22 +760,13 @@ unexclude_processes_impl(Specs, State0) ->
     State1 :: state(),
     Response :: not_paused | {ok, [edb:stack_frame()]}.
 stack_frames_impl(Pid, State0) ->
-    Result = stack_frames(Pid, State0),
-    {reply, Result, State0}.
-
--spec stack_frames(Pid, State0) -> Result when
-    Pid :: pid(),
-    State0 :: state(),
-    Result :: not_paused | {ok, [edb:stack_frame()]}.
-stack_frames(Pid, State0) ->
-    case raw_stack_frames(Pid, State0) of
+    case raw_user_stack_frames(Pid, State0) of
         not_paused ->
-            not_paused;
+            {reply, not_paused, State0};
         RawFrames ->
-            RelevantFrames = edb_server_inspect:without_bottom_terminator_frame(
-                edb_server_inspect:user_frames_only(RawFrames)
-            ),
-            {ok, [format_frame(RawFrame) || RawFrame <- RelevantFrames]}
+            RelevantFrames = edb_server_inspect:without_bottom_terminator_frame(RawFrames),
+            Result = [format_frame(RawFrame) || RawFrame <- RelevantFrames],
+            {reply, {ok, Result}, State0}
     end.
 
 -spec format_frame(RawFrame :: erl_debugger:stack_frame()) -> edb:stack_frame().
@@ -837,6 +828,16 @@ raw_stack_frames(Pid, State) ->
             not_paused;
         RawFrames when is_list(RawFrames) ->
             RawFrames
+    end.
+
+-spec raw_user_stack_frames(Pid, State) -> RawStackFrames when
+    Pid :: pid(),
+    State :: state(),
+    RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
+raw_user_stack_frames(Pid, State) ->
+    case raw_stack_frames(Pid, State) of
+        not_paused -> not_paused;
+        RawFrames -> edb_server_inspect:user_frames_only(RawFrames)
     end.
 
 %%--------------------------------------------------------------------
