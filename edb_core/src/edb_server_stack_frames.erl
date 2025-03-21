@@ -12,7 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %% % @format
--module(edb_server_inspect).
+-module(edb_server_stack_frames).
 
 %% erlfmt:ignore
 % @fb-only
@@ -24,11 +24,31 @@
 -dialyzer({nowarn_function, [get_debug_info/2]}).
 -ignore_xref([{code, get_debug_info, 1}]).
 
+-export([raw_stack_frames/1, raw_user_stack_frames/1]).
 -export([user_frames_only/1, without_bottom_terminator_frame/1]).
 -export([stack_frame_vars/5]).
--export([module_source/1]).
 
-%% Inspecting stack frames
+-spec raw_stack_frames(Pid) -> RawStackFrames when
+    Pid :: pid(),
+    RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
+raw_stack_frames(Pid) ->
+    % get immediate values, as they are free to transfer
+    MaxTermSize = 1,
+    case erl_debugger:stack_frames(Pid, MaxTermSize) of
+        running ->
+            not_paused;
+        RawFrames when is_list(RawFrames) ->
+            RawFrames
+    end.
+
+-spec raw_user_stack_frames(Pid) -> RawStackFrames when
+    Pid :: pid(),
+    RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
+raw_user_stack_frames(Pid) ->
+    case raw_stack_frames(Pid) of
+        not_paused -> not_paused;
+        RawFrames -> user_frames_only(RawFrames)
+    end.
 
 %% @doc Remove frames that are introduced due to handling of breakpoints, etc.
 -spec user_frames_only(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].
@@ -266,52 +286,3 @@ get_debug_info(Module, Line) when is_atom(Module) ->
 assert_is_var_debug_info(X = {x, N}) when is_integer(N) -> X;
 assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
 assert_is_var_debug_info(V = {value, _}) -> V.
-
--spec module_source(Module :: module()) -> undefined | file:filename().
-module_source(Module) ->
-    try Module:module_info(compile) of
-        CompileInfo when is_list(CompileInfo) ->
-            case proplists:get_value(source, CompileInfo, undefined) of
-                undefined ->
-                    guess_module_source(Module);
-                SourcePath ->
-                    case filename:pathtype(SourcePath) of
-                        relative ->
-                            SourcePath;
-                        _ ->
-                            case filelib:is_regular(SourcePath) of
-                                true ->
-                                    SourcePath;
-                                false ->
-                                    case guess_module_source(Module) of
-                                        undefined ->
-                                            % We did our best, but this is the best we have
-                                            SourcePath;
-                                        GuessedSourcePath ->
-                                            GuessedSourcePath
-                                    end
-                            end
-                    end
-            end
-    catch
-        _:_ ->
-            undefined
-    end.
-
--spec guess_module_source(Module :: module()) -> undefined | file:filename().
-guess_module_source(Module) ->
-    BeamName = atom_to_list(Module) ++ ".beam",
-    case edb_server_call_proc:code_where_is_file(BeamName) of
-        {call_error, _} ->
-            undefined;
-        {call_ok, non_existing} ->
-            undefined;
-        {call_ok, BeamPath} ->
-            case filelib:find_source(BeamPath) of
-                {ok, SourcePath} when is_list(SourcePath) ->
-                    % eqwalizer:ignore incompatible_types -- file:name() vs file:filename() hell
-                    SourcePath;
-                _ ->
-                    undefined
-            end
-    end.

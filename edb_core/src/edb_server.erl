@@ -496,7 +496,7 @@ continue_impl(State0) ->
     State0 :: state(),
     State1 :: state().
 step_over_impl(Pid, State0) ->
-    case raw_user_stack_frames(Pid, State0) of
+    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
         StackFrames when is_list(StackFrames) ->
             step_in_stack_frames(Pid, StackFrames, State0);
         not_paused ->
@@ -508,7 +508,7 @@ step_over_impl(Pid, State0) ->
     State0 :: state(),
     State1 :: state().
 step_out_impl(Pid, State0) ->
-    case raw_user_stack_frames(Pid, State0) of
+    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
         StackFrames when is_list(StackFrames) ->
             % Step in all frames but the most recent one
             [_ | StackTail] = StackFrames,
@@ -760,11 +760,11 @@ unexclude_processes_impl(Specs, State0) ->
     State1 :: state(),
     Response :: not_paused | {ok, [edb:stack_frame()]}.
 stack_frames_impl(Pid, State0) ->
-    case raw_user_stack_frames(Pid, State0) of
+    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
         not_paused ->
             {reply, not_paused, State0};
         RawFrames ->
-            RelevantFrames = edb_server_inspect:without_bottom_terminator_frame(RawFrames),
+            RelevantFrames = edb_server_stack_frames:without_bottom_terminator_frame(RawFrames),
             Result = [format_frame(RawFrame) || RawFrame <- RelevantFrames],
             {reply, {ok, Result}, State0}
     end.
@@ -782,7 +782,7 @@ format_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
         id => FrameNo,
         mfa => MFA,
         % TODO(T204197553) take md5 sum into account once it is available in the raw frame
-        source => edb_server_inspect:module_source(M),
+        source => edb_server_code:module_source(M),
         line => Line
     }.
 
@@ -798,47 +798,22 @@ when
     State1 :: state().
 stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
     Result =
-        case raw_stack_frames(Pid, State0) of
+        case edb_server_stack_frames:raw_stack_frames(Pid) of
             not_paused ->
                 not_paused;
             RawFrames ->
                 ResolveLocalVars =
-                    case edb_server_inspect:user_frames_only(RawFrames) of
+                    case edb_server_stack_frames:user_frames_only(RawFrames) of
                         [{TopFrameId, _, _} | _] when FrameId =:= TopFrameId ->
                             edb_server_break:is_process_trapped(Pid, State0#state.breakpoints);
                         _ ->
                             false
                     end,
-                edb_server_inspect:stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, #{
+                edb_server_stack_frames:stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, #{
                     resolve_local_vars => ResolveLocalVars
                 })
         end,
     {reply, Result, State0}.
-
--spec raw_stack_frames(Pid, State) -> RawStackFrames when
-    Pid :: pid(),
-    State :: state(),
-    RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
-raw_stack_frames(Pid, State) ->
-    #state{suspended_procs = SuspendedProcs} = State,
-    % get immediate values, as they are free to transfer
-    MaxTermSize = 1,
-    case erl_debugger:stack_frames(Pid, MaxTermSize) of
-        running when not is_map_key(Pid, SuspendedProcs) ->
-            not_paused;
-        RawFrames when is_list(RawFrames) ->
-            RawFrames
-    end.
-
--spec raw_user_stack_frames(Pid, State) -> RawStackFrames when
-    Pid :: pid(),
-    State :: state(),
-    RawStackFrames :: [erl_debugger:stack_frame()] | not_paused.
-raw_user_stack_frames(Pid, State) ->
-    case raw_stack_frames(Pid, State) of
-        not_paused -> not_paused;
-        RawFrames -> edb_server_inspect:user_frames_only(RawFrames)
-    end.
 
 %%--------------------------------------------------------------------
 %% State helpers

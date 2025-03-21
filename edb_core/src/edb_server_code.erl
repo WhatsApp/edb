@@ -15,9 +15,8 @@
 
 -module(edb_server_code).
 
--export([
-    fetch_fun_block_surrounding/2
-]).
+-export([fetch_fun_block_surrounding/2]).
+-export([module_source/1]).
 
 -compile(warn_missing_spec_all).
 
@@ -127,3 +126,52 @@ form_line(Form) ->
 -spec location_line(erl_anno:location()) -> line().
 location_line(Line) when is_integer(Line) -> Line;
 location_line({Line, _Col}) -> Line.
+
+-spec module_source(Module :: module()) -> undefined | file:filename().
+module_source(Module) ->
+    try Module:module_info(compile) of
+        CompileInfo when is_list(CompileInfo) ->
+            case proplists:get_value(source, CompileInfo, undefined) of
+                undefined ->
+                    guess_module_source(Module);
+                SourcePath ->
+                    case filename:pathtype(SourcePath) of
+                        relative ->
+                            SourcePath;
+                        _ ->
+                            case filelib:is_regular(SourcePath) of
+                                true ->
+                                    SourcePath;
+                                false ->
+                                    case guess_module_source(Module) of
+                                        undefined ->
+                                            % We did our best, but this is the best we have
+                                            SourcePath;
+                                        GuessedSourcePath ->
+                                            GuessedSourcePath
+                                    end
+                            end
+                    end
+            end
+    catch
+        _:_ ->
+            undefined
+    end.
+
+-spec guess_module_source(Module :: module()) -> undefined | file:filename().
+guess_module_source(Module) ->
+    BeamName = atom_to_list(Module) ++ ".beam",
+    case edb_server_call_proc:code_where_is_file(BeamName) of
+        {call_error, _} ->
+            undefined;
+        {call_ok, non_existing} ->
+            undefined;
+        {call_ok, BeamPath} ->
+            case filelib:find_source(BeamPath) of
+                {ok, SourcePath} when is_list(SourcePath) ->
+                    % eqwalizer:ignore incompatible_types -- file:name() vs file:filename() hell
+                    SourcePath;
+                _ ->
+                    undefined
+            end
+    end.
