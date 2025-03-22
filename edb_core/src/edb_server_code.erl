@@ -55,7 +55,13 @@ find_fun_block_surrounding(Line, [Form = {function, _Anno, _Name, _Arity, _Claus
             case
                 erl_parse:fold_anno(
                     fun(Anno, {MinLine, MaxLine}) ->
-                        {min(erl_anno:line(Anno), MinLine), max(erl_anno:line(Anno), MaxLine)}
+                        case erl_anno:line(Anno) of
+                            0 ->
+                                % Line information is somehow missing on this ast node, ignore
+                                {MinLine, MaxLine};
+                            AnnoLine ->
+                                {min(AnnoLine, MinLine), max(AnnoLine, MaxLine)}
+                        end
                     end,
                     {Line, Line},
                     Form
