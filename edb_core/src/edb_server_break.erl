@@ -222,51 +222,40 @@ prepare_for_stepping(StepType, Pid, Breakpoints0) ->
 
             CallStackAddrs = call_stack_addrs(StackFramesToInstrument),
 
-            add_steps_on_stack_frames(Pid, StackFramesToInstrument, CallStackAddrs, Breakpoints0)
+            add_steps_on_stack_frames(
+                Pid, StackFramesToInstrument, CallStackAddrs, top_frame_must_succeed, Breakpoints0
+            )
     end.
 
--spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
-    Pid :: pid(),
-    FrameAddrs :: call_stack_addrs(),
-    Frames :: [erl_debugger:stack_frame()],
-    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
-add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Breakpoints0) ->
-    %% Proper MFA and line: try to put steps on the surrounding function
-    case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
-        {ok, Breakpoints1} when Breakpoints0 =/= Breakpoints1 ->
-            %% Steps were set successfully, proceed with the rest of the stack
-            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints1);
-        {ok, _Breakpoints1} ->
-            %% We cannot claim success if no breakpoints were added
-            {_, #{function := {Module, _, _}}, _} = TopFrame,
-            {error, {cannot_breakpoint, Module}};
-        skipped ->
-            edb_server:invariant_violation(stepping_from_unbreakable_frame);
-        {error, Error} ->
-            {error, Error}
-    end.
-
--spec add_steps_on_remaining_stack_frames(Pid, Frames, FrameAddrs, breakpoints()) ->
+-spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, Kind, breakpoints()) ->
     {ok, breakpoints()} | {error, Error}
 when
     Pid :: pid(),
-    Frames :: [erl_debugger:stack_frame()],
     FrameAddrs :: call_stack_addrs(),
-    Error :: no_abstract_code | {beam_analysis, term()}.
-add_steps_on_remaining_stack_frames(_Pid, [], [], Breakpoints0) ->
-    {ok, Breakpoints0};
-add_steps_on_remaining_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Breakpoints0) ->
+    Frames :: [erl_debugger:stack_frame()],
+    Kind :: top_frame_must_succeed | top_frame_can_fail,
+    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
+add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Kind, Breakpoints0) ->
     %% Proper MFA and line: try to put steps on the surrounding function
     case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
         {ok, Breakpoints1} ->
-            %% Steps were set successfully, proceed with the rest of the stack
-            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints1);
+            case Breakpoints0 =:= Breakpoints1 of
+                true when Kind =:= top_frame_must_succeed ->
+                    %% We cannot claim success if no breakpoints were added
+                    {_, #{function := {Module, _, _}}, _} = TopFrame,
+                    {error, {cannot_breakpoint, Module}};
+                _ ->
+                    add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints1)
+            end;
+        skipped when Kind =:= top_frame_must_succeed ->
+            edb_server:invariant_violation(stepping_from_unbreakable_frame);
         skipped ->
-            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints0);
+            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints0);
         {error, Error} ->
-            %% Steps could not be set, fail
             {error, Error}
-    end.
+    end;
+add_steps_on_stack_frames(_Pid, [], [], top_frame_can_fail, Breakpoints) ->
+    {ok, Breakpoints}.
 
 -spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, breakpoints()) ->
     {ok, breakpoints()} | skipped | {error, Error}
