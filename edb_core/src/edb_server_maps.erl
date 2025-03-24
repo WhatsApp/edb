@@ -25,7 +25,7 @@
 -spec add(Key, Value, Map) -> Map when
     Map :: #{Key => Value}.
 add(Key, Value, Map) ->
-    maps:put(Key, Value, Map).
+    Map#{Key => Value}.
 
 -spec add(Key1, Key2, Value, Map) -> Map when
     Map :: #{Key1 => #{Key2 => Value}}.
