@@ -17,6 +17,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -177,6 +178,7 @@ all() ->
 
 init_per_suite(Config) ->
     erts_debug:set_internal_state(available_internal_state, true),
+    % eqwalizer:fixme new erts_debug not yet in default toolchain
     erts_debug:set_internal_state(debugger_support, true),
     erts_debug:set_internal_state(available_internal_state, false),
 
@@ -716,8 +718,8 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     % We also want to exclude an application
     ok = application:start(dummy_app_1),
     ok = application:start(dummy_app_2),
-    {DummyApp1Pid, DummyApp1SupPid} = {whereis(dummy_app_1), whereis(dummy_app_1_sup)},
-    {DummyApp2Pid, DummyApp2SupPid} = {whereis(dummy_app_2), whereis(dummy_app_2_sup)},
+    {DummyApp1Pid, DummyApp1SupPid} = {whereis_proc(dummy_app_1), whereis_proc(dummy_app_1_sup)},
+    {DummyApp2Pid, DummyApp2SupPid} = {whereis_proc(dummy_app_2), whereis_proc(dummy_app_2_sup)},
 
     ok = edb:exclude_processes([{application, dummy_app_1}]),
 
@@ -977,7 +979,7 @@ test_excluding_a_process_makes_it_resume(_Config) ->
 test_can_override_excluded_processes_by_other_reasons(_Config) ->
     edb:exclude_processes([{application, dummy_app_1}]),
     application:start(dummy_app_1),
-    {DummyApp1Pid, DummyApp1SupPid} = {whereis(dummy_app_1), whereis(dummy_app_1_sup)},
+    {DummyApp1Pid, DummyApp1SupPid} = {whereis_proc(dummy_app_1), whereis_proc(dummy_app_1_sup)},
 
     SubscribedPid = erlang:spawn(fun() ->
         edb:subscribe(),
@@ -2805,6 +2807,13 @@ test_format_works(_Config) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
+
+-spec whereis_proc(RegisteredName :: atom()) -> pid().
+whereis_proc(RegisteredName) ->
+    case whereis(RegisteredName) of
+        Pid when is_pid(Pid) -> Pid;
+        undefined -> error({proc_not_found, RegisteredName})
+    end.
 
 compile_dummy_apps(Config) ->
     DataDir = proplists:get_value(data_dir, Config),

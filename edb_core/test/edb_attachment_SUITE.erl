@@ -18,6 +18,7 @@
 
 %% erlfmt:ignore
 % @fb-only
+-typing([eqwalizer]).
 
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
@@ -350,14 +351,20 @@ test_attach_detects_unreachable_nodes(Config) ->
 
 test_attach_validates_args(Config) ->
     on_debugger_node(Config, fun() ->
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {missing, node}}, edb:attach(#{})),
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, #{node := ~"not a node"}}, edb:attach(#{node => ~"not a node"})),
 
         Args = #{node => edb_test_support:random_node("debuggee")},
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, #{timeout := nan}}, edb:attach(Args#{timeout => nan})),
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, #{cookie := ~"blah"}}, edb:attach(Args#{cookie => ~"blah"})),
 
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {unknown, [foo]}}, edb:attach(Args#{foo => bar})),
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {unknown, [foo, hey]}}, edb:attach(Args#{foo => bar, hey => ho})),
         ok
     end).
@@ -528,13 +535,18 @@ test_reverse_attach_detects_domain_mismatch(Config) ->
 
 test_reverse_attach_validates_args(Config) ->
     on_debugger_node(Config, fun() ->
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {missing, name_domain}}, edb:reverse_attach(#{})),
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, #{name_domain := mediumnames}}, edb:reverse_attach(#{name_domain => mediumnames})),
 
         Args = #{name_domain => shortnames},
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, #{timeout := nan}}, edb:reverse_attach(Args#{timeout => nan})),
 
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {unknown, [foo]}}, edb:reverse_attach(Args#{foo => bar})),
+        % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {unknown, [foo, hey]}}, edb:reverse_attach(Args#{foo => bar, hey => ho})),
 
         ok
@@ -755,7 +767,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
 %% Helpers
 %%--------------------------------------------------------------------
 -spec start_debugger_node(Config) -> Config when
-    Config :: ct_suite:config().
+    Config :: ct_suite:ct_config().
 start_debugger_node(Config0) ->
     {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config0, #{
         copy_code_path => true
@@ -767,7 +779,7 @@ start_debugger_node(Config0) ->
     Config1.
 
 -spec on_debugger_node(Config, fun(() -> Result)) -> Result when
-    Config :: ct_suite:config().
+    Config :: ct_suite:ct_config().
 on_debugger_node(Config, Fun) ->
     Peer = ?config(debugger_peer_key(), Config),
     peer:call(Peer, erlang, apply, [Fun, []]).
@@ -792,7 +804,7 @@ stop_distribution() ->
     ok = net_kernel:stop().
 
 -spec wait_reverse_attach_notification(NotificationRef :: reference()) ->
-    ok | timeout | {error, {bootstrap_failed, edb:bootstrap_error()}}.
+    ok | timeout | {error, {bootstrap_failed, edb:bootstrap_failure()}}.
 wait_reverse_attach_notification(NotificationRef) ->
     receive
         {NotificationRef, ok} -> ok;
