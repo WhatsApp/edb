@@ -142,10 +142,14 @@ should_be_suspended(Module, Line, Pid, Breakpoints) ->
         _ ->
             case Steps of
                 #{Pid := #{{Module, Line} := []}} ->
-                    % If someone killed the Pid processes asynchronously, don't crash
-                    catch erlang:suspend_process(Pid),
                     %% This is a step breakpoint for the current process
-                    {true, step};
+                    case edb_server_process:try_suspend_process(Pid) of
+                        true ->
+                            {true, step};
+                        false ->
+                            % Process was concurrently killed, etc
+                            false
+                    end;
                 _ ->
                     false
             end

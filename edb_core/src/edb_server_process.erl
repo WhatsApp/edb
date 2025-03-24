@@ -12,7 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %% % @format
--module(edb_server_process_info).
+-module(edb_server_process).
 
 %% erlfmt:ignore
 % @fb-only
@@ -21,17 +21,23 @@
 
 -moduledoc false.
 
+% Suspending processes
+-export([try_suspend_process/1, try_resume_process/1]).
+
+% Process info
 -export([excluded_process_info/2, excluded_processes_info/1]).
 -export([process_info/2, processes_info/1]).
-
 -export([basic_process_info/2]).
 -export_type([basic_process_info_fields/0]).
 
-%% --Macros----------------------------------------------------------
--define(is_internal_pid(Pid), (node(Pid) =:= node())).
 %% ------------------------------------------------------------------
+%% Macros
+%% ------------------------------------------------------------------
+-define(is_internal_pid(Pid), (node(Pid) =:= node())).
 
-%% --Types ----------------------------------------------------------
+%% ------------------------------------------------------------------
+%% Types
+%% ------------------------------------------------------------------
 -type basic_process_info() :: #{
     application => atom(),
     current_fun => mfa(),
@@ -44,6 +50,35 @@
 %% The original erlang:proces_info_result_item/0 type is not exported
 -type erlang_process_info_result_item() :: {term(), term()}.
 
+%% ------------------------------------------------------------------
+%% Suspending processes
+%% ------------------------------------------------------------------
+-spec try_suspend_process(Pid :: pid()) -> boolean().
+try_suspend_process(Pid) ->
+    try
+        erlang:suspend_process(Pid)
+    catch
+        error:badarg:ST ->
+            case erlang:is_process_alive(Pid) of
+                false -> false;
+                true -> erlang:raise(error, badarg, ST)
+            end
+    end.
+
+-spec try_resume_process(Pid :: pid()) -> boolean().
+try_resume_process(Pid) ->
+    try
+        true = erlang:resume_process(Pid)
+    catch
+        error:bardarg:ST ->
+            case erlang:is_process_alive(Pid) of
+                false -> true;
+                true -> erlang:raise(error, badarg, ST)
+            end
+    end.
+
+%% ------------------------------------------------------------------
+%% Process info
 %% ------------------------------------------------------------------
 
 -spec excluded_process_info(Pid, Reasons) -> {ok, Info} | undefined when

@@ -35,10 +35,6 @@
 
 -export_type([call_request/0]).
 
-% @fb-only
-% @fb-only
-% @fb-only
-
 %%--------------------------------------------------------------------
 %% Types
 %%--------------------------------------------------------------------
@@ -326,7 +322,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                                     % resume it here to balance the suspension count. Notice the process will
                                     % remain suspended, resume_process here is cheap as it is just decreasing
                                     % a counter.
-                                    try_resume_process(Pid),
+                                    edb_server_process:try_resume_process(Pid),
                                     {step, Pid}
                             end,
                         ok = edb_events:broadcast(
@@ -515,7 +511,7 @@ step_impl(StepType, Pid, State0) ->
     Result :: {ok, edb:process_info()} | undefined.
 process_info_impl(Pid, State0) ->
     Status = process_status(Pid, State0),
-    {reply, edb_server_process_info:process_info(Pid, Status), State0}.
+    {reply, edb_server_process:process_info(Pid, Status), State0}.
 
 -spec processes_impl(State0) -> {reply, Result, State1} when
     State0 :: state(),
@@ -525,7 +521,7 @@ processes_impl(State0) ->
     Universe = erlang:processes(),
     Excluded = get_excluded_processes(Universe, State0),
 
-    Result = edb_server_process_info:processes_info(
+    Result = edb_server_process:processes_info(
         #{
             Pid => process_status(Pid, State0)
          || Pid <- Universe,
@@ -547,7 +543,7 @@ is_paused_impl(State0) ->
 excluded_processes_impl(State0) ->
     Universe = erlang:processes(),
     Excluded = get_excluded_processes(Universe, State0),
-    Result = edb_server_process_info:excluded_processes_info(Excluded),
+    Result = edb_server_process:excluded_processes_info(Excluded),
     {reply, Result, State0}.
 
 -spec excluded_sys_processes(Universe :: [pid()], state()) -> set(pid()).
@@ -826,7 +822,7 @@ resume_processes(Targets, Reason, State0) ->
                 {NeedToBeResumed, RemainingSuspended, RemainingBP}
         end,
 
-    ActuallyResumed = #{Pid => [] || Pid := [] <- ToResume, try_resume_process(Pid)},
+    ActuallyResumed = #{Pid => [] || Pid := [] <- ToResume, edb_server_process:try_resume_process(Pid)},
 
     State1 = State0#state{
         suspended_procs = Suspended1,
@@ -861,7 +857,7 @@ suspend_all_processes(Universe, Unsuspendable, State0) ->
             Pid => []
          || Pid <- Universe,
             not MustIgnore(Pid),
-            try_suspend_process(Pid)
+            edb_server_process:try_suspend_process(Pid)
         },
     AllSuspended = maps:merge(AlreadySuspended, JustSuspended),
     State1 = State0#state{suspended_procs = AllSuspended},
@@ -910,32 +906,6 @@ process_status(Pid, State) ->
 %%--------------------------------------------------------------------
 %% Process helpers
 %%--------------------------------------------------------------------
-
-%% erlfmt:ignore-begin T209051371
--spec try_suspend_process(Pid :: pid()) -> boolean().
-try_suspend_process(Pid) ->
-    try
-        erlang:suspend_process(Pid)
-    catch
-        error:badarg:ST ->
-            case erlang:is_process_alive(Pid) of
-                false -> false;
-                true -> erlang:raise(error, badarg, ST)
-            end
-    end.
-
--spec try_resume_process(Pid :: pid()) -> boolean().
-try_resume_process(Pid) ->
-    try
-        true = erlang:resume_process(Pid)
-    catch
-        error:bardarg:ST ->
-            case erlang:is_process_alive(Pid) of
-                false -> true;
-                true -> erlang:raise(error, badarg, ST)
-            end
-    end.
-%% erlfmt:ignore-end
 
 -spec is_relevant_pid(Pid :: pid()) -> boolean().
 is_relevant_pid(Pid) ->
