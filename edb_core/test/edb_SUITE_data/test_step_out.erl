@@ -2,7 +2,7 @@
 
 -compile([warn_missing_spec_all]).
 
--export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, call_closure_from_unbreakpointable_fun/1]).
+-export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, call_closure_from_unbreakpointable_fun/1, callee_calling_caller/0]).
 
 %% Utility function to check executed lines
 
@@ -97,11 +97,28 @@ raise_exception(Controller) ->
 
 -spec call_closure_from_unbreakpointable_fun(Controller :: pid()) -> ok.
 call_closure_from_unbreakpointable_fun(Controller) ->
-    Fun = fun(X) -> 
+    Fun = fun(X) ->
         sync(Controller, ?LINE),
         X
     end,
     sync(Controller, ?LINE),
     [ok] = test_step_out_no_beam_debug_info:forward_call(Fun, ok),
     sync(Controller, ?LINE),
+    ok.
+
+-spec y(Fun, X) -> Res when
+      Fun :: fun((fun((Fun, X) -> Res), X) -> Res).
+y(Fun, X) ->
+    Res = Fun(fun y/2, X),
+    Res.
+
+-spec yid(Fun, X) -> X when
+    Fun :: fun((fun((Fun, X) -> X), X) -> X).
+yid(Fun, X) ->
+    Id = fun (_, Y) -> Y end,
+    Fun(Id, X).
+
+-spec callee_calling_caller() -> ok.
+callee_calling_caller() ->
+    y(fun yid/2, 42),
     ok.

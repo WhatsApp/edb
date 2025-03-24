@@ -52,8 +52,10 @@
     %% Explicit breakpoints requested by the client, grouped by module
     explicits :: #{module() => #{line() => []}},
 
-    %% Internal breakpoints set by the server to step through, grouped by pid
-    steps :: #{pid() => #{{module(), line()} => []}},
+    %% Internal breakpoints set by the server to step through, grouped by pid.
+    %% For each such breakpoint, there are only certain call-stacks under which
+    %% we want to suspend the process.
+    steps :: #{pid() => #{{module(), line()} => #{call_stack_pattern() => []}}},
 
     %% Explicit breakpoints that have been hit
     explicits_hit :: #{pid() => {module(), line()}},
@@ -141,11 +143,28 @@ should_be_suspended(Module, Line, Pid, Breakpoints) ->
             {true, explicit};
         _ ->
             case Steps of
-                #{Pid := #{{Module, Line} := []}} ->
-                    %% This is a step breakpoint for the current process
+                #{Pid := #{{Module, Line} := Patterns}} ->
+                    % We need stack-frames, and these require the process to be suspended
                     case edb_server_process:try_suspend_process(Pid) of
                         true ->
-                            {true, step};
+                            case edb_server_stack_frames:raw_user_stack_frames(Pid) of
+                                not_paused ->
+                                    edb_server:invariant_violation(not_paused_right_after_suspending);
+                                StackFrames when is_list(StackFrames) ->
+                                    ShouldSuspend = lists:any(
+                                        fun(Pattern) -> call_stack_matches(Pattern, StackFrames) end,
+                                        maps:keys(Patterns)
+                                    ),
+                                    case ShouldSuspend of
+                                        true ->
+                                            %% This is a step breakpoint for the current process.
+                                            %% Caller expects this process to be suspended, in this case
+                                            {true, step};
+                                        _ ->
+                                            edb_server_process:try_resume_process(Pid),
+                                            false
+                                    end
+                            end;
                         false ->
                             % Process was concurrently killed, etc
                             false
@@ -200,62 +219,72 @@ prepare_for_stepping(StepType, Pid, Breakpoints0) ->
                     step_out ->
                         tl(StackFrames)
                 end,
-            add_steps_on_stack_frames(Pid, StackFramesToInstrument, Breakpoints0)
+
+            CallStackAddrs = call_stack_addrs(StackFramesToInstrument),
+
+            add_steps_on_stack_frames(Pid, StackFramesToInstrument, CallStackAddrs, Breakpoints0)
     end.
 
--spec add_steps_on_stack_frames(Pid, Frames, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
+-spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
     Pid :: pid(),
+    FrameAddrs :: call_stack_addrs(),
     Frames :: [erl_debugger:stack_frame()],
     Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
-add_steps_on_stack_frames(Pid, [{_, #{function := {Module, _, _}, line := Line}, _} | StackTail], Breakpoints0) when
-    is_integer(Line)
-->
+add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Breakpoints0) ->
     %% Proper MFA and line: try to put steps on the surrounding function
-    case add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints0) of
+    case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
         {ok, Breakpoints1} when Breakpoints0 =/= Breakpoints1 ->
             %% Steps were set successfully, proceed with the rest of the stack
-            add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints1);
+            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints1);
         {ok, _Breakpoints1} ->
             %% We cannot claim success if no breakpoints were added
+            {_, #{function := {Module, _, _}}, _} = TopFrame,
             {error, {cannot_breakpoint, Module}};
+        skipped ->
+            edb_server:invariant_violation(stepping_from_unbreakable_frame);
         {error, Error} ->
             {error, Error}
-    end;
-add_steps_on_stack_frames(_Pid, [_ | _], _Breakpoints0) ->
-    {error, no_abstract_code}.
+    end.
 
--spec add_steps_on_remaining_stack_frames(Pid, Frames, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
+-spec add_steps_on_remaining_stack_frames(Pid, Frames, FrameAddrs, breakpoints()) ->
+    {ok, breakpoints()} | {error, Error}
+when
     Pid :: pid(),
     Frames :: [erl_debugger:stack_frame()],
+    FrameAddrs :: call_stack_addrs(),
     Error :: no_abstract_code | {beam_analysis, term()}.
-add_steps_on_remaining_stack_frames(_Pid, [], Breakpoints0) ->
+add_steps_on_remaining_stack_frames(_Pid, [], [], Breakpoints0) ->
     {ok, Breakpoints0};
-add_steps_on_remaining_stack_frames(
-    Pid, [{_, #{function := {Module, _, _}, line := Line}, _} | StackTail], Breakpoints0
-) when is_integer(Line) ->
+add_steps_on_remaining_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Breakpoints0) ->
     %% Proper MFA and line: try to put steps on the surrounding function
-    case add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints0) of
+    case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
         {ok, Breakpoints1} ->
             %% Steps were set successfully, proceed with the rest of the stack
-            add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints1);
+            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints1);
+        skipped ->
+            add_steps_on_remaining_stack_frames(Pid, MoreFrames, tl(FrameAddrs), Breakpoints0);
         {error, Error} ->
             %% Steps could not be set, fail
             {error, Error}
-    end;
-add_steps_on_remaining_stack_frames(Pid, [_ | StackTail], Breakpoints0) ->
-    %% Unknown function or line -- do nothing
-    add_steps_on_remaining_stack_frames(Pid, StackTail, Breakpoints0).
+    end.
 
--spec add_steps_on_function_surrounding(pid(), module(), line(), breakpoints()) ->
-    {ok, breakpoints()} | {error, Error}
+-spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, breakpoints()) ->
+    {ok, breakpoints()} | skipped | {error, Error}
 when
+    Pid :: pid(),
+    TopFrame :: erl_debugger:stack_frame(),
+    FrameAddrs :: call_stack_addrs(),
     Error :: no_abstract_code | {beam_analysis, term()}.
-add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints) ->
+add_steps_on_stack_frame(Pid, {_, #{function := MFA, line := Line}, _}, FrameAddrs, Breakpoints) when
+    is_tuple(MFA), is_integer(Line)
+->
+    {Module, _, _} = MFA,
     case edb_server_code:fetch_fun_block_surrounding(Module, Line) of
         {ok, Lines} ->
+            Pattern = [MFA | tl(FrameAddrs)],
             Breakpoints1 = lists:foldl(
                 fun(Line1, Accu) ->
-                    add_step(Pid, Module, Line1, Accu)
+                    add_step(Pid, Pattern, Module, Line1, Accu)
                 end,
                 Breakpoints,
                 Lines
@@ -263,7 +292,10 @@ add_steps_on_function_surrounding(Pid, Module, Line, Breakpoints) ->
             {ok, Breakpoints1};
         {error, Error} ->
             {error, Error}
-    end.
+    end;
+add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Breakpoints) ->
+    % no line-number information or not a user function
+    skipped.
 
 -spec clear_steps(pid(), breakpoints()) -> {ok, breakpoints()}.
 clear_steps(Pid, Breakpoints) ->
@@ -275,7 +307,7 @@ clear_steps(Pid, Breakpoints) ->
     Breakpoints1 = Breakpoints#breakpoints{steps = Steps1},
 
     Breakpoints2 = maps:fold(
-        fun({Module, Line}, [], Accu) ->
+        fun({Module, Line}, _Patterns, Accu) ->
             try_clear_step_in_vm(Pid, Module, Line, Accu)
         end,
         Breakpoints1,
@@ -320,14 +352,16 @@ resume_processes(ToResume, Breakpoints) ->
 
     Breakpoints#breakpoints{explicits_hit = ExplicitsHit1, resume_actions = ResumeActions1}.
 
--spec add_step(pid(), Module, Line, breakpoints()) -> breakpoints() when
+-spec add_step(Pid, Pattern, Module, Line, breakpoints()) -> breakpoints() when
+    Pid :: pid(),
+    Pattern :: call_stack_pattern(),
     Module :: module(),
     Line :: line().
-add_step(Pid, Module, Line, Breakpoints0) ->
+add_step(Pid, Pattern, Module, Line, Breakpoints0) ->
     case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
-            Steps2 = edb_server_maps:add(Pid, {Module, Line}, [], Steps1),
+            Steps2 = edb_server_maps:add(Pid, {Module, Line}, Pattern, [], Steps1),
             Breakpoints1#breakpoints{steps = Steps2};
         {error, _} ->
             % This is not a line where we can set a breakpoint, do nothing.
@@ -488,3 +522,27 @@ vm_unset_breakpoint(Module, Line) ->
             % that it isn't set anymore
             vanished
     end.
+
+%% --------------------------------------------------------------------
+%% call-stacks and call-stack patterns
+%% --------------------------------------------------------------------
+
+-type call_stack_addrs() :: [CodeAddr :: pos_integer()].
+-type call_stack_pattern() :: [mfa() | CodeAddr :: pos_integer()].
+
+-spec call_stack_addrs(RawFrames) -> call_stack_addrs() when
+    RawFrames :: [erl_debugger:stack_frame()].
+call_stack_addrs(RawFrames) ->
+    [CodeAddr || {_, _, #{code := CodeAddr}} <- RawFrames].
+
+-spec call_stack_matches(Pattern, RawFrames) -> boolean() when
+    Pattern :: call_stack_pattern(),
+    RawFrames :: [erl_debugger:stack_frame()].
+call_stack_matches([], []) ->
+    true;
+call_stack_matches([MFA | MorePattern], [{_, #{function := MFA}, _} | MoreFrames]) when is_tuple(MFA) ->
+    call_stack_matches(MorePattern, MoreFrames);
+call_stack_matches([CodeAddr | MorePattern], [{_, _, #{code := CodeAddr}} | MoreFrames]) when is_integer(CodeAddr) ->
+    call_stack_matches(MorePattern, MoreFrames);
+call_stack_matches(_, _) ->
+    false.

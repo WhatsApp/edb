@@ -66,11 +66,13 @@
 -export([test_breakpoint_consumes_step/1]).
 -export([test_multiprocess_parallel_steps/1]).
 -export([test_step_over_in_unbreakpointable_code/1]).
+-export([test_step_over_on_recursive_call/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
 -export([test_step_out_into_caller_handler/1]).
 -export([test_step_out_with_unbreakpointable_caller/1]).
+-export([test_step_out_is_not_confused_when_calling_caller/1]).
 
 %% Test cases for the test_code_inspection group
 -export([test_fetch_fun_block_surrounding/1]).
@@ -91,7 +93,7 @@
 suite() ->
     [
         % @fb-only
-        {timetrap, {minutes, 10}}
+        {timetrap, {minutes, 1}}
     ].
 
 groups() ->
@@ -134,12 +136,14 @@ groups() ->
             test_step_over_progresses_from_breakpoint,
             test_breakpoint_consumes_step,
             test_multiprocess_parallel_steps,
-            test_step_over_in_unbreakpointable_code
+            test_step_over_in_unbreakpointable_code,
+            test_step_over_on_recursive_call
         ]},
         {test_step_out, [], [
             test_step_out_of_external_closure,
             test_step_out_into_caller_handler,
-            test_step_out_with_unbreakpointable_caller
+            test_step_out_with_unbreakpointable_caller,
+            test_step_out_is_not_confused_when_calling_caller
         ]},
         {test_code_inspection, [], [
             test_fetch_fun_block_surrounding
@@ -2073,6 +2077,27 @@ test_multiprocess_parallel_steps(_Config) ->
 
     ok.
 
+test_step_over_on_recursive_call(_Config) ->
+    % Add a breakpoint in test_step_over:fac/1, before the recursive call
+    ok = edb:add_breakpoint(test_step_over, 127),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_step_over, fac, [10]),
+    {ok, paused} = edb:wait(),
+
+    % Sanity check, we are on the breakpoint on line 127 (the recursive call)
+    {ok, [#{line := 127}]} = edb:stack_frames(Pid),
+
+    % Remove the breakpoint, as we only want to stop due to stepping
+    ok = edb:clear_breakpoint(test_step_over, 127),
+
+    % Step over, we want to be in line 128
+    ok = edb:step_over(Pid),
+    {ok, paused} = edb:wait(),
+    {ok, [#{line := 128}]} = edb:stack_frames(Pid),
+
+    ok.
+
 %% ------------------------------------------------------------------
 %% Test cases for test_step_out fixture
 %% ------------------------------------------------------------------
@@ -2232,6 +2257,48 @@ test_step_out_with_unbreakpointable_caller(_Config) ->
 
     % Step out of the closure
     {error, {cannot_breakpoint, test_step_out_no_beam_debug_info}} = edb:step_out(Pid),
+
+    ok.
+
+test_step_out_is_not_confused_when_calling_caller(_Config) ->
+    % Add a breakpoint in yid/1, just before calling y/2
+    ok = edb:add_breakpoint(test_step_out, 119),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(test_step_out, callee_calling_caller, []),
+    {ok, paused} = edb:wait(),
+
+    % Sanity-check: we are on the breakpoint, and y/1 is our current caller
+    {ok, Frames1} = edb:stack_frames(Pid),
+    ?assertMatch(
+        [
+            #{mfa := {test_step_out, yid, 2}, line := 119},
+            #{mfa := {test_step_out, y, 2}, line := 112},
+            #{mfa := {test_step_out, callee_calling_caller, 0}, line := 123}
+        ],
+        Frames1
+    ),
+
+    % The next thing Pid will do is call y/2, so let's check that (otherwise this testcase is useless!)
+    TraceSession = trace:session_create(monitor_calls, self(), []),
+    trace:process(TraceSession, Pid, true, [call]),
+    trace:function(TraceSession, {test_step_out, y, 2}, [], [local]),
+
+    % Step out of yid/2, we should now be in the previous frame
+    ok = edb:step_out(Pid),
+    {ok, paused} = edb:wait(),
+    {ok, Frames2} = edb:stack_frames(Pid),
+    ?assertMatch(
+        [
+            #{mfa := {test_step_out, y, 2}, line := 113},
+            #{mfa := {test_step_out, callee_calling_caller, 0}, line := 123}
+        ],
+        Frames2
+    ),
+
+    % Sanity-check: y/2 was called while stepping out
+    ?expectReceive({trace, Pid, call, {test_step_out, y, [_, _]}}),
+    true = trace:session_destroy(TraceSession),
 
     ok.
 

@@ -2,7 +2,7 @@
 
 -compile([warn_missing_spec_all]).
 
--export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, awaiting_steps/0, spawn_loop/1]).
+-export([go/1, cycle/2, just_sync/1, just_sync/2, call_closure/1, call_external_closure/1, catch_exception/1, raise_exception/1, awaiting_steps/0, spawn_loop/1, fac/1]).
 
 %% Utility function to check executed lines
 
@@ -118,3 +118,11 @@ spawn_loop(Controller) ->
                 ok
     end,
     ok.
+
+-spec fac(N) -> N when N :: non_neg_integer().
+fac(0) ->
+    1;
+fac(N) ->
+    NMinus1 = N - 1,
+    FacNMinus1 = fac(NMinus1),
+    N * FacNMinus1.
