@@ -2312,6 +2312,8 @@ test_step_out_is_not_confused_when_calling_caller(_Config) ->
 %% ------------------------------------------------------------------
 
 test_fetch_fun_block_surrounding(_Config) ->
+    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
+
     %% Auxiliary function to check that a fun block is retrieved from all its lines
     CheckIsFunBlock = fun(FirstLine, LastLine) ->
         Lines = lists:seq(FirstLine, LastLine),
@@ -2319,7 +2321,7 @@ test_fetch_fun_block_surrounding(_Config) ->
             ?assertEqual(
                 %% Add the line number to the block, to make it easier to debug
                 {line, Line, {ok, Lines}},
-                {line, Line, edb_server_code:fetch_fun_block_surrounding(test_code_inspection, Line)}
+                {line, Line, edb_server_code:fetch_fun_block_surrounding(Line, Forms)}
             )
          || Line <- Lines
         ]

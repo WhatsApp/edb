@@ -268,19 +268,24 @@ add_steps_on_stack_frame(Pid, {_, #{function := MFA, line := Line}, _}, FrameAdd
     is_tuple(MFA), is_integer(Line)
 ->
     {Module, _, _} = MFA,
-    case edb_server_code:fetch_fun_block_surrounding(Module, Line) of
-        {ok, Lines} ->
-            Pattern = [MFA | tl(FrameAddrs)],
-            Breakpoints1 = lists:foldl(
-                fun(Line1, Accu) ->
-                    add_step(Pid, Pattern, Module, Line1, Accu)
-                end,
-                Breakpoints,
-                Lines
-            ),
-            {ok, Breakpoints1};
-        {error, Error} ->
-            {error, Error}
+    case edb_server_code:fetch_abstract_forms(Module) of
+        {error, _} = Error ->
+            Error;
+        {ok, Forms} ->
+            case edb_server_code:fetch_fun_block_surrounding(Line, Forms) of
+                {ok, Lines} ->
+                    Pattern = [MFA | tl(FrameAddrs)],
+                    Breakpoints1 = lists:foldl(
+                        fun(Line1, Accu) ->
+                            add_step(Pid, Pattern, Module, Line1, Accu)
+                        end,
+                        Breakpoints,
+                        Lines
+                    ),
+                    {ok, Breakpoints1};
+                {error, Error} ->
+                    {error, Error}
+            end
     end;
 add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Breakpoints) ->
     % no line-number information or not a user function

@@ -15,6 +15,7 @@
 
 -module(edb_server_code).
 
+-export([fetch_abstract_forms/1]).
 -export([fetch_fun_block_surrounding/2]).
 -export([module_source/1]).
 
@@ -23,28 +24,77 @@
 %% erlfmt:ignore
 % @fb-only
 
+%% --------------------------------------------------------------------
+%% Types
+%% --------------------------------------------------------------------
+
 -type line() :: edb:line().
 
 %% Defined in beam_lib but not exported
--type beam_lib_form() :: erl_parse:abstract_form() | erl_parse:form_info().
--type beam_lib_forms() :: [beam_lib_form()].
+-export_type([form/0, forms/0]).
+-type form() :: erl_parse:abstract_form() | erl_parse:form_info().
+-type forms() :: [form()].
 
--spec fetch_fun_block_surrounding(module(), line()) -> {ok, [line()]} | {error, Error} when
+%% --------------------------------------------------------------------
+%% fetch_abstract_forms: fetch abstract forms from beam file
+%% --------------------------------------------------------------------
+
+-spec fetch_abstract_forms(Module) -> {ok, forms()} | {error, Error} when
+    Module :: module(),
     Error :: no_abstract_code | {beam_analysis, term()}.
-fetch_fun_block_surrounding(Module, Line) ->
-    case fetch_abstract_forms(Module) of
-        {ok, Forms} ->
-            case find_fun_block_surrounding(Line, Forms) of
-                {ok, MinLine, MaxLine} ->
-                    {ok, lists:seq(MinLine, MaxLine)};
-                not_found ->
-                    {error, {beam_analysis, {invalid_line, Module, Line}}}
-            end;
+fetch_abstract_forms(Module) ->
+    case fetch_beam_filename(Module) of
         {error, Error} ->
-            {error, Error}
+            {error, {beam_analysis, Error}};
+        {ok, ModuleBeamFile} ->
+            case beam_lib:chunks(ModuleBeamFile, [abstract_code]) of
+                {ok, {Module, [{abstract_code, {raw_abstract_v1, Forms}}]}} ->
+                    {ok, Forms};
+                {ok, {Module, [{abstract_code, no_abstract_code}]}} ->
+                    {error, no_abstract_code};
+                {ok, _} ->
+                    %% This should never happen, but if it does, it's a bug in beam_lib
+                    {error, {beam_analysis, unexpected}};
+                {error, beam_lib, Error} ->
+                    {error, {beam_analysis, {beam_lib, Error}}}
+            end
     end.
 
--spec find_fun_block_surrounding(line(), beam_lib_forms()) -> {ok, line(), line()} | not_found.
+-spec fetch_beam_filename(Module) -> {ok, file:filename()} | {error, Error} when
+    Module :: module(),
+    Error :: non_existing | cover_compiled | preloaded | dynamically_compiled.
+fetch_beam_filename(Module) ->
+    case code:which(Module) of
+        non_existing ->
+            {error, non_existing};
+        cover_compiled ->
+            {error, cover_compiled};
+        preloaded ->
+            {error, preloaded};
+        Filename ->
+            case string:lowercase(filename:extension(Filename)) of
+                ".beam" -> {ok, Filename};
+                _ -> {error, dynamically_compiled}
+            end
+    end.
+
+%% --------------------------------------------------------------------
+%% fetch_fun_block_surrounding: finding lines of functions
+%% --------------------------------------------------------------------
+
+-spec fetch_fun_block_surrounding(Line, Forms) -> {ok, [line()]} | {error, Error} when
+    Line :: line(),
+    Forms :: forms(),
+    Error :: {beam_analysis, {invalid_line, Line}}.
+fetch_fun_block_surrounding(Line, Forms) ->
+    case find_fun_block_surrounding(Line, Forms) of
+        {ok, MinLine, MaxLine} ->
+            {ok, lists:seq(MinLine, MaxLine)};
+        not_found ->
+            {error, {beam_analysis, {invalid_line, Line}}}
+    end.
+
+-spec find_fun_block_surrounding(line(), forms()) -> {ok, line(), line()} | not_found.
 find_fun_block_surrounding(_Line, []) ->
     not_found;
 find_fun_block_surrounding(Line, [Form = {function, _Anno, _Name, _Arity, _Clauses}, NextForm | Forms]) ->
@@ -79,46 +129,9 @@ find_fun_block_surrounding(Line, [_ | Forms]) ->
     %% Not a function form, so skip it
     find_fun_block_surrounding(Line, Forms).
 
--spec fetch_abstract_forms(module()) -> {ok, beam_lib_forms()} | {error, Error} when
-    Error :: no_abstract_code | {beam_analysis, term()}.
-fetch_abstract_forms(Module) ->
-    case fetch_beam_filename(Module) of
-        {error, Error} ->
-            {error, {beam_analysis, Error}};
-        {ok, ModuleBeamFile} ->
-            case beam_lib:chunks(ModuleBeamFile, [abstract_code]) of
-                {ok, {Module, [{abstract_code, {raw_abstract_v1, Forms}}]}} ->
-                    {ok, Forms};
-                {ok, {Module, [{abstract_code, no_abstract_code}]}} ->
-                    {error, no_abstract_code};
-                {ok, _} ->
-                    %% This should never happen, but if it does, it's a bug in beam_lib
-                    {error, {beam_analysis, unexpected}};
-                {error, beam_lib, Error} ->
-                    {error, {beam_analysis, {beam_lib, Error}}}
-            end
-    end.
-
--spec fetch_beam_filename(module()) -> {ok, file:filename()} | {error, Error} when
-    Error :: non_existing | cover_compiled | preloaded | dynamically_compiled.
-fetch_beam_filename(Module) ->
-    case code:which(Module) of
-        non_existing ->
-            {error, non_existing};
-        cover_compiled ->
-            {error, cover_compiled};
-        preloaded ->
-            {error, preloaded};
-        Filename ->
-            case string:lowercase(filename:extension(Filename)) of
-                ".beam" -> {ok, Filename};
-                _ -> {error, dynamically_compiled}
-            end
-    end.
-
 %% Functions to help manipulate line numbers within abstract forms
 
--spec form_line(beam_lib_form()) -> line().
+-spec form_line(form()) -> line().
 form_line({eof, Location}) ->
     location_line(Location);
 form_line({error, {Location, _, _}}) ->
@@ -132,6 +145,10 @@ form_line(Form) ->
 -spec location_line(erl_anno:location()) -> line().
 location_line(Line) when is_integer(Line) -> Line;
 location_line({Line, _Col}) -> Line.
+
+% --------------------------------------------------------------------
+% module_source: Source location of a module
+% --------------------------------------------------------------------
 
 -spec module_source(Module :: module()) -> undefined | file:filename().
 module_source(Module) ->
