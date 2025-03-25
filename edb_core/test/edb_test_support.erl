@@ -22,9 +22,13 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+%% Compiling test modues
+-export_type([module_spec/0, compile_opts/0]).
+-export([compile_module/3]).
+
 %% Peer nodes
 -export_type([peer/0, start_peer_node_opts/0, start_peer_result/0]).
--export_type([start_peer_no_dist_opts/0, start_peer_no_dist_result/0, module_spec/0]).
+-export_type([start_peer_no_dist_opts/0, start_peer_no_dist_result/0]).
 -export([start_peer_node/2, start_peer_no_dist/2, stop_peer/1, stop_all_peers/0]).
 -export([random_node/1, random_node/2]).
 -export([random_srcdir/1]).
@@ -34,6 +38,98 @@
 
 %% Conversions
 -export([file_name_all_to_string/1, file_name_all_to_binary/1, safe_string_to_binary/1]).
+
+%% --------------------------------------------------------------------
+%% Compiling test modules
+%% --------------------------------------------------------------------
+-type module_spec() :: {filename, file:name_all()} | {filepath, file:filename_all()} | {source, iodata()}.
+-type compile_opts() :: #{
+    work_dir => file:filename_all(),
+    load_it => boolean(),
+    flags => [compile:option()]
+}.
+-type compile_opts_full() :: #{
+    work_dir := file:filename_all(),
+    load_it := boolean(),
+    flags := [compile:option()]
+}.
+
+-spec compile_module(CtConfig, ModuleSpec, Opts) -> {ok, Module, FilePath} when
+    CtConfig :: ct_suite:ct_config(),
+    ModuleSpec :: module_spec(),
+    Opts :: compile_opts(),
+    Module :: module(),
+    FilePath :: binary().
+compile_module(CtConfig, ModuleSpec, Opts0) ->
+    Opts1 =
+        case Opts0 of
+            #{work_dir := _} ->
+                Opts0;
+            _ ->
+                WorkDir = proplists:get_value(priv_dir, CtConfig),
+                Opts0#{work_dir => WorkDir}
+        end,
+    Opts2 =
+        case Opts1 of
+            #{load_it := _} -> Opts1;
+            _ -> Opts1#{load_it => false}
+        end,
+    Opts3 =
+        case Opts2 of
+            #{flags := _} ->
+                Opts2;
+            _ ->
+                DefaultFlags = [debug_info, beam_debug_info],
+                Opts2#{flags => DefaultFlags}
+        end,
+    compile_module_1(CtConfig, ModuleSpec, Opts3).
+
+-spec compile_module_1(CtConfig, ModuleSpec, Opts) -> {ok, Module, FilePath} when
+    CtConfig :: ct_suite:ct_config(),
+    ModuleSpec :: module_spec(),
+    Opts :: compile_opts_full(),
+    Module :: module(),
+    FilePath :: binary().
+compile_module_1(_CtConfig, {filepath, FilePath}, Opts) ->
+    compile_module_2(FilePath, Opts);
+compile_module_1(CtConfig, {filename, FileName}, Opts) ->
+    DataDir = ?config(data_dir, CtConfig),
+    FilePath = filename:join(DataDir, FileName),
+    {ok, Contents} = file:read_file(FilePath),
+    compile_module_1(CtConfig, {source, Contents}, Opts);
+compile_module_1(CtConfig, {source, Source}, Opts) ->
+    #{work_dir := WorkDir} = Opts,
+    MatchModuleRegex = ~"-module\\(([^)]+)\\)\\.",
+    case re:run(Source, MatchModuleRegex, [{capture, all_but_first, list}]) of
+        {match, [ModuleName]} ->
+            FilePath = filename:join([WorkDir, "src", ModuleName ++ ".erl"]),
+            ok = filelib:ensure_dir(FilePath),
+            ok = file:write_file(FilePath, Source),
+            compile_module_1(CtConfig, {filepath, FilePath}, Opts);
+        nomatch ->
+            error(couldnt_parse_module_name)
+    end.
+
+-spec compile_module_2(SourceFile, Opts) -> {ok, Module, FilePath} when
+    SourceFile :: file:filename_all(),
+    Opts :: compile_opts_full(),
+    Module :: module(),
+    FilePath :: binary().
+compile_module_2(SourceFile, Opts) ->
+    CompileOpts = maps:get(flags, Opts),
+    WorkDir = maps:get(work_dir, Opts),
+    FilePathStr = file_name_all_to_string(SourceFile),
+    Ebindir = filename:join(WorkDir, "ebin"),
+    ok = filelib:ensure_path(Ebindir),
+    {ok, Module} = compile:file(FilePathStr, [{outdir, Ebindir} | CompileOpts]),
+    case Opts of
+        #{load_it := true} ->
+            BeamFilePath = filename:join(Ebindir, filename:basename(FilePathStr, ".erl")),
+            {module, Module} = code:load_abs(BeamFilePath);
+        _ ->
+            ok
+    end,
+    {ok, Module, safe_string_to_binary(FilePathStr)}.
 
 %% --------------------------------------------------------------------
 %% Peer nodes
@@ -80,8 +176,6 @@ random_srcdir(CtConfig) ->
     ok = file:make_dir(WorkDir),
     ok = file:make_dir(SrcDir),
     file_name_all_to_binary(SrcDir).
-
--type module_spec() :: {filename, file:name_all()} | {filepath, file:filename_all()} | {source, iodata()}.
 
 -type start_peer_node_opts() ::
     #{
@@ -243,42 +337,15 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     ok = file:make_dir(EbinDir),
     true = peer:call(Peer, code, add_patha, [EbinDir]),
 
+    CompileOpts = #{work_dir => WorkDir},
     Modules =
         #{
             Module => BeamFilePath
          || ModuleSpec <- maps:get(modules, Opts, []),
-            {ok, Module, BeamFilePath} <- [compile_module(CtConfig, WorkDir, ModuleSpec)]
+            {ok, Module, BeamFilePath} <- [compile_module(CtConfig, ModuleSpec, CompileOpts)]
         },
 
     {ok, Peer, SrcDir, Modules}.
-
--spec compile_module(CtConfig, PeerWorkdir, ModuleSpec) -> {ok, Module, FilePath} when
-    CtConfig :: ct_suite:ct_config(),
-    PeerWorkdir :: file:filename_all(),
-    ModuleSpec :: module_spec(),
-    Module :: module(),
-    FilePath :: binary().
-compile_module(CtConfig, Workdir, {filename, FileName}) ->
-    DataDir = ?config(data_dir, CtConfig),
-    FilePath = filename:join(DataDir, FileName),
-    {ok, Contents} = file:read_file(FilePath),
-    compile_module(CtConfig, Workdir, {source, Contents});
-compile_module(CtConfig, PeerWorkdir, {source, Source}) ->
-    MatchModuleRegex = ~"-module\\(([^)]+)\\)\\.",
-    case re:run(Source, MatchModuleRegex, [{capture, all_but_first, list}]) of
-        {match, [ModuleName]} ->
-            FilePath = filename:join([PeerWorkdir, "src", ModuleName ++ ".erl"]),
-            file:write_file(FilePath, Source),
-            compile_module(CtConfig, PeerWorkdir, {filepath, FilePath});
-        nomatch ->
-            error(couldnt_parse_module_name)
-    end;
-compile_module(_CtConfig, PeerWorkdir, {filepath, FilePath}) ->
-    CompileOpts = [debug_info, beam_debug_info],
-    FilePathStr = file_name_all_to_string(FilePath),
-    Ebindir = filename:join(PeerWorkdir, "ebin"),
-    {ok, Module} = compile:file(FilePathStr, [{outdir, Ebindir} | CompileOpts]),
-    {ok, Module, safe_string_to_binary(FilePathStr)}.
 
 -spec stop_peer(Peer) -> ok when
     Peer :: peer().

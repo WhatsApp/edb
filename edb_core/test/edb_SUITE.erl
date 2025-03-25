@@ -192,10 +192,6 @@ end_per_suite(_Config) ->
 
 init_per_group(Group, Config0) ->
     DataDir = proplists:get_value(data_dir, Config0),
-    PrivDir = proplists:get_value(priv_dir, Config0),
-
-    CompileOpts = [{outdir, PrivDir}, debug_info, beam_debug_info],
-    CompileNoDebugOpts = [{outdir, PrivDir}, debug_info],
 
     % Compile and load all the `$GROUP*.erl` files in the data dir
 
@@ -204,15 +200,10 @@ init_per_group(Group, Config0) ->
 
     Config1 = lists:foldl(
         fun(SrcFileName, AccConfig) ->
-            TestSupportModule = list_to_atom(filename:basename(SrcFileName, ".erl")),
-            ActualCompileOpts =
-                case string:find(SrcFileName, "no_beam_debug_info.erl") of
-                    nomatch -> CompileOpts;
-                    _ -> CompileNoDebugOpts
-                end,
-            {ok, _} = compile:file(SrcFileName, ActualCompileOpts),
-            BinFileName = filename:join(PrivDir, atom_to_list(TestSupportModule)),
-            {module, TestSupportModule} = code:load_abs(BinFileName),
+            {ok, _, _} = edb_test_support:compile_module(AccConfig, {filepath, SrcFileName}, #{
+                flags => [debug_info, beam_debug_info],
+                load_it => true
+            }),
             [{erl_source, SrcFileName} | AccConfig]
         end,
         Config0,
@@ -225,6 +216,7 @@ end_per_group(Group, _Config) ->
     % Delete and purge all the $GROUP* loaded test support modules
     [
         begin
+            code:purge(TestSupportModule),
             true = code:delete(TestSupportModule),
             code:purge(TestSupportModule)
         end
@@ -1908,7 +1900,13 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     ok.
 
-test_step_over_in_unbreakpointable_code(_Config) ->
+test_step_over_in_unbreakpointable_code(Config) ->
+    % Ensure test_step_over_no_beam_debug_info is compiled without beam_debug_info
+    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_step_over_no_beam_debug_info.erl"}, #{
+        flags => [debug_info],
+        load_it => true
+    }),
+
     % To do this test, we must first manage to stop on a line that is not breakable
     % This is done by starting a process that will loop forever in unbreakable code
     % and setting a breakpoint on code executed in a different process.
@@ -2227,9 +2225,14 @@ test_step_out_into_caller_handler(_Config) ->
 
     ok.
 
-test_step_out_with_unbreakpointable_caller(_Config) ->
-    % Check that we get a sane error if a step out exits to caller, and the caller is an OTP function
-    % (which is not supported by the debugger)
+test_step_out_with_unbreakpointable_caller(Config) ->
+    % Check that we get a sane error if a step out exits to caller, is not compiled with beam_debug_info
+
+    % Ensure test_step_out_no_beam_debug_info is compiled without beam_debug_info
+    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_step_out_no_beam_debug_info.erl"}, #{
+        flags => [debug_info],
+        load_it => true
+    }),
 
     % Add a breakpoint to start stepping from
     ok = edb:add_breakpoint(test_step_out, 101),
