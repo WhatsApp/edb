@@ -12,17 +12,17 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc DAP Request Handlers
-%%      The actual implementation for the DAP requests.
-%%      This function should be invoked by the DAP server.
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_utils).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+DAP Request Handlers
+The actual implementation for the DAP requests.
+This function should be invoked by the DAP server.
+""".
 -compile(warn_missing_spec_all).
 
 -export([strip_suffix/2]).
