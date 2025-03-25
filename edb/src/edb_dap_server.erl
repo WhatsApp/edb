@@ -12,17 +12,17 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Handling of DAP requests, responses and events
-%%
-%% For details see https://microsoft.github.io/debug-adapter-protocol/specification
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_server).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Handling of DAP requests, responses and events
+
+For details see https://microsoft.github.io/debug-adapter-protocol/specification
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(gen_server).

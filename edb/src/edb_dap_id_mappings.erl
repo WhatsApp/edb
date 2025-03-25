@@ -12,25 +12,25 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%---------------------------------------------------------------------------------
-%% @doc An mapper of IDs for the debug adapter
-%%
-%% The DAP protocol expects numeric ids for threads, frames, scopes, etc. These ids
-%% are represented as number() in the JSON specification, and are expected to fit
-%% in a 64-bit float. Some ids like thread_ids are expected to be unique across the
-%% debugging session, while others (frame-ids, etc), need be unique only between
-%% pauses. The specification recommends adapters to reset them on `continue' requests.
-%% For more details see https://microsoft.github.io/debug-adapter-protocol/overview
-%%
-%% This module implements the mapping fo PIDs to thread-ids, etc, generically.
-%%
-%% @end
-%%%---------------------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_id_mappings).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+An mapper of IDs for the debug adapter
+
+The DAP protocol expects numeric ids for threads, frames, scopes, etc. These ids
+are represented as number() in the JSON specification, and are expected to fit
+in a 64-bit float. Some ids like thread_ids are expected to be unique across the
+debugging session, while others (frame-ids, etc), need be unique only between
+pauses. The specification recommends adapters to reset them on `continue` requests.
+For more details see https://microsoft.github.io/debug-adapter-protocol/overview
+
+This module implements the mapping fo PIDs to thread-ids, etc, generically.
+
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(gen_server).

@@ -12,15 +12,15 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Handle events coming from the debugger.
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_internal_events).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Handle events coming from the debugger.
+""".
 -compile(warn_missing_spec_all).
 
 -export([handle_reverse_attach_result/2]).

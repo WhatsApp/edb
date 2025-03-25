@@ -12,21 +12,21 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Transport layer of the DAP server
-%%      This module deals with serialization/deserialization, sequencing
-%%      and other low-level details of the DAP frontend for the edb Erlang
-%%      debugger.
-%%
-%%      For the actual handling of requests, etc. see the edb_dap_server
-%%      module.
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_transport).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Transport layer of the DAP server
+This module deals with serialization/deserialization, sequencing
+and other low-level details of the DAP frontend for the edb Erlang
+debugger.
+
+For the actual handling of requests, etc. see the edb_dap_server
+module.
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(gen_server).

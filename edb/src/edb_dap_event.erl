@@ -12,15 +12,15 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc DAP Events
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_event).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+DAP Events
+""".
 -compile(warn_missing_spec_all).
 
 -export([

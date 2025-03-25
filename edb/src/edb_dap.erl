@@ -12,26 +12,26 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%---------------------------------------------------------------------------------
-%% @doc Support for the DAP Protocol
-%%
-%%      The Debug Adapter Protocol (DAP) defines the abstract protocol
-%%      used between a development tool (e.g. IDE or editor) and a
-%%      debugger, using JSON-RPC as the underlying transport protocol.
-%%
-%%      This module implements the types and functions required to
-%%      encode and decode messages to and from the DAP protocol.
-%%
-%%      For the full specification, please refer to:
-%%
-%%      https://microsoft.github.io/debug-adapter-protocol/specification
-%% @end
-%%%---------------------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Support for the DAP Protocol
+
+The Debug Adapter Protocol (DAP) defines the abstract protocol
+used between a development tool (e.g. IDE or editor) and a
+debugger, using JSON-RPC as the underlying transport protocol.
+
+This module implements the types and functions required to
+encode and decode messages to and from the DAP protocol.
+
+For the full specification, please refer to:
+
+https://microsoft.github.io/debug-adapter-protocol/specification
+""".
 -compile(warn_missing_spec_all).
 
 -export([encode_frame/1, decode_frames/1, frame/1, unframe/1]).

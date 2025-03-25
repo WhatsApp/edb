@@ -12,14 +12,14 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc edb public API
-%% @end
-%%%-------------------------------------------------------------------
 %% % @format
 -module(edb_app).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+edb public API
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(application).

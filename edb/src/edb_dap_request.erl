@@ -12,16 +12,16 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Behaviour for handling client requests
-%%
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_request).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Behaviour for handling client requests
+
+""".
 -compile(warn_missing_spec_all).
 
 %% Public API

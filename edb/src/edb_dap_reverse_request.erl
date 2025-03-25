@@ -12,16 +12,16 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Behaviour for handling reverse-requests to the client
-%%
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_reverse_request).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Behaviour for handling reverse-requests to the client
+
+""".
 -compile(warn_missing_spec_all).
 
 %% Public API

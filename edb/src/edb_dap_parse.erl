@@ -12,14 +12,14 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc Support for parsing of request arguments, etc
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 -module(edb_dap_parse).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Support for parsing of request arguments, etc
+""".
 -compile(warn_missing_spec_all).
 
 -export([parse/3]).
