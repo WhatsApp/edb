@@ -16,7 +16,8 @@
 -module(edb_server_code).
 
 -export([fetch_abstract_forms/1]).
--export([fetch_fun_block_surrounding/2]).
+-export([find_fun_containing_line/2]).
+-export([get_line_span/1]).
 -export([get_call_target/2]).
 -export([module_source/1]).
 
@@ -80,49 +81,56 @@ fetch_beam_filename(Module) ->
     end.
 
 %% --------------------------------------------------------------------
-%% fetch_fun_block_surrounding: finding lines of functions
+%% Dealing with function forms
 %% --------------------------------------------------------------------
 
--spec fetch_fun_block_surrounding(Line, Forms) -> {ok, [line()]} | {error, Error} when
-    Line :: line(),
-    Forms :: forms(),
-    Error :: {beam_analysis, {invalid_line, Line}}.
-fetch_fun_block_surrounding(Line, Forms) ->
-    case find_fun_block_surrounding(Line, Forms) of
-        {ok, MinLine, MaxLine} ->
-            {ok, lists:seq(MinLine, MaxLine)};
-        not_found ->
-            {error, {beam_analysis, {invalid_line, Line}}}
-    end.
-
--spec find_fun_block_surrounding(Line, Forms) -> {ok, line(), line()} | not_found when
+-spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
     Line :: line(),
     Forms :: forms().
-find_fun_block_surrounding(Line, Forms) ->
-    case find_fun_containing_line(Line, Forms) of
-        not_found ->
-            not_found;
-        {ok, Form} ->
-            case
-                erl_parse:fold_anno(
-                    fun(Anno, {MinLine, MaxLine}) ->
-                        case erl_anno:line(Anno) of
-                            0 ->
-                                % Line information is somehow missing on this ast node, ignore
-                                {MinLine, MaxLine};
-                            AnnoLine ->
-                                {min(AnnoLine, MinLine), max(AnnoLine, MaxLine)}
-                        end
-                    end,
-                    {Line, Line},
-                    Form
-                )
-            of
-                %% fold_anno has a type that doesn't enforce accumulator type being preserved
-                %% so we have to do this
-                {MinLine, MaxLine} when is_integer(MinLine), is_integer(MaxLine) ->
-                    {ok, MinLine, MaxLine}
-            end
+find_fun_containing_line(_Line, []) ->
+    not_found;
+find_fun_containing_line(Line, [Form, NextForm | Forms]) ->
+    case erl_syntax:type(Form) of
+        function ->
+            NextFormLine = form_line(NextForm),
+            case NextFormLine > Line of
+                true ->
+                    %% Next form starts after Line, so we found the function
+                    {ok, Form};
+                false ->
+                    find_fun_containing_line(Line, [NextForm | Forms])
+            end;
+        _ ->
+            %% Not a function form, so skip it
+            find_fun_containing_line(Line, [NextForm | Forms])
+    end.
+
+%% --------------------------------------------------------------------
+%% Spans
+%% --------------------------------------------------------------------
+
+-spec get_line_span(Form) -> {line(), line()} when
+    Form :: form().
+get_line_span(Form) ->
+    case
+        erl_parse:fold_anno(
+            fun(Anno, {MinLine, MaxLine}) ->
+                case erl_anno:line(Anno) of
+                    0 ->
+                        % Line information is somehow missing on this ast node, ignore
+                        {MinLine, MaxLine};
+                    AnnoLine ->
+                        {min(AnnoLine, MinLine), max(AnnoLine, MaxLine)}
+                end
+            end,
+            {infinity, 0},
+            Form
+        )
+    of
+        %% fold_anno has a type that doesn't enforce accumulator type being preserved
+        %% so we have to do this
+        {MinLine, MaxLine} when is_integer(MinLine), is_integer(MaxLine) ->
+            {MinLine, MaxLine}
     end.
 
 % --------------------------------------------------------------------
@@ -315,27 +323,6 @@ find_module_name([Form | Forms]) ->
             end;
         _ ->
             find_module_name(Forms)
-    end.
-
--spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
-    Line :: line(),
-    Forms :: forms().
-find_fun_containing_line(_Line, []) ->
-    not_found;
-find_fun_containing_line(Line, [Form, NextForm | Forms]) ->
-    case erl_syntax:type(Form) of
-        function ->
-            NextFormLine = form_line(NextForm),
-            case NextFormLine > Line of
-                true ->
-                    %% Next form starts after Line, so we found the function
-                    {ok, Form};
-                false ->
-                    find_fun_containing_line(Line, [NextForm | Forms])
-            end;
-        _ ->
-            %% Not a function form, so skip it
-            find_fun_containing_line(Line, [NextForm | Forms])
     end.
 
 -spec form_line(form()) -> line().

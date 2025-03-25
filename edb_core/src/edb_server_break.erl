@@ -239,17 +239,14 @@ add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Kind, Breakp
     %% Proper MFA and line: try to put steps on the surrounding function
     case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
         {ok, Breakpoints1} ->
-            case Breakpoints0 =:= Breakpoints1 of
-                true when Kind =:= top_frame_must_succeed ->
-                    %% We cannot claim success if no breakpoints were added
-                    {_, #{function := {Module, _, _}}, _} = TopFrame,
-                    {error, {cannot_breakpoint, Module}};
-                _ ->
-                    add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints1)
-            end;
+            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints1);
+        no_breakpoint_set when Kind =:= top_frame_must_succeed ->
+            %% We cannot claim success if no breakpoints were added
+            {_, #{function := {Module, _, _}}, _} = TopFrame,
+            {error, {cannot_breakpoint, Module}};
         skipped when Kind =:= top_frame_must_succeed ->
             edb_server:invariant_violation(stepping_from_unbreakable_frame);
-        skipped ->
+        Failure when Failure =:= skipped; Failure =:= no_breakpoint_set ->
             add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints0);
         {error, Error} ->
             {error, Error}
@@ -258,7 +255,7 @@ add_steps_on_stack_frames(_Pid, [], [], top_frame_can_fail, Breakpoints) ->
     {ok, Breakpoints}.
 
 -spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, breakpoints()) ->
-    {ok, breakpoints()} | skipped | {error, Error}
+    {ok, breakpoints()} | no_breakpoint_set | skipped | {error, Error}
 when
     Pid :: pid(),
     TopFrame :: erl_debugger:stack_frame(),
@@ -272,24 +269,48 @@ add_steps_on_stack_frame(Pid, {_, #{function := MFA, line := Line}, _}, FrameAdd
         {error, _} = Error ->
             Error;
         {ok, Forms} ->
-            case edb_server_code:fetch_fun_block_surrounding(Line, Forms) of
-                {ok, Lines} ->
-                    Pattern = [MFA | tl(FrameAddrs)],
-                    Breakpoints1 = lists:foldl(
-                        fun(Line1, Accu) ->
-                            add_step(Pid, Pattern, Module, Line1, Accu)
-                        end,
-                        Breakpoints,
-                        Lines
-                    ),
-                    {ok, Breakpoints1};
-                {error, Error} ->
-                    {error, Error}
+            case edb_server_code:find_fun_containing_line(Line, Forms) of
+                {ok, Form} ->
+                    add_steps_on_function(Pid, MFA, Form, FrameAddrs, Breakpoints);
+                not_found ->
+                    {error, {beam_analysis, {invalid_line, Line}}}
             end
     end;
 add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Breakpoints) ->
     % no line-number information or not a user function
     skipped.
+
+-spec add_steps_on_function(Pid, MFA, FunForm, FrameAddrs, breakpoints()) ->
+    {ok, breakpoints()} | no_breakpoint_set
+when
+    Pid :: pid(),
+    MFA :: mfa(),
+    FunForm :: edb_server_code:form(),
+    FrameAddrs :: call_stack_addrs().
+add_steps_on_function(Pid, MFA, FunForm, FrameAddrs, Breakpoints0) ->
+    {From, To} = edb_server_code:get_line_span(FunForm),
+    Lines = lists:seq(From, To),
+
+    {Module, _, _} = MFA,
+    Pattern = [MFA | tl(FrameAddrs)],
+
+    {Breakpoints1, SomeBreakpointSet} = lists:foldl(
+        fun(Line1, Acc0 = {AccBreakpoints0, _}) ->
+            case add_step(Pid, Pattern, Module, Line1, AccBreakpoints0) of
+                no_breakpoint_set ->
+                    Acc0;
+                {ok, AccBreakpoints1} ->
+                    {AccBreakpoints1, true}
+            end
+        end,
+        {Breakpoints0, false},
+        Lines
+    ),
+
+    case SomeBreakpointSet of
+        true -> {ok, Breakpoints1};
+        false -> no_breakpoint_set
+    end.
 
 -spec clear_steps(pid(), breakpoints()) -> {ok, breakpoints()}.
 clear_steps(Pid, Breakpoints) ->
@@ -346,7 +367,7 @@ resume_processes(ToResume, Breakpoints) ->
 
     Breakpoints#breakpoints{explicits_hit = ExplicitsHit1, resume_actions = ResumeActions1}.
 
--spec add_step(Pid, Pattern, Module, Line, breakpoints()) -> breakpoints() when
+-spec add_step(Pid, Pattern, Module, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
     Pid :: pid(),
     Pattern :: call_stack_pattern(),
     Module :: module(),
@@ -356,10 +377,11 @@ add_step(Pid, Pattern, Module, Line, Breakpoints0) ->
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
             Steps2 = edb_server_maps:add(Pid, {Module, Line}, Pattern, [], Steps1),
-            Breakpoints1#breakpoints{steps = Steps2};
+            Breakpoints2 = Breakpoints1#breakpoints{steps = Steps2},
+            {ok, Breakpoints2};
         {error, _} ->
-            % This is not a line where we can set a breakpoint, do nothing.
-            Breakpoints0
+            % This is not a line where we can set a breakpoint.
+            no_breakpoint_set
     end.
 
 -spec add_explicits(module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when
