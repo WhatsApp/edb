@@ -94,14 +94,14 @@ fetch_fun_block_surrounding(Line, Forms) ->
             {error, {beam_analysis, {invalid_line, Line}}}
     end.
 
--spec find_fun_block_surrounding(line(), forms()) -> {ok, line(), line()} | not_found.
-find_fun_block_surrounding(_Line, []) ->
-    not_found;
-find_fun_block_surrounding(Line, [Form = {function, _Anno, _Name, _Arity, _Clauses}, NextForm | Forms]) ->
-    NextFormLine = form_line(NextForm),
-    case NextFormLine > Line of
-        true ->
-            %% Next form starts after Line, so we found the function
+-spec find_fun_block_surrounding(Line, Forms) -> {ok, line(), line()} | not_found when
+    Line :: line(),
+    Forms :: forms().
+find_fun_block_surrounding(Line, Forms) ->
+    case find_fun_containing_line(Line, Forms) of
+        not_found ->
+            not_found;
+        {ok, Form} ->
             case
                 erl_parse:fold_anno(
                     fun(Anno, {MinLine, MaxLine}) ->
@@ -121,30 +121,8 @@ find_fun_block_surrounding(Line, [Form = {function, _Anno, _Name, _Arity, _Claus
                 %% so we have to do this
                 {MinLine, MaxLine} when is_integer(MinLine), is_integer(MaxLine) ->
                     {ok, MinLine, MaxLine}
-            end;
-        false ->
-            find_fun_block_surrounding(Line, [NextForm | Forms])
-    end;
-find_fun_block_surrounding(Line, [_ | Forms]) ->
-    %% Not a function form, so skip it
-    find_fun_block_surrounding(Line, Forms).
-
-%% Functions to help manipulate line numbers within abstract forms
-
--spec form_line(form()) -> line().
-form_line({eof, Location}) ->
-    location_line(Location);
-form_line({error, {Location, _, _}}) ->
-    location_line(Location);
-form_line({warning, {Location, _, _}}) ->
-    location_line(Location);
-form_line(Form) ->
-    Anno = element(2, Form),
-    erl_anno:line(Anno).
-
--spec location_line(erl_anno:location()) -> line().
-location_line(Line) when is_integer(Line) -> Line;
-location_line({Line, _Col}) -> Line.
+            end
+    end.
 
 % --------------------------------------------------------------------
 % module_source: Source location of a module
@@ -198,3 +176,32 @@ guess_module_source(Module) ->
                     undefined
             end
     end.
+
+% --------------------------------------------------------------------
+% Helpers
+% --------------------------------------------------------------------
+
+-spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
+    Line :: line(),
+    Forms :: forms().
+find_fun_containing_line(_Line, []) ->
+    not_found;
+find_fun_containing_line(Line, [Form, NextForm | Forms]) ->
+    case erl_syntax:type(Form) of
+        function ->
+            NextFormLine = form_line(NextForm),
+            case NextFormLine > Line of
+                true ->
+                    %% Next form starts after Line, so we found the function
+                    {ok, Form};
+                false ->
+                    find_fun_containing_line(Line, [NextForm | Forms])
+            end;
+        _ ->
+            %% Not a function form, so skip it
+            find_fun_containing_line(Line, [NextForm | Forms])
+    end.
+
+-spec form_line(form()) -> line().
+form_line(Form) ->
+    erl_anno:line(erl_syntax:get_pos(Form)).

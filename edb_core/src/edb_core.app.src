@@ -20,7 +20,8 @@
     {applications, [
         % @fb-only
         kernel,
-        stdlib
+        stdlib,
+        syntax_tools
     ]},
     {licenses, ["Apache-2.0"]},
     {links, []},
