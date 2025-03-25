@@ -17,6 +17,7 @@
 
 -export([fetch_abstract_forms/1]).
 -export([fetch_fun_block_surrounding/2]).
+-export([get_call_target/2]).
 -export([module_source/1]).
 
 -compile(warn_missing_spec_all).
@@ -125,6 +126,119 @@ find_fun_block_surrounding(Line, Forms) ->
     end.
 
 % --------------------------------------------------------------------
+% get_call_target: Call-target analysis for stepping-in, etc
+% --------------------------------------------------------------------
+-spec get_call_target(Line, Forms) ->
+    {ok, {mfa(), Args :: [erl_syntax:syntaxTree()]}}
+    | {error, Reason}
+when
+    Line :: line(),
+    Forms :: forms(),
+    Reason ::
+        not_found
+        | {not_a_call, Type :: atom()}
+        | unsupported_operator.
+get_call_target(Line, Forms) ->
+    case expr_at_line(Line, Forms) of
+        not_found ->
+            {error, not_found};
+        {ok, Expr} ->
+            case erl_syntax:type(Expr) of
+                application ->
+                    AppOperator = erl_syntax:application_operator(Expr),
+                    case erl_syntax:type(AppOperator) of
+                        atom ->
+                            % Call target is a local function
+                            case find_module_name(Forms) of
+                                {ok, M} ->
+                                    F = erl_syntax:atom_value(AppOperator),
+                                    Args = erl_syntax:application_arguments(Expr),
+                                    A = length(Args),
+                                    {ok, {{M, F, A}, Args}};
+                                not_found ->
+                                    {error, unsupported_operator}
+                            end;
+                        module_qualifier ->
+                            % Call target is an MFA
+                            L = erl_syntax:module_qualifier_argument(AppOperator),
+                            R = erl_syntax:module_qualifier_body(AppOperator),
+                            case {resolve_atom(L), resolve_atom(R)} of
+                                {{ok, M}, {ok, F}} ->
+                                    Args = erl_syntax:application_arguments(Expr),
+                                    A = length(Args),
+                                    {ok, {{M, F, A}, Args}};
+                                _ ->
+                                    {error, unsupported_operator}
+                            end;
+                        implicit_fun ->
+                            % Call target is a function reference
+                            Ref = erl_syntax:implicit_fun_name(AppOperator),
+                            case erl_syntax:type(Ref) of
+                                module_qualifier ->
+                                    % fun M:F/A
+                                    L = erl_syntax:module_qualifier_argument(Ref),
+                                    case resolve_atom(L) of
+                                        {ok, M} ->
+                                            R = erl_syntax:module_qualifier_body(Ref),
+                                            case resolve_arity_qualifier(M, R) of
+                                                {ok, MFA} ->
+                                                    Args = Args = erl_syntax:application_arguments(Expr),
+                                                    {ok, {MFA, Args}};
+                                                error ->
+                                                    {error, unsupported_operator}
+                                            end;
+                                        _ ->
+                                            {error, unsupported_operator}
+                                    end;
+                                arity_qualifier ->
+                                    case find_module_name(Forms) of
+                                        {ok, M} ->
+                                            case resolve_arity_qualifier(M, Ref) of
+                                                {ok, MFA} ->
+                                                    Args = erl_syntax:application_arguments(Expr),
+                                                    {ok, {MFA, Args}};
+                                                error ->
+                                                    {error, unsupported_operator}
+                                            end;
+                                        not_found ->
+                                            {error, unsupported_operator}
+                                    end;
+                                _ ->
+                                    {error, unsupported_operator}
+                            end;
+                        _ ->
+                            {error, unsupported_operator}
+                    end;
+                Type ->
+                    {error, {not_a_call, Type}}
+            end
+    end.
+
+-spec resolve_arity_qualifier(Module, ArityQualifier) -> {ok, mfa()} | error when
+    Module :: module(),
+    ArityQualifier :: erl_syntax:syntaxTree().
+resolve_arity_qualifier(Module, ArityQualifier) ->
+    case erl_syntax:type(ArityQualifier) of
+        arity_qualifier ->
+            L = erl_syntax:arity_qualifier_body(ArityQualifier),
+            case resolve_atom(L) of
+                {ok, F} ->
+                    R = erl_syntax:arity_qualifier_argument(ArityQualifier),
+                    case erl_syntax:type(R) of
+                        integer ->
+                            A = erl_syntax:integer_value(R),
+                            {ok, {Module, F, A}};
+                        _ ->
+                            error
+                    end;
+                _ ->
+                    error
+            end;
+        _ ->
+            error
+    end.
+
+% --------------------------------------------------------------------
 % module_source: Source location of a module
 % --------------------------------------------------------------------
 
@@ -181,6 +295,28 @@ guess_module_source(Module) ->
 % Helpers
 % --------------------------------------------------------------------
 
+-spec find_module_name(Forms) -> {ok, module()} | not_found when
+    Forms :: forms().
+find_module_name([]) ->
+    not_found;
+find_module_name([Form | Forms]) ->
+    case erl_syntax:type(Form) of
+        attribute ->
+            L = erl_syntax:attribute_name(Form),
+            Rs = erl_syntax:attribute_arguments(Form),
+            case {resolve_atom(L), Rs} of
+                {{ok, module}, [R]} ->
+                    case resolve_atom(R) of
+                        {ok, Module} -> {ok, Module};
+                        _ -> find_module_name(Forms)
+                    end;
+                _ ->
+                    find_module_name(Forms)
+            end;
+        _ ->
+            find_module_name(Forms)
+    end.
+
 -spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
     Line :: line(),
     Forms :: forms().
@@ -205,3 +341,29 @@ find_fun_containing_line(Line, [Form, NextForm | Forms]) ->
 -spec form_line(form()) -> line().
 form_line(Form) ->
     erl_anno:line(erl_syntax:get_pos(Form)).
+
+-spec resolve_atom(Expr :: erl_syntax:syntaxTree()) -> {ok, atom()} | none.
+resolve_atom(Expr) ->
+    case erl_syntax:type(Expr) of
+        atom -> {ok, erl_syntax:atom_value(Expr)};
+        _ -> none
+    end.
+
+-spec expr_at_line(Line, FormOrForms) -> {ok, Form} | not_found when
+    Line :: line(),
+    Form :: form(),
+    FormOrForms :: form() | forms().
+expr_at_line(_Line, []) ->
+    not_found;
+expr_at_line(Line, [Form | Forms]) ->
+    case expr_at_line(Line, Form) of
+        {ok, _} = Result ->
+            Result;
+        not_found ->
+            expr_at_line(Line, Forms)
+    end;
+expr_at_line(Line, Form) ->
+    case form_line(Form) =:= Line of
+        true -> {ok, Form};
+        false -> expr_at_line(Line, erl_syntax:subtrees(Form))
+    end.

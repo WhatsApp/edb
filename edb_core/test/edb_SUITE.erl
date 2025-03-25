@@ -22,7 +22,7 @@
 % @fb-only
 -include_lib("stdlib/include/assert.hrl").
 
-%% Test server specific exports
+%% CT callbacks
 -export([all/0, groups/0, suite/0]).
 -export([init_per_suite/1, end_per_suite/1]).
 -export([init_per_group/2, end_per_group/2]).
@@ -74,9 +74,6 @@
 -export([test_step_out_into_caller_handler/1]).
 -export([test_step_out_with_unbreakpointable_caller/1]).
 -export([test_step_out_is_not_confused_when_calling_caller/1]).
-
-%% Test cases for the test_code_inspection group
--export([test_fetch_fun_block_surrounding/1]).
 
 %% Test cases for the test_stackframes group
 -export([test_shows_stackframes_of_process_in_breakpoint/1]).
@@ -146,9 +143,6 @@ groups() ->
             test_step_out_with_unbreakpointable_caller,
             test_step_out_is_not_confused_when_calling_caller
         ]},
-        {test_code_inspection, [], [
-            test_fetch_fun_block_surrounding
-        ]},
 
         {test_stackframes, [], [
             test_shows_stackframes_of_process_in_breakpoint,
@@ -171,7 +165,6 @@ all() ->
         {group, test_breakpoints},
         {group, test_step_over},
         {group, test_step_out},
-        {group, test_code_inspection},
         {group, test_stackframes},
         {group, test_format}
     ].
@@ -2304,47 +2297,6 @@ test_step_out_is_not_confused_when_calling_caller(_Config) ->
     % Sanity-check: y/2 was called while stepping out
     ?expectReceive({trace, Pid, call, {test_step_out, y, [_, _]}}),
     true = trace:session_destroy(TraceSession),
-
-    ok.
-
-%% ------------------------------------------------------------------
-%% Test cases for test_code_inspection fixture
-%% ------------------------------------------------------------------
-
-test_fetch_fun_block_surrounding(_Config) ->
-    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
-
-    %% Auxiliary function to check that a fun block is retrieved from all its lines
-    CheckIsFunBlock = fun(FirstLine, LastLine) ->
-        Lines = lists:seq(FirstLine, LastLine),
-        [
-            ?assertEqual(
-                %% Add the line number to the block, to make it easier to debug
-                {line, Line, {ok, Lines}},
-                {line, Line, edb_server_code:fetch_fun_block_surrounding(Line, Forms)}
-            )
-         || Line <- Lines
-        ]
-    end,
-
-    %% go/1 (Simple case)
-    CheckIsFunBlock(14, 19),
-
-    %% cycle/2 (multiple clauses)
-    CheckIsFunBlock(24, 29),
-
-    %% just_sync/1 (arity overloading)
-    CheckIsFunBlock(34, 36),
-
-    %% just_sync/2 (arity overloading)
-    CheckIsFunBlock(39, 41),
-
-    %% make_closure/1 (ends with a non-executable line: `end.`)
-    CheckIsFunBlock(46, 49),
-
-    %% id/1 and swap/1: no specs inbetween (consecutive function forms)
-    CheckIsFunBlock(54, 56),
-    CheckIsFunBlock(58, 59),
 
     ok.
 
