@@ -13,11 +13,13 @@
 %% limitations under the License.
 %% % @format
 %%
-%% @doc The (new!) Erlang debugger
 -module(edb).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+The (new!) Erlang debugger
+""".
 -compile(warn_missing_spec_all).
 -compile({no_auto_import, [processes/0]}).
 
@@ -161,19 +163,21 @@
 %% External exports
 %% -------------------------------------------------------------------
 
-%% @doc Start a debugging session by attaching to the given node.
-%%
-%% If edb was already attached to a node, it will get detached first.
-%% The attached node may already have a debugging session in progress,
-%% in this case, edb joins it.
-%%
-%% This call may start distribution and set the node name.
-%%
-%% Arguments:
-%%
-%% * `node' - the node to attach to
-%% * `timeout' - how long to wait for the node to be up; defaults to 0,
-%% * 'cookie' - cookie to use for connecting to the node
+-doc """
+Start a debugging session by attaching to the given node.
+
+If edb was already attached to a node, it will get detached first.
+The attached node may already have a debugging session in progress,
+in this case, edb joins it.
+
+This call may start distribution and set the node name.
+
+Arguments:
+
+* `node` - the node to attach to
+* `timeout` - how long to wait for the node to be up; defaults to 0,
+* 'cookie' - cookie to use for connecting to the node
+""".
 -spec attach(#{
     node := node(),
     timeout => timeout(),
@@ -216,30 +220,32 @@ attach(AttachOpts0) ->
 
     edb_node_monitor:attach(NodeToDebug, AttachTimeout).
 
-%% @doc Prepare for attachment by a node that doesn't exist yet.
-%%
-%% The caller is expected to start a new node, and ensure it executes the
-%% code returned by this call. The caller can then expect to receive a message tagged
-%% with the reference in `notification_ref`, containing the result of the reverse attachment.
-%%
-%% When the node executes the injected code, it will be forced to become attached, and
-%% immediately paused.
-%%
-%% As long as `timeout' is not `infinity`, the caller is guaranteed to eventually receive
-%% a message of the form:
-%%
-%% - `{NotificationRef, ok}': The reverse attachment succeeded, the node is now paused.
-%% - `{NotificationRef, timeout}': The reverse attachment timed out; it will now never happen.
-%% - `{NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}}': We tried to bootstrap
-%%    edb on the node but failed
-%%
-%% This call may start distribution and set the node name.
-%%
-%% Options:
-%%
-%% - `name_domain`: whether we expect to be attached by a node using longnames or shortnames;
-%% - `timeout': how long to wait for the node to be up; defaults to infinity.
-%%
+-doc """
+Prepare for attachment by a node that doesn't exist yet.
+
+The caller is expected to start a new node, and ensure it executes the
+code returned by this call. The caller can then expect to receive a message tagged
+with the reference in `notification_ref`, containing the result of the reverse attachment.
+
+When the node executes the injected code, it will be forced to become attached, and
+immediately paused.
+
+As long as `timeout` is not `infinity`, the caller is guaranteed to eventually receive
+a message of the form:
+
+- `{NotificationRef, ok}`: The reverse attachment succeeded, the node is now paused.
+- `{NotificationRef, timeout}`: The reverse attachment timed out; it will now never happen.
+- `{NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}}`: We tried to bootstrap
+edb on the node but failed
+
+This call may start distribution and set the node name.
+
+Options:
+
+- `name_domain`: whether we expect to be attached by a node using longnames or shortnames;
+- `timeout`: how long to wait for the node to be up; defaults to infinity.
+
+""".
 -spec reverse_attach(Opts) -> {ok, Info} | {error, Reason} when
     Opts :: #{name_domain := longnames | shortnames, timeout => timeout()},
     Info :: #{erl_code_to_inject := binary(), notification_ref := reference()},
@@ -271,63 +277,77 @@ reverse_attach(AttachOpts0) ->
             Error
     end.
 
-%% @doc Detach from the currently attached node.
-%%
-%% The debugger session running on the node is left undisturbed.
+-doc """
+Detach from the currently attached node.
+
+The debugger session running on the node is left undisturbed.
+""".
 -spec detach() -> ok.
 detach() ->
     edb_node_monitor:detach().
 
-%% @doc Terminates the debugging session.
-%%
-%% Detaches from the node, but stopping the debugger running on it.
-%% That means that breakpoints will be cleared, and any paused processes
-%% will be resumed, etc.
+-doc """
+Terminates the debugging session.
+
+Detaches from the node, but stopping the debugger running on it.
+That means that breakpoints will be cleared, and any paused processes
+will be resumed, etc.
+""".
 -spec terminate() -> ok.
 terminate() ->
     ok = rpc_attached_node(edb_server, stop, []),
     ok = edb_node_monitor:detach(),
     ok.
 
-%% @doc Returns the node being debugged.
-%%
-%% Will raise a `not_attached' error if not attached.
+-doc """
+Returns the node being debugged.
+
+Will raise a `not_attached` error if not attached.
+""".
 -spec attached_node() -> node().
 attached_node() ->
     edb_node_monitor:attached_node().
 
-%% @doc Subscribe caller process to receive debugging events from the attached node.
-%%
-%% The caller process can then expect messages of type `event_envelope(event())', with
-%% the specified subscription in the envelope.
-%% A process can  hold multiple subscriptions and can unsubscribe from them individually.
+-doc """
+Subscribe caller process to receive debugging events from the attached node.
+
+The caller process can then expect messages of type `event_envelope(event())`, with
+the specified subscription in the envelope.
+A process can  hold multiple subscriptions and can unsubscribe from them individually.
+""".
 -spec subscribe() -> {ok, event_subscription()}.
 subscribe() ->
     edb_node_monitor:subscribe().
 
-%% @doc Remove a previously added subscription.
-%%
-%% The caller process need not be the one holding the subscription. An `unsubscribed' event
-%% will be sent as final event to the subscription, which marks the end of the event stream.
+-doc """
+Remove a previously added subscription.
+
+The caller process need not be the one holding the subscription. An `unsubscribed` event
+will be sent as final event to the subscription, which marks the end of the event stream.
+""".
 -spec unsubscribe(Subscription) -> ok when
     Subscription :: event_subscription().
 unsubscribe(Subscription) ->
     edb_node_monitor:unsubscribe(Subscription).
 
-%% @doc Request that a `sync' event is sent to the given subscription.
-%%
-%% The process holding the subscription will receive a `sync' event,
-%% with the returned reference as value. This can be used to ensure that
-%% there are no events the server is planning to send.
-%%
-%% Returns `{error, unknown_subscription}' if the subscription is not known.
+-doc """
+Request that a `sync` event is sent to the given subscription.
+
+The process holding the subscription will receive a `sync` event,
+with the returned reference as value. This can be used to ensure that
+there are no events the server is planning to send.
+
+Returns `{error, unknown_subscription}` if the subscription is not known.
+""".
 -spec send_sync_event(Subscription) -> {ok, SyncRef} | undefined when
     Subscription :: event_subscription(),
     SyncRef :: reference().
 send_sync_event(Subscription) ->
     call_server({send_sync_event, Subscription}).
 
-%% @doc Set a breakpoint on the line of a loaded module on the remote node.
+-doc """
+Set a breakpoint on the line of a loaded module on the remote node.
+""".
 -spec add_breakpoint(Module, Line) -> ok | {error, Reason} when
     Module :: module(),
     Line :: line(),
@@ -335,20 +355,26 @@ send_sync_event(Subscription) ->
 add_breakpoint(Module, Line) ->
     call_server({add_breakpoint, Module, Line}).
 
-%% @doc Clear all previously set breakpoints of a module on the remote node.
+-doc """
+Clear all previously set breakpoints of a module on the remote node.
+""".
 -spec clear_breakpoints(Module) -> ok when
     Module :: module().
 clear_breakpoints(Module) ->
     call_server({clear_breakpoints, Module}).
 
-%% @doc Clear a previously set breakpoint on the remote node.
+-doc """
+Clear a previously set breakpoint on the remote node.
+""".
 -spec clear_breakpoint(Module, Line) -> ok | {error, not_found} when
     Module :: module(),
     Line :: line().
 clear_breakpoint(Module, Line) ->
     call_server({clear_breakpoint, Module, Line}).
 
-%% @doc Set breakpoints for a given module on the remote node.
+-doc """
+Set breakpoints for a given module on the remote node.
+""".
 -spec set_breakpoints(Module, [Line]) -> Result when
     Module :: module(),
     Line :: line(),
@@ -356,25 +382,33 @@ clear_breakpoint(Module, Line) ->
 set_breakpoints(Module, Lines) ->
     call_server({set_breakpoints, Module, Lines}).
 
-%% @doc Get all currently set breakpoints on the remote node.
+-doc """
+Get all currently set breakpoints on the remote node.
+""".
 -spec get_breakpoints() -> #{module() => [breakpoint_info()]}.
 get_breakpoints() ->
     call_server(get_breakpoints).
 
-%% @doc Get currently set breakpoints for a given module on the remote node.
+-doc """
+Get currently set breakpoints for a given module on the remote node.
+""".
 -spec get_breakpoints(Module) -> [breakpoint_info()] when
     Module :: module().
 get_breakpoints(Module) ->
     call_server({get_breakpoints, Module}).
 
-%% @doc Pause the execution of the remote node.
+-doc """
+Pause the execution of the remote node.
+""".
 -spec pause() -> ok.
 pause() ->
     call_server(pause).
 
-%% @doc Continues the execution on the remote node and returns right away.
-%%
-%% Returns `not_paused' if no process was paused, otherwise `resumed'.
+-doc """
+Continues the execution on the remote node and returns right away.
+
+Returns `not_paused` if no process was paused, otherwise `resumed`.
+""".
 -spec continue() -> {ok, resumed | not_paused}.
 continue() ->
     call_server(continue).
@@ -387,7 +421,9 @@ step_over(Pid) ->
 step_out(Pid) ->
     call_server({step_out, Pid}).
 
-%% @doc Waits until the node gets paused.
+-doc """
+Waits until the node gets paused.
+""".
 -spec wait() -> {ok, paused}.
 wait() ->
     {ok, Subscription} = subscribe(),
@@ -404,91 +440,107 @@ wait() ->
     release_subscription(Subscription),
     {ok, paused}.
 
-%% @doc Get the list of processes currently paused at a breakpoint on the remote node.
+-doc """
+Get the list of processes currently paused at a breakpoint on the remote node.
+""".
 -spec get_breakpoints_hit() -> #{pid() => breakpoint_info()}.
 get_breakpoints_hit() ->
     call_server(get_breakpoints_hit).
 
-%% @doc Get information about a process managed by the debugger on the remote node.
+-doc """
+Get information about a process managed by the debugger on the remote node.
+""".
 -spec process_info(pid()) -> {ok, process_info()} | undefined.
 process_info(Pid) ->
     call_server({process_info, Pid}).
 
-%% @doc Get the set of processes managed by the debugger on the remote node.
+-doc """
+Get the set of processes managed by the debugger on the remote node.
+""".
 -spec processes() -> #{pid() => process_info()}.
 processes() ->
     call_server(processes).
 
-%% @doc List the pids that will not be paused by the debugger on the remote node.
+-doc """
+List the pids that will not be paused by the debugger on the remote node.
+""".
 -spec excluded_processes() -> #{pid() => []}.
 excluded_processes() ->
     call_server(excluded_processes).
 
-%% @doc Check if there exists paused processes.
+-doc """
+Check if there exists paused processes.
+""".
 -spec is_paused() -> boolean().
 is_paused() ->
     call_server(is_paused).
 
-%% @doc
-%% Add a single process to the set of processes excluded from debugging.
-%% It is equivalent to `exclude_processes([{proc, Proc}])'.
+-doc """
+Add a single process to the set of processes excluded from debugging.
+It is equivalent to `exclude_processes([{proc, Proc}])`.
+""".
 -spec exclude_process(Proc) -> ok when
     Proc :: pid() | atom().
 exclude_process(Proc) ->
     exclude_processes([{proc, Proc}]).
 
-%% @doc
-%%
-%% Extend the set of processes excluded by the debugger.
-%%
-%% Processes can be specified in the following ways:
-%%     - by pid,
-%%     - by being part of an application,
-%%     - exception list for pids that should not be excluded
-%%
-%% E.g. a spec like:
-%% ```
-%% [Pid1, {appication, foo}, {application, bar}, {except, Pid2}, {except, Pid3}]
-%% '''
-%% will exclude `Pid1' and all processes in applications `foo' and `bar'; however
-%% `Pid2' and `Pid3' are guaranteed not to be excluded, whether they are part
-%% of `foo', `bar', etc. The order of the spec clauses is irrelevant and, in
-%% particular, `except' clauses are global.
-%%
-%% If any specified processes are currently paused, they will
-%% be automatically resumed.
+-doc """
+
+Extend the set of processes excluded by the debugger.
+
+Processes can be specified in the following ways:
+- by pid,
+- by being part of an application,
+- exception list for pids that should not be excluded
+
+E.g. a spec like:
+```
+[Pid1, {appication, foo}, {application, bar}, {except, Pid2}, {except, Pid3}]
+```
+will exclude `Pid1` and all processes in applications `foo` and `bar`; however
+`Pid2` and `Pid3` are guaranteed not to be excluded, whether they are part
+of `foo`, `bar`, etc. The order of the spec clauses is irrelevant and, in
+particular, `except` clauses are global.
+
+If any specified processes are currently paused, they will
+be automatically resumed.
+""".
 -spec exclude_processes(Specs) -> ok when
     Specs :: [procs_spec()].
 exclude_processes(Specs) ->
     validate_procs_spec(Specs),
     call_server({exclude_processes, Specs}).
 
-%% @doc
-%%
-%% Removes an exclusion previously added with `exclude_processes/1'.
-%%
-%% If there are currently paused processes, any specified processes
-%% will be paused as well.
+-doc """
+
+Removes an exclusion previously added with `exclude_processes/1`.
+
+If there are currently paused processes, any specified processes
+will be paused as well.
+""".
 -spec unexclude_processes(Specs) -> ok when
     Specs :: [procs_spec()].
 unexclude_processes(Specs) ->
     validate_procs_spec(Specs),
     call_server({unexclude_processes, Specs}).
 
-%% @doc
-%% Get the stack frames for a paused process.
-%%
-%% The `FrameNo' can then be used to retrieve the variables for
-%% a particular frame.
+-doc """
+Get the stack frames for a paused process.
+
+The `FrameNo` can then be used to retrieve the variables for
+a particular frame.
+""".
 -spec stack_frames(Pid) -> not_paused | {ok, [Frame]} when
     Pid :: pid(),
     Frame :: stack_frame().
 stack_frames(Pid) ->
     call_server({stack_frames, Pid}).
 
-%% @doc Get the local variables for a paused processes at a give frame.
-%%
-%% Equivalent to `stack_frame_vars(Pid, 2048)'.
+-doc """
+Get the local variables for a paused processes at a give frame.
+
+Equivalent to `stack_frame_vars(Pid, 2048)`.
+""".
 -spec stack_frame_vars(Pid, FrameId) -> not_paused | undefined | {ok, Result} when
     Pid :: pid(),
     FrameId :: frame_id(),
@@ -497,16 +549,17 @@ stack_frame_vars(Pid, FrameId) ->
     DefaultMaxTermSize = 2048,
     stack_frame_vars(Pid, FrameId, DefaultMaxTermSize).
 
-%% @doc
-%% Get the local variables for a paused process at a given frame.
-%%
-%% The value of `FrameId` must be one of the frame-ids returned
-%% by `stack_frames/1', or the call will return `undefined'.
-%%
-%% For each variable, the value is returned only if its internal
-%% size is at most `MaxTermSize', otherwise `{too_large, Size, MaxTermSize}'
-%% is returned. This is to prevent the caller from getting
-%% objects that are larger than they are willing to handle.
+-doc """
+Get the local variables for a paused process at a given frame.
+
+The value of `FrameId` must be one of the frame-ids returned
+by `stack_frames/1`, or the call will return `undefined`.
+
+For each variable, the value is returned only if its internal
+size is at most `MaxTermSize`, otherwise `{too_large, Size, MaxTermSize}`
+is returned. This is to prevent the caller from getting
+objects that are larger than they are willing to handle.
+""".
 -spec stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     not_paused | undefined | {ok, Result}
 when
