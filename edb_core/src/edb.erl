@@ -406,17 +406,24 @@ pause() ->
 
 -doc """
 Continues the execution on the remote node and returns right away.
-
 Returns `not_paused` if no process was paused, otherwise `resumed`.
 """.
 -spec continue() -> {ok, resumed | not_paused}.
 continue() ->
     call_server(continue).
 
+-doc """
+Continues the execution on the remote node, until the next expression finishes.
+""".
 -spec step_over(pid()) -> ok | {error, step_error()}.
 step_over(Pid) ->
     call_server({step_over, Pid}).
 
+-doc """
+Continues the execution on the remote node, until the current function returns.
+If the function is not tail-recursive, we step over it.
+If the function is tail-recursive, we step into it.
+""".
 -spec step_out(pid()) -> ok | {error, step_error()}.
 step_out(Pid) ->
     call_server({step_out, Pid}).
@@ -570,12 +577,13 @@ when
 stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     call_server({stack_frame_vars, Pid, FrameId, MaxTermSize}).
 
-%% doc
-%% Run `io_lib:format(Format, Args)' on the remote node.
-%%
-%% This is useful to get a human-readable representation of terms
-%% where Pids, Refs, etc. are displayed relative to the node being
-%% debugged.
+-doc """
+Run `io_lib:format(Format, Args)` on the remote node.
+
+This is useful to get a human-readable representation of terms
+where Pids, Refs, etc. are displayed relative to the node being
+debugged.
+""".
 -spec format(Format, Args) -> binary() when
     Format :: io:format(),
     Args :: [term()].
