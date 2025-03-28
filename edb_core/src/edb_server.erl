@@ -200,7 +200,9 @@ call(Node, Request, Timeout) ->
         Reply -> Reply
     end.
 
-%% @doc Signal an invariant violation. The server will catch the error and return it as a term.
+-doc """
+Signal an invariant violation. The server will catch the error and return it as a term.
+""".
 -spec invariant_violation(term()) -> no_return().
 invariant_violation(Term) ->
     throw({invariant_violation, Term}).
