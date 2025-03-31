@@ -72,7 +72,12 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State, Args) ->
-    ok = edb:terminate(),
+    try
+        ok = edb:terminate()
+    catch
+        error:not_attached ->
+            ok
+    end,
 
     case shouldTerminateDebuggee(State, Args) of
         true ->
