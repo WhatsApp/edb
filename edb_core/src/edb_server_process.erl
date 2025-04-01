@@ -17,7 +17,7 @@
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
--compile({no_auto_import, [process_info/1]}).
+-compile({no_auto_import, [process_info/1, process_info/2]}).
 
 -moduledoc false.
 
@@ -25,10 +25,8 @@
 -export([try_suspend_process/1, try_resume_process/1]).
 
 % Process info
--export([excluded_process_info/2, excluded_processes_info/1]).
--export([process_info/2, processes_info/1]).
--export([basic_process_info/2]).
--export_type([basic_process_info_fields/0]).
+-export([excluded_processes_info/2]).
+-export([processes_info/2]).
 
 %% ------------------------------------------------------------------
 %% Macros
@@ -38,16 +36,15 @@
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
--type basic_process_info() :: #{
-    application => atom(),
-    current_fun => mfa(),
-    current_loc => {File :: string(), Line :: pos_integer()},
-    parent => atom() | pid(),
-    registered_name => atom(),
-    message_queue_len => non_neg_integer()
-}.
 
-%% The original erlang:proces_info_result_item/0 type is not exported
+%% The original erlang:process_info_item/0 and erlang:proces_info_result_item/0
+%% types are not exported
+-type erlang_process_info_item() ::
+    current_location
+    | group_leader
+    | message_queue_len
+    | parent
+    | registered_name.
 -type erlang_process_info_result_item() :: {term(), term()}.
 
 %% ------------------------------------------------------------------
@@ -81,152 +78,224 @@ try_resume_process(Pid) ->
 %% Process info
 %% ------------------------------------------------------------------
 
--spec excluded_process_info(Pid, Reasons) -> {ok, Info} | undefined when
+-spec excluded_processes_info(#{Pid => Reasons}, Fields) -> #{Pid => Info} when
     Pid :: pid(),
     Reasons :: [edb:exclusion_reason()],
+    Fields :: [edb:process_info_field()],
     Info :: edb:process_info().
-excluded_process_info(Pid, Reasons) ->
-    case excluded_processes_info(#{Pid => Reasons}) of
-        #{Pid := Info} ->
-            {ok, Info};
-        #{} ->
-            undefined
-    end.
+excluded_processes_info(Procs, Fields) ->
+    Fields0 = make_process_info_fields(Fields, running, [], #{}),
+    #{
+        Pid => Info
+     || Pid := Reasons <- Procs,
+        {ok, Info} <- [process_info(Pid, update_process_info_fields_exclusion_reasons(Reasons, Fields0))]
+    }.
 
--spec excluded_processes_info(#{Pid => Reasons}) -> #{Pid => Info} when
+-spec processes_info(#{Pid => Status}, Fields) -> #{Pid => Info} when
     Pid :: pid(),
-    Reasons :: [edb:exclusion_reason()],
+    Status :: raw_status(),
+    Fields :: [edb:process_info_field()],
     Info :: edb:process_info().
-excluded_processes_info(Procs) ->
-    Fields = #{
-        application => {true, group_leader_to_app()},
-        current_fun => true,
-        current_loc => false,
-        parent => true,
-        registered_name => true,
-        message_queue_len => true
-    },
-    #{Pid => Info || Pid := Reasons <- Procs, {ok, Info} <- [excluded_process_info(Pid, Reasons, Fields)]}.
+processes_info(Procs, Fields) when is_map(Procs) ->
+    Fields0 = make_process_info_fields(Fields, running, undefined, #{}),
+    #{
+        Pid => Info
+     || Pid := Status <- Procs,
+        {ok, Info} <- [process_info(Pid, update_process_info_fields_status(Status, Fields0))]
+    }.
 
--spec excluded_process_info(Pid, Reasons, Fields) -> {ok, Info} | undefined when
+-spec process_info(Pid, Fields) -> {ok, Info} | undefined when
     Pid :: pid(),
-    Reasons :: [edb:exclusion_reason()],
-    Fields :: basic_process_info_fields(),
+    Fields :: process_info_fields(),
     Info :: edb:process_info().
-excluded_process_info(Pid, Reasons, Fields) ->
-    case basic_process_info(Pid, Fields) of
-        undefined ->
-            undefined;
-        {ok, Info0} ->
-            Info1 = Info0#{
-                status => running,
-                exclusion_reasons => Reasons
-            },
-            {ok, Info1}
-    end.
-
--spec process_info(Pid, Status) -> {ok, Info} | undefined when
-    Pid :: pid(),
-    Status :: running | paused | {breakpoint, edb:breakpoint_info()},
-    Info :: edb:process_info().
-process_info(Pid, Status) ->
-    case processes_info(#{Pid => Status}) of
-        #{Pid := Info} ->
-            {ok, Info};
-        #{} ->
-            undefined
-    end.
-
--spec processes_info(#{Pid => Status}) -> #{Pid => Info} when
-    Pid :: pid(),
-    Status :: running | paused | {breakpoint, edb:breakpoint_info()},
-    Info :: edb:process_info().
-processes_info(Procs) when is_map(Procs) ->
-    Fields = #{
-        application => {true, group_leader_to_app()},
-        current_fun => true,
-        current_loc => true,
-        parent => true,
-        registered_name => true,
-        message_queue_len => true
-    },
-    #{Pid => Info || Pid := Status <- Procs, {ok, Info} <- [process_info(Pid, Status, Fields)]}.
-
--spec process_info(Pid, Status, Fields) -> {ok, Info} | undefined when
-    Pid :: pid(),
-    Status :: running | paused | {breakpoint, edb:breakpoint_info()},
-    Fields :: basic_process_info_fields(),
-    Info :: edb:process_info().
-process_info(Pid, Status, Fields) ->
-    case basic_process_info(Pid, Fields) of
-        undefined ->
-            undefined;
-        {ok, Info0} ->
-            Info1 =
-                case Status of
-                    running ->
-                        Info0#{status => running};
-                    paused ->
-                        Info0#{status => paused};
-                    {breakpoint, #{line := Line}} ->
-                        Info0#{status => breakpoint, current_bp => {line, Line}}
-                end,
-            {ok, Info1}
-    end.
+process_info(Pid, Fields) ->
+    Info0 = #{},
+    {ok, Info1, ErlangProcessInfoFlags} = add_process_info_1(Info0, Fields),
+    add_process_info_2(Pid, Info1, ErlangProcessInfoFlags, Fields).
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--type basic_process_info_fields() ::
+-type raw_status() :: running | paused | {breakpoint, edb:breakpoint_info()}.
+-type process_info_fields() ::
     #{
-        application := boolean() | {true, precomputed_group_leader_to_app_map()},
-        current_fun := boolean(),
-        current_loc := boolean(),
-        parent := boolean(),
-        registered_name := boolean(),
-        message_queue_len := boolean()
+        application => boolean() | {true, precomputed_group_leader_to_app_map()},
+        current_bp => raw_status(),
+        current_fun => boolean(),
+        current_loc => boolean(),
+        exclusion_reasons => [edb:exclusion_reason()],
+        message_queue_len => boolean(),
+        parent => boolean(),
+        registered_name => boolean(),
+        status => raw_status()
     }.
 
 -type precomputed_group_leader_to_app_map() :: #{pid() => atom()}.
 
--spec basic_process_info(pid(), Fields) -> {ok, Info} | undefined when
-    Fields :: basic_process_info_fields(),
-    Info :: basic_process_info().
-basic_process_info(Pid, Fields) ->
-    MaybeRawInfo = erlang:process_info(
-        Pid,
-        [current_location, group_leader, parent, registered_name, message_queue_len]
-    ),
+-spec make_process_info_fields(Fields, RawStatus, ExclusionReasons, Acc) -> Result when
+    Fields :: [edb:process_info_field()],
+    RawStatus :: raw_status(),
+    ExclusionReasons :: undefined | [edb:exclusion_reason()],
+    Acc :: process_info_fields(),
+    Result :: process_info_fields().
+make_process_info_fields([], _RawStatus, _ExclusionReasons, Acc) ->
+    Acc;
+make_process_info_fields([application | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{application => {true, group_leader_to_app()}},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([current_bp | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{current_bp => RawStatus},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([current_fun | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{current_fun => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([current_loc | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{current_loc => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([exclusion_reasons | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 =
+        case ExclusionReasons of
+            undefined -> Acc0;
+            Reasons -> Acc0#{exclusion_reasons => Reasons}
+        end,
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([message_queue_len | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{message_queue_len => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([parent | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{parent => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([registered_name | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{registered_name => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([status | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{status => RawStatus},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1).
+
+-spec update_process_info_fields_status(Status, Fields0) -> Fields1 when
+    Status :: raw_status(),
+    Fields0 :: process_info_fields(),
+    Fields1 :: process_info_fields().
+update_process_info_fields_status(Status, Fields0) ->
+    Fields1 =
+        case Fields0 of
+            #{status := _} -> Fields0#{status => Status};
+            _ -> Fields0
+        end,
+    case Fields1 of
+        #{current_bp := _} -> Fields1#{current_bp => Status};
+        _ -> Fields1
+    end.
+-spec update_process_info_fields_exclusion_reasons(ExclusionReasons, Fields0) -> Fields1 when
+    ExclusionReasons :: [edb:exclusion_reason()],
+    Fields0 :: process_info_fields(),
+    Fields1 :: process_info_fields().
+update_process_info_fields_exclusion_reasons(ExclusionReasons, Fields0) ->
+    case Fields0 of
+        #{exclusion_reasons := _} -> Fields0#{exclusion_reasons => ExclusionReasons};
+        _ -> Fields0
+    end.
+
+-spec add_process_info_1(Info0, Fields) -> {ok, Info1, ErlangProcessInfoItems} when
+    Fields :: process_info_fields(),
+    ErlangProcessInfoItems :: [erlang_process_info_item()],
+    Info0 :: edb:process_info(),
+    Info1 :: edb:process_info().
+add_process_info_1(Info0, #{status := S} = Fields0) ->
+    Info1 =
+        case S of
+            running ->
+                Info0#{status => running};
+            paused ->
+                Info0#{status => paused};
+            {breakpoint, _} ->
+                Info0#{status => breakpoint}
+        end,
+    Fields1 = maps:remove(status, Fields0),
+    add_process_info_1(Info1, Fields1);
+add_process_info_1(Info0, #{current_bp := S} = Fields0) ->
+    Info1 =
+        case S of
+            running ->
+                Info0;
+            paused ->
+                Info0;
+            {breakpoint, #{line := Line}} ->
+                Info0#{current_bp => {line, Line}}
+        end,
+    Fields1 = maps:remove(current_bp, Fields0),
+    add_process_info_1(Info1, Fields1);
+add_process_info_1(Info0, #{exclusion_reasons := Reasons} = Fields0) ->
+    Info1 = Info0#{exclusion_reasons => Reasons},
+    Fields1 = maps:remove(exclusion_reasons, Fields0),
+    add_process_info_1(Info1, Fields1);
+add_process_info_1(Info, Fields) ->
+    ErlangProcessInfoItems = required_process_info_items(maps:keys(Fields), []),
+    {ok, Info, ErlangProcessInfoItems}.
+
+-spec required_process_info_items(FieldKeys, Acc) -> Items when
+    FieldKeys :: [FieldKey],
+    FieldKey ::
+        application
+        | current_fun
+        | current_loc
+        | message_queue_len
+        | parent
+        | registered_name,
+    Acc :: [erlang_process_info_item()],
+    Items :: [erlang_process_info_item()].
+required_process_info_items([], Acc) ->
+    lists:uniq(Acc);
+required_process_info_items([application | Rest], Acc) ->
+    required_process_info_items(Rest, [group_leader | Acc]);
+required_process_info_items([current_fun | Rest], Acc) ->
+    required_process_info_items(Rest, [current_location | Acc]);
+required_process_info_items([current_loc | Rest], Acc) ->
+    required_process_info_items(Rest, [current_location | Acc]);
+required_process_info_items([message_queue_len | Rest], Acc) ->
+    required_process_info_items(Rest, [message_queue_len | Acc]);
+required_process_info_items([parent | Rest], Acc) ->
+    required_process_info_items(Rest, [parent | Acc]);
+required_process_info_items([registered_name | Rest], Acc) ->
+    required_process_info_items(Rest, [registered_name | Acc]).
+
+-spec add_process_info_2(Pid, Info0, ErlangProcessInfoItems, Fields) -> {ok, Info1} | undefined when
+    Pid :: pid(),
+    Fields :: process_info_fields(),
+    ErlangProcessInfoItems :: [erlang_process_info_item()],
+    Info0 :: edb:process_info(),
+    Info1 :: edb:process_info().
+add_process_info_2(Pid, Info0, ErlangProcessInfoItems, Fields) ->
+    MaybeRawInfo =
+        case ErlangProcessInfoItems of
+            [] -> [];
+            _ -> erlang:process_info(Pid, ErlangProcessInfoItems)
+        end,
 
     case MaybeRawInfo of
         % Pid not alive
-        undefined -> undefined;
-        RawInfo -> {ok, basic_process_info_1(RawInfo, Fields)}
+        undefined ->
+            undefined;
+        RawInfo ->
+            Info1 = lists:foldl(
+                fun(Info, Acc) -> fold_process_info(Info, Acc, Fields) end,
+                Info0,
+                RawInfo
+            ),
+            {ok, Info1}
     end.
-
--spec basic_process_info_1(RawProcessInfo, Fields) -> basic_process_info() when
-    RawProcessInfo :: [erlang_process_info_result_item()],
-    Fields :: basic_process_info_fields().
-basic_process_info_1(RawProcessInfo, Fields) ->
-    lists:foldl(
-        fun(Info, Acc) -> fold_process_info(Info, Acc, Fields) end,
-        #{},
-        RawProcessInfo
-    ).
 
 -spec fold_process_info(ProcInfo, Acc, Fields) -> Acc when
     ProcInfo :: erlang_process_info_result_item(),
-    Acc :: basic_process_info(),
-    Fields :: basic_process_info_fields().
+    Acc :: edb:process_info(),
+    Fields :: process_info_fields().
 fold_process_info(ProcInfo, Acc, Fields) ->
-    #{
-        application := WantsApp,
-        current_fun := WantsFun,
-        current_loc := WantsLoc,
-        parent := WantsParent,
-        registered_name := WantsRegName,
-        message_queue_len := WantsMessageQueueLen
-    } = Fields,
+    WantsApp = maps:get(application, Fields, false),
+    WantsFun = maps:get(current_fun, Fields, false),
+    WantsLoc = maps:get(current_loc, Fields, false),
+    WantsParent = maps:get(parent, Fields, false),
+    WantsRegName = maps:get(registered_name, Fields, false),
+    WantsMessageQueueLen = maps:get(message_queue_len, Fields, false),
 
     case ProcInfo of
         {current_location, {M, F, A, Loc}} when WantsFun; WantsLoc ->

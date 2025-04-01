@@ -21,7 +21,6 @@
 The (new!) Erlang debugger
 """.
 -compile(warn_missing_spec_all).
--compile({no_auto_import, [processes/0]}).
 
 %% External exports
 -export([attach/1, reverse_attach/1, detach/0, terminate/0]).
@@ -39,11 +38,11 @@ The (new!) Erlang debugger
 
 -export([step_over/1, step_out/1]).
 
--export([processes/0, process_info/1]).
+-export([processes/1, process_info/2]).
 
 -export([is_paused/0]).
 
--export([excluded_processes/0, exclude_process/1, exclude_processes/1, unexclude_processes/1]).
+-export([excluded_processes/1, exclude_process/1, exclude_processes/1, unexclude_processes/1]).
 
 -export([stack_frames/1, stack_frame_vars/2, stack_frame_vars/3]).
 
@@ -90,7 +89,18 @@ The (new!) Erlang debugger
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.
 
--export_type([process_info/0, process_status/0, exclusion_reason/0]).
+-export_type([process_info_field/0, process_info/0, process_status/0, exclusion_reason/0]).
+-type process_info_field() ::
+    application
+    | current_bp
+    | current_fun
+    | current_loc
+    | exclusion_reasons
+    | message_queue_len
+    | parent
+    | registered_name
+    | status.
+
 -type process_info() :: #{
     application => atom(),
     current_bp => {line, line()},
@@ -447,23 +457,27 @@ get_breakpoints_hit() ->
 -doc """
 Get information about a process managed by the debugger on the remote node.
 """.
--spec process_info(pid()) -> {ok, process_info()} | undefined.
-process_info(Pid) ->
-    call_server({process_info, Pid}).
+-spec process_info(Pid, RequestedFields) -> {ok, process_info()} | undefined when
+    Pid :: pid(),
+    RequestedFields :: [process_info_field()].
+process_info(Pid, RequestedFields) ->
+    call_server({process_info, Pid, RequestedFields}).
 
 -doc """
 Get the set of processes managed by the debugger on the remote node.
 """.
--spec processes() -> #{pid() => process_info()}.
-processes() ->
-    call_server(processes).
+-spec processes(RequestedFields) -> #{pid() => process_info()} when
+    RequestedFields :: [process_info_field()].
+processes(RequestedFields) ->
+    call_server({processes, RequestedFields}).
 
 -doc """
 List the pids that will not be paused by the debugger on the remote node.
 """.
--spec excluded_processes() -> #{pid() => []}.
-excluded_processes() ->
-    call_server(excluded_processes).
+-spec excluded_processes(RequestedFields) -> #{pid() => []} when
+    RequestedFields :: [process_info_field()].
+excluded_processes(RequestedFields) ->
+    call_server({excluded_processes, RequestedFields}).
 
 -doc """
 Check if there exists paused processes.

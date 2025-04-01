@@ -153,7 +153,7 @@ test_raises_error_until_attached(Config) ->
     on_debugger_node(Config, fun() ->
         % Initially, we are not attached to any node, so error on operations
         ?assertError(not_attached, edb:attached_node()),
-        ?assertError(not_attached, edb:processes()),
+        ?assertError(not_attached, edb:processes([])),
 
         {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
@@ -167,12 +167,12 @@ test_raises_error_until_attached(Config) ->
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
         ?assertMatch(Node, edb:attached_node()),
-        ?assertMatch(#{}, edb:processes()),
+        ?assertMatch(#{}, edb:processes([])),
 
         % After detaching, we error again
         ok = edb:detach(),
         ?assertError(not_attached, edb:attached_node()),
-        ?assertError(not_attached, edb:processes()),
+        ?assertError(not_attached, edb:processes([])),
 
         ok
     end).
@@ -390,7 +390,7 @@ test_raises_error_until_reverse_attached(Config) ->
     on_debugger_node(Config, fun() ->
         % Initially, we are not attached to any node, so error on operations
         ?assertError(not_attached, edb:attached_node()),
-        ?assertError(not_attached, edb:processes()),
+        ?assertError(not_attached, edb:processes([])),
 
         % We are now waiting for a new node to attach
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
@@ -403,12 +403,12 @@ test_raises_error_until_reverse_attached(Config) ->
         % We eventually attach, and no longer error
         ok = wait_reverse_attach_notification(Ref),
         ?assertEqual(Node, edb:attached_node()),
-        ?assertMatch(#{}, edb:processes()),
+        ?assertMatch(#{}, edb:processes([])),
 
         % After detaching, we error again
         ok = edb:detach(),
         ?assertError(not_attached, edb:attached_node()),
-        ?assertError(not_attached, edb:processes()),
+        ?assertError(not_attached, edb:processes([])),
 
         ok
     end).
@@ -563,11 +563,11 @@ test_querying_on_a_vanished_node_detaches(Config) ->
         ok = edb_test_support:start_event_collector(),
 
         % Sanity check: no errors while attached
-        ?assertMatch(#{}, edb:processes()),
+        ?assertMatch(#{}, edb:processes([])),
 
         % Kill the node, we will be detached
         ok = edb_test_support:stop_peer(Peer),
-        ?assertError(not_attached, edb:processes()),
+        ?assertError(not_attached, edb:processes([])),
 
         % Verify we get a nodedown event
         ?assertEqual(

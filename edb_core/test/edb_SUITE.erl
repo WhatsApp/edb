@@ -84,6 +84,9 @@
 -export([test_doesnt_show_stackframes_for_running_processes/1]).
 -export([test_shows_a_path_that_exists_for_otp_sources/1]).
 
+%% Test cases for the test_process_info group
+-export([test_can_select_process_info_fields/1]).
+
 %% Test cases for the test_format group
 -export([test_format_works/1]).
 
@@ -96,15 +99,15 @@ suite() ->
 
 groups() ->
     [
-        {test_subscriptions, [], [
+        {test_subscriptions, [
             test_can_subscribe_and_unsubscribe,
             test_terminated_event_is_sent
         ]},
-        {test_pause, [], [
+        {test_pause, [
             test_pause_pauses,
             test_pause_is_idempotent
         ]},
-        {test_breakpoints, [], [
+        {test_breakpoints, [
             test_wait_waits_for_breakpoint_hit,
             test_continue_continues,
             test_hitting_a_breakpoint_suspends_other_processes,
@@ -122,7 +125,7 @@ groups() ->
             test_set_breakpoints_sets_breakpoints,
             test_set_breakpoints_returns_result_per_line
         ]},
-        {test_step_over, [], [
+        {test_step_over, [
             test_step_over_goes_to_next_line,
             test_step_over_skips_same_name_fun_call,
             test_step_over_fails_on_running_process,
@@ -137,14 +140,14 @@ groups() ->
             test_step_over_in_unbreakpointable_code,
             test_step_over_on_recursive_call
         ]},
-        {test_step_out, [], [
+        {test_step_out, [
             test_step_out_of_external_closure,
             test_step_out_into_caller_handler,
             test_step_out_with_unbreakpointable_caller,
             test_step_out_is_not_confused_when_calling_caller
         ]},
 
-        {test_stackframes, [], [
+        {test_stackframes, [
             test_shows_stackframes_of_process_in_breakpoint,
             test_shows_stackframes_of_paused_processes_not_in_breakpoint,
             test_shows_stackframes_of_stepping_process,
@@ -153,7 +156,10 @@ groups() ->
             test_doesnt_show_stackframes_for_running_processes,
             test_shows_a_path_that_exists_for_otp_sources
         ]},
-        {test_format, [], [
+        {test_process_info, [
+            test_can_select_process_info_fields
+        ]},
+        {test_format, [
             test_format_works
         ]}
     ].
@@ -166,6 +172,7 @@ all() ->
         {group, test_step_over},
         {group, test_step_out},
         {group, test_stackframes},
+        {group, test_process_info},
         {group, test_format}
     ].
 
@@ -222,7 +229,7 @@ end_per_group(Group, _Config) ->
 init_per_testcase(_Case, Config) ->
     ok = edb:attach(#{node => node()}),
     edb_test_support:start_event_collector(),
-    ExcludedByDefault = edb:excluded_processes(),
+    ExcludedByDefault = edb:excluded_processes([]),
     AmbientTestSupportProcsSpec = [
         {proc, Pid}
      || Pid <- erlang:processes(),
@@ -546,6 +553,12 @@ test_hitting_a_breakpoint_suspends_other_processes(_Config) ->
 
 test_processes_reports_running_and_paused_processes(_Config) ->
     Me = self(),
+    RelevantProcessInfoFields = [
+        current_bp,
+        current_fun,
+        parent,
+        status
+    ],
 
     % We want a couple of ambient processes.
     AmbientPid1 = spawn_idle_proc(),
@@ -576,15 +589,15 @@ test_processes_reports_running_and_paused_processes(_Config) ->
         },
         maps:with(
             [AmbientPid1, AmbientPid2, AmbientPid3],
-            edb:processes()
+            edb:processes(RelevantProcessInfoFields)
         )
     ),
 
     % edb:process_info() agrees with edb:processes()
-    ProcessesResult0 = edb:processes(),
+    ProcessesResult0 = edb:processes(RelevantProcessInfoFields),
     ?assertEqual(
         ProcessesResult0,
-        #{Pid => Info || Pid := _ <- ProcessesResult0, {ok, Info} <- [edb:process_info(Pid)]}
+        #{Pid => Info || Pid := _ <- ProcessesResult0, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]}
     ),
 
     % We spawn a process that will go through that line.
@@ -621,15 +634,15 @@ test_processes_reports_running_and_paused_processes(_Config) ->
         },
         maps:with(
             [DebuggeePid, AmbientPid1, AmbientPid2, AmbientPid3],
-            edb:processes()
+            edb:processes(RelevantProcessInfoFields)
         )
     ),
 
     % edb:process_info() still agrees with edb:processes()
-    ProcessesResult1 = edb:processes(),
+    ProcessesResult1 = edb:processes(RelevantProcessInfoFields),
     ?assertEqual(
         ProcessesResult1,
-        #{Pid => Info || Pid := _ <- ProcessesResult1, {ok, Info} <- [edb:process_info(Pid)]}
+        #{Pid => Info || Pid := _ <- ProcessesResult1, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]}
     ),
 
     % All processes are now actually suspended
@@ -638,7 +651,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
             {Proc, {status, suspended}},
             {Proc, erlang:process_info(Proc, status)}
         )
-     || Proc := _ <- edb:processes()
+     || Proc := _ <- edb:processes(RelevantProcessInfoFields)
     ],
 
     % We continue
@@ -670,7 +683,7 @@ test_processes_reports_running_and_paused_processes(_Config) ->
         },
         maps:with(
             [DebuggeePid, AmbientPid1, AmbientPid2, AmbientPid3],
-            edb:processes()
+            edb:processes(RelevantProcessInfoFields)
         )
     ),
 
@@ -686,6 +699,15 @@ test_processes_reports_running_and_paused_processes(_Config) ->
 
 test_excluded_processes_reports_excluded_processes(_Config) ->
     Me = self(),
+    RelevantFields = [
+        status,
+        parent,
+        current_fun,
+        message_queue_len,
+        registered_name,
+        application,
+        exclusion_reasons
+    ],
 
     % We want an ambient processes to be paused
     UnrelatedPid = spawn_idle_proc(),
@@ -728,7 +750,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 message_queue_len := _
             }
         },
-        maps:with([Me], edb:excluded_processes())
+        maps:with([Me], edb:excluded_processes(RelevantFields))
     ),
 
     KernelSupPid = erlang:whereis(kernel_sup),
@@ -744,7 +766,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 exclusion_reasons := [excluded_application]
             }
         },
-        maps:with([KernelSupPid], edb:excluded_processes())
+        maps:with([KernelSupPid], edb:excluded_processes(RelevantFields))
     ),
 
     InitPid = erlang:whereis(init),
@@ -757,7 +779,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 exclusion_reasons := [system_component]
             }
         },
-        maps:with([InitPid], edb:excluded_processes())
+        maps:with([InitPid], edb:excluded_processes(RelevantFields))
     ),
 
     ?assertMatch(
@@ -768,7 +790,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 exclusion_reasons := [debugger_component]
             }
         },
-        maps:with([SubscribedPid], edb:excluded_processes())
+        maps:with([SubscribedPid], edb:excluded_processes(RelevantFields))
     ),
 
     % Manually excluded processes are reported
@@ -778,7 +800,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
 
     ?assertEqual(
         #{ExcludedPid => Info#{exclusion_reasons => [excluded_pid]}},
-        maps:with([ExcludedPid], edb:excluded_processes())
+        maps:with([ExcludedPid], edb:excluded_processes(RelevantFields))
     ),
 
     ?assertEqual(
@@ -788,7 +810,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 registered_name => some_named_proc
             }
         },
-        maps:with([NameablePid1], edb:excluded_processes())
+        maps:with([NameablePid1], edb:excluded_processes(RelevantFields))
     ),
 
     ?assertMatch(
@@ -810,7 +832,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 registered_name := dummy_app_1
             }
         } when is_pid(SupParentPid),
-        maps:with([DummyApp1Pid, DummyApp1SupPid], edb:excluded_processes())
+        maps:with([DummyApp1Pid, DummyApp1SupPid], edb:excluded_processes(RelevantFields))
     ),
 
     % Non-excluded processes are not reported
@@ -819,7 +841,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
         #{},
         maps:with(
             [UnrelatedPid, NameablePid2, DummyApp2Pid, DummyApp2SupPid],
-            edb:excluded_processes()
+            edb:excluded_processes(RelevantFields)
         )
     ),
 
@@ -834,7 +856,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 exclusion_reasons := [excluded_application, excluded_pid]
             }
         },
-        maps:with([DummyApp1Pid], edb:excluded_processes())
+        maps:with([DummyApp1Pid], edb:excluded_processes(RelevantFields))
     ),
 
     % Registered name is dynamically converted to pid
@@ -846,13 +868,13 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 registered_name => some_named_proc
             }
         },
-        maps:with([NameablePid1, NameablePid2], edb:excluded_processes())
+        maps:with([NameablePid1, NameablePid2], edb:excluded_processes(RelevantFields))
     ),
 
     erlang:unregister(some_named_proc),
     ?assertEqual(
         #{},
-        maps:with([NameablePid1, NameablePid2], edb:excluded_processes())
+        maps:with([NameablePid1, NameablePid2], edb:excluded_processes(RelevantFields))
     ),
 
     erlang:register(some_named_proc, NameablePid2),
@@ -864,7 +886,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 registered_name => some_named_proc
             }
         },
-        maps:with([NameablePid1, NameablePid2], edb:excluded_processes())
+        maps:with([NameablePid1, NameablePid2], edb:excluded_processes(RelevantFields))
     ),
 
     % Check the events delivered
@@ -895,8 +917,8 @@ test_excluded_processes_dont_hit_breakpoints(_Config) ->
     [P ! gogogo || P <- [NormalPid, ExcludedPid]],
 
     % Sanity check: only the expected pids are excluded
-    ?assertNotMatch(#{NormalPid := _}, edb:excluded_processes()),
-    ?assertMatch(#{ExcludedPid := _}, edb:excluded_processes()),
+    ?assertNotMatch(#{NormalPid := _}, edb:excluded_processes([])),
+    ?assertMatch(#{ExcludedPid := _}, edb:excluded_processes([])),
 
     % Wait for the BP
     {ok, paused} = edb:wait(),
@@ -987,23 +1009,23 @@ test_can_override_excluded_processes_by_other_reasons(_Config) ->
     end),
 
     % Sanity check linked processes are excluded
-    ?assertMatch(#{DummyApp1Pid := _}, edb:excluded_processes()),
-    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes()),
-    ?assertMatch(#{SubscribedPid := _}, edb:excluded_processes()),
+    ?assertMatch(#{DummyApp1Pid := _}, edb:excluded_processes([])),
+    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes([])),
+    ?assertMatch(#{SubscribedPid := _}, edb:excluded_processes([])),
 
     % Except some of them
     edb:exclude_processes([{except, DummyApp1Pid}, {except, SubscribedPid}]),
 
-    ?assertNotMatch(#{DummyApp1Pid := _}, edb:excluded_processes()),
-    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes()),
-    ?assertNotMatch(#{SubscribedPid := _}, edb:excluded_processes()),
+    ?assertNotMatch(#{DummyApp1Pid := _}, edb:excluded_processes([])),
+    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes([])),
+    ?assertNotMatch(#{SubscribedPid := _}, edb:excluded_processes([])),
 
     % Remove one exception
     edb:unexclude_processes([{except, DummyApp1Pid}]),
 
-    ?assertMatch(#{DummyApp1Pid := _}, edb:excluded_processes()),
-    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes()),
-    ?assertNotMatch(#{SubscribedPid := _}, edb:excluded_processes()),
+    ?assertMatch(#{DummyApp1Pid := _}, edb:excluded_processes([])),
+    ?assertMatch(#{DummyApp1SupPid := _}, edb:excluded_processes([])),
+    ?assertNotMatch(#{SubscribedPid := _}, edb:excluded_processes([])),
 
     % Check the events delivered
     ?assertEqual(
@@ -1018,14 +1040,14 @@ test_can_reinclude_previously_excluded_processes(_Config) ->
     edb:exclude_processes([{proc, Pid1}, {proc, Pid2}]),
 
     % Sanity-check: processes current excluded
-    ?assertMatch(#{Pid1 := _}, edb:excluded_processes()),
-    ?assertMatch(#{Pid2 := _}, edb:excluded_processes()),
+    ?assertMatch(#{Pid1 := _}, edb:excluded_processes([])),
+    ?assertMatch(#{Pid2 := _}, edb:excluded_processes([])),
 
     % Reinclude only one of them
     edb:unexclude_processes([{proc, Pid1}]),
 
-    ?assertNotMatch(#{Pid1 := _}, edb:excluded_processes()),
-    ?assertMatch(#{Pid2 := _}, edb:excluded_processes()),
+    ?assertNotMatch(#{Pid1 := _}, edb:excluded_processes([])),
+    ?assertMatch(#{Pid2 := _}, edb:excluded_processes([])),
 
     % Check the events delivered
     ?assertEqual(
@@ -2764,6 +2786,28 @@ test_shows_a_path_that_exists_for_otp_sources(_Config) ->
             ?assert(filelib:is_file(TimerSource)),
             ok
     end.
+
+%% ------------------------------------------------------------------
+%% Test cases for the test_process_info fixture
+%% ------------------------------------------------------------------
+test_can_select_process_info_fields(_Config) ->
+    Pid = spawn_idle_proc(),
+
+    ?assertEqual(
+        {ok, #{status => running}},
+        edb:process_info(Pid, [status])
+    ),
+
+    ?assertEqual(
+        #{Pid => #{status => running}},
+        maps:with([Pid], edb:processes([status]))
+    ),
+
+    ?assertEqual(
+        #{self() => #{status => running, exclusion_reasons => [excluded_pid]}},
+        maps:with([self()], edb:excluded_processes([status, exclusion_reasons]))
+    ),
+    ok.
 
 %% ------------------------------------------------------------------
 %% Test cases for test_format fixture

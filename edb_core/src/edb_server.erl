@@ -126,9 +126,9 @@ find() ->
     | pause
     | continue
     | is_paused
-    | {process_info, pid()}
-    | processes
-    | excluded_processes
+    | {process_info, pid(), [edb:process_info_field()]}
+    | {processes, [edb:process_info_field()]}
+    | {excluded_processes, [edb:process_info_field()]}
     | {step_over, pid()}
     | {step_out, pid()}
     | {exclude_processes, [procs_spec()]}
@@ -247,12 +247,12 @@ dispatch_call(pause, _From, State0) ->
     pause_impl(State0);
 dispatch_call(continue, _From, State0) ->
     continue_impl(State0);
-dispatch_call({process_info, Pid}, _From, State0) ->
-    process_info_impl(Pid, State0);
-dispatch_call(processes, _From, State0) ->
-    processes_impl(State0);
-dispatch_call(excluded_processes, _From, State0) ->
-    excluded_processes_impl(State0);
+dispatch_call({process_info, Pid, RequestedFields}, _From, State0) ->
+    process_info_impl(Pid, RequestedFields, State0);
+dispatch_call({processes, RequestedFields}, _From, State0) ->
+    processes_impl(RequestedFields, State0);
+dispatch_call({excluded_processes, RequestedFields}, _From, State0) ->
+    excluded_processes_impl(RequestedFields, State0);
 dispatch_call({exclude_processes, Specs}, _From, State0) ->
     exclude_processes_impl(Specs, State0);
 dispatch_call(is_paused, _From, State0) ->
@@ -506,30 +506,36 @@ step_impl(StepType, Pid, State0) ->
             {reply, {error, Reason}, State0}
     end.
 
--spec process_info_impl(Pid, State0) -> {reply, Result, State1} when
+-spec process_info_impl(Pid, RequestedFields, State0) -> {reply, Result, State1} when
     Pid :: pid(),
+    RequestedFields :: [edb:process_info_field()],
     State0 :: state(),
     State1 :: state(),
     Result :: {ok, edb:process_info()} | undefined.
-process_info_impl(Pid, State0) ->
+process_info_impl(Pid, RequestedFields, State0) ->
     Status = process_status(Pid, State0),
-    {reply, edb_server_process:process_info(Pid, Status), State0}.
+    Result =
+        case edb_server_process:processes_info(#{Pid => Status}, RequestedFields) of
+            #{Pid := Info} -> {ok, Info};
+            _ -> undefined
+        end,
+    {reply, Result, State0}.
 
--spec processes_impl(State0) -> {reply, Result, State1} when
+-spec processes_impl(RequestedFields, State0) -> {reply, Result, State1} when
+    RequestedFields :: [edb:process_info_field()],
     State0 :: state(),
     State1 :: state(),
     Result :: #{pid() => edb:process_info()}.
-processes_impl(State0) ->
+processes_impl(RequestedFields, State0) ->
     Universe = erlang:processes(),
     Excluded = get_excluded_processes(Universe, State0),
 
-    Result = edb_server_process:processes_info(
+    Procs =
         #{
             Pid => process_status(Pid, State0)
-         || Pid <- Universe,
-            not maps:is_key(Pid, Excluded)
-        }
-    ),
+         || Pid <- Universe, not maps:is_key(Pid, Excluded)
+        },
+    Result = edb_server_process:processes_info(Procs, RequestedFields),
     {reply, Result, State0}.
 
 -spec is_paused_impl(State0) -> {reply, Result, State1} when
@@ -539,13 +545,14 @@ processes_impl(State0) ->
 is_paused_impl(State0) ->
     {reply, is_paused(State0), State0}.
 
--spec excluded_processes_impl(State0) -> {reply, #{pid() => edb:process_info()}, State1} when
+-spec excluded_processes_impl(RequestedFields, State0) -> {reply, #{pid() => edb:process_info()}, State1} when
+    RequestedFields :: [edb:process_info_field()],
     State0 :: state(),
     State1 :: state().
-excluded_processes_impl(State0) ->
+excluded_processes_impl(RequestedFields, State0) ->
     Universe = erlang:processes(),
     Excluded = get_excluded_processes(Universe, State0),
-    Result = edb_server_process:excluded_processes_info(Excluded),
+    Result = edb_server_process:excluded_processes_info(Excluded, RequestedFields),
     {reply, Result, State0}.
 
 -spec excluded_sys_processes(Universe :: [pid()], state()) -> set(pid()).
