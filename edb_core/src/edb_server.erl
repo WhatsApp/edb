@@ -539,7 +539,7 @@ processes_impl(State0) ->
 is_paused_impl(State0) ->
     {reply, is_paused(State0), State0}.
 
--spec excluded_processes_impl(State0) -> {reply, #{pid() => edb:excluded_process_info()}, State1} when
+-spec excluded_processes_impl(State0) -> {reply, #{pid() => edb:process_info()}, State1} when
     State0 :: state(),
     State1 :: state().
 excluded_processes_impl(State0) ->

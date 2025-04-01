@@ -90,31 +90,21 @@ The (new!) Erlang debugger
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.
 
--export_type([process_info/0, process_status/0]).
+-export_type([process_info/0, process_status/0, exclusion_reason/0]).
 -type process_info() :: #{
-    status := process_status(),
     application => atom(),
+    current_bp => {line, line()},
     current_fun => mfa(),
     current_loc => {string(), line()},
-    current_bp => {line, line()},
+    exclusion_reasons => [exclusion_reason()],
+    message_queue_len => non_neg_integer(),
     parent => atom() | pid(),
     registered_name => atom(),
-    message_queue_len => non_neg_integer()
+    status => process_status()
 }.
 
 -type process_status() ::
     running | paused | breakpoint.
-
--export_type([excluded_process_info/0, exclusion_reason/0]).
--type excluded_process_info() :: #{
-    application => atom(),
-    current_fun => mfa(),
-    current_loc => {string(), line()},
-    parent => atom() | pid(),
-    exclusion_reasons => [exclusion_reason()],
-    registered_name => atom(),
-    message_queue_len => non_neg_integer()
-}.
 
 -type exclusion_reason() ::
     debugger_component

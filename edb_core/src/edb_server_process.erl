@@ -84,7 +84,7 @@ try_resume_process(Pid) ->
 -spec excluded_process_info(Pid, Reasons) -> {ok, Info} | undefined when
     Pid :: pid(),
     Reasons :: [edb:exclusion_reason()],
-    Info :: edb:excluded_process_info().
+    Info :: edb:process_info().
 excluded_process_info(Pid, Reasons) ->
     case excluded_processes_info(#{Pid => Reasons}) of
         #{Pid := Info} ->
@@ -96,7 +96,7 @@ excluded_process_info(Pid, Reasons) ->
 -spec excluded_processes_info(#{Pid => Reasons}) -> #{Pid => Info} when
     Pid :: pid(),
     Reasons :: [edb:exclusion_reason()],
-    Info :: edb:excluded_process_info().
+    Info :: edb:process_info().
 excluded_processes_info(Procs) ->
     Fields = #{
         application => {true, group_leader_to_app()},
@@ -112,13 +112,16 @@ excluded_processes_info(Procs) ->
     Pid :: pid(),
     Reasons :: [edb:exclusion_reason()],
     Fields :: basic_process_info_fields(),
-    Info :: edb:excluded_process_info().
+    Info :: edb:process_info().
 excluded_process_info(Pid, Reasons, Fields) ->
     case basic_process_info(Pid, Fields) of
         undefined ->
             undefined;
         {ok, Info0} ->
-            Info1 = Info0#{exclusion_reasons => Reasons},
+            Info1 = Info0#{
+                status => running,
+                exclusion_reasons => Reasons
+            },
             {ok, Info1}
     end.
 

@@ -721,6 +721,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertMatch(
         #{
             Me := #{
+                status := running,
                 parent := _,
                 current_fun := _,
                 exclusion_reasons := [excluded_pid],
@@ -734,6 +735,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertMatch(
         #{
             KernelSupPid := #{
+                status := running,
                 parent := _,
                 current_fun := _,
                 message_queue_len := _,
@@ -749,6 +751,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertMatch(
         #{
             InitPid := #{
+                status := running,
                 current_fun := _,
                 registered_name := init,
                 exclusion_reasons := [system_component]
@@ -760,6 +763,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertMatch(
         #{
             SubscribedPid := #{
+                status := running,
                 current_fun := _,
                 exclusion_reasons := [debugger_component]
             }
@@ -770,7 +774,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     % Manually excluded processes are reported
 
     IdleProcMFA = {?MODULE, wait_for_any_message, 0},
-    Info = #{parent => Me, current_fun => IdleProcMFA, message_queue_len => 0},
+    Info = #{status => running, parent => Me, current_fun => IdleProcMFA, message_queue_len => 0},
 
     ?assertEqual(
         #{ExcludedPid => Info#{exclusion_reasons => [excluded_pid]}},
@@ -790,6 +794,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertMatch(
         #{
             DummyApp1SupPid := #{
+                status := running,
                 parent := SupParentPid,
                 application := dummy_app_1,
                 exclusion_reasons := [excluded_application],
@@ -797,6 +802,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
             },
 
             DummyApp1Pid := #{
+                status := running,
                 application := dummy_app_1,
                 % name is used if available
                 parent := dummy_app_1_sup,
@@ -822,7 +828,12 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ok = edb:exclude_process(DummyApp1Pid),
 
     ?assertMatch(
-        #{DummyApp1Pid := #{exclusion_reasons := [excluded_application, excluded_pid]}},
+        #{
+            DummyApp1Pid := #{
+                status := running,
+                exclusion_reasons := [excluded_application, excluded_pid]
+            }
+        },
         maps:with([DummyApp1Pid], edb:excluded_processes())
     ),
 
@@ -830,6 +841,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertEqual(
         #{
             NameablePid1 => Info#{
+                status := running,
                 exclusion_reasons => [excluded_regname],
                 registered_name => some_named_proc
             }
@@ -847,6 +859,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertEqual(
         #{
             NameablePid2 => Info#{
+                status := running,
                 exclusion_reasons => [excluded_regname],
                 registered_name => some_named_proc
             }
