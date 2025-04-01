@@ -53,7 +53,8 @@ parse_arguments(Args) ->
     Args :: arguments().
 handle(#{state := attached}, _Args) ->
     ProcessesInfo = edb:processes([message_queue_len, pid_string, registered_name]),
-    Threads = [thread(Pid, Info) || Pid := Info <- ProcessesInfo],
+    ThreadIds = edb_dap_id_mappings:pids_to_thread_ids(maps:keys(ProcessesInfo)),
+    Threads = [thread(Pid, ThreadIds, Info) || Pid := Info <- ProcessesInfo],
     #{response => edb_dap_request:success(#{threads => Threads})};
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
@@ -61,9 +62,12 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec thread(pid(), edb:process_info()) -> thread().
-thread(Pid, Info) ->
-    Id = edb_dap_id_mappings:pid_to_thread_id(Pid),
+-spec thread(Pid, ThreadIds, Info) -> thread() when
+    Pid :: pid(),
+    ThreadIds :: #{pid() => edb_dap:thread_id()},
+    Info :: edb:process_info().
+thread(Pid, ThreadIds, Info) ->
+    Id = maps:get(Pid, ThreadIds),
     #{
         id => Id,
         name => thread_name(Info)

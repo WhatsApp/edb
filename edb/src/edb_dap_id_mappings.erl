@@ -37,7 +37,7 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 
 %% API
 -export([start_link_thread_ids_server/0, start_link_frame_ids_server/0, start_link_var_reference_ids_server/0]).
--export([pid_to_thread_id/1, thread_id_to_pid/1]).
+-export([pid_to_thread_id/1, pids_to_thread_ids/1, thread_id_to_pid/1]).
 -export([pid_frame_to_frame_id/1, frame_id_to_pid_frame/1]).
 -export([var_reference_to_frame_scope/1, frame_scope_to_var_reference/1]).
 -export([reset/0]).
@@ -88,6 +88,10 @@ start_link_var_reference_ids_server() ->
 -spec pid_to_thread_id(pid()) -> id().
 pid_to_thread_id(Pid) when is_pid(Pid) ->
     gen_server:call(?THREAD_IDS_SERVER, {get_id, Pid}).
+
+-spec pids_to_thread_ids([pid()]) -> #{pid() => id()}.
+pids_to_thread_ids(Pids) ->
+    gen_server:call(?THREAD_IDS_SERVER, {get_ids, Pids}).
 
 -spec thread_id_to_pid(id()) -> {ok, pid()} | {error, not_found}.
 thread_id_to_pid(Id) when is_integer(Id) ->
@@ -150,11 +154,23 @@ init(ServerType) ->
 
 -spec handle_call
     ({get_id, A}, gen_server:from(), state(A)) -> {reply, id(), state(A)};
+    ({get_ids, [A]}, gen_server:from(), state(A)) -> {reply, #{A => id()}, state(A)};
     ({from_id, id()}, gen_server:from(), state(A)) -> {reply, {ok, A} | {error, not_found}, state(A)};
     (reset, gen_server:from(), state(A)) -> {reply, ok, state(A)}.
 handle_call({get_id, A}, _From, State0) ->
     {Id, State1} = id_mapping_get_id(A, State0),
     {reply, Id, State1};
+handle_call({get_ids, As}, _From, State0) ->
+    {Ids, State1} = lists:foldl(
+        fun(A, {IdsN, StateN}) ->
+            {Id, StateN_plus_1} = id_mapping_get_id(A, StateN),
+            IdsN_plus_1 = IdsN#{A => Id},
+            {IdsN_plus_1, StateN_plus_1}
+        end,
+        {#{}, State0},
+        As
+    ),
+    {reply, Ids, State1};
 handle_call({from_id, Id}, _From, State0) ->
     Result = id_mapping_from_id(Id, State0),
     {reply, Result, State0};

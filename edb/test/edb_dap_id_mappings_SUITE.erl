@@ -49,8 +49,12 @@ test_it_works(_Config) ->
     % Assigns a new id to each pid, only if needed
     ThreadId1 = 1 = edb_dap_id_mappings:pid_to_thread_id(Pid1),
     ThreadId2 = 2 = edb_dap_id_mappings:pid_to_thread_id(Pid2),
-    ThreadId3 = 3 = edb_dap_id_mappings:pid_to_thread_id(Pid3),
-    ThreadId4 = 4 = edb_dap_id_mappings:pid_to_thread_id(Pid4),
+    #{
+        Pid1 := ThreadId1,
+        Pid2 := ThreadId2,
+        Pid3 := 3 = ThreadId3,
+        Pid4 := 4 = ThreadId4
+    } = edb_dap_id_mappings:pids_to_thread_ids([Pid1, Pid2, Pid3, Pid4]),
 
     ThreadId1 = edb_dap_id_mappings:pid_to_thread_id(Pid1),
     ThreadId2 = edb_dap_id_mappings:pid_to_thread_id(Pid2),
