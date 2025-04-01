@@ -111,7 +111,7 @@ The (new!) Erlang debugger
     current_fun => mfa(),
     current_loc => {string(), line()},
     parent => atom() | pid(),
-    reason => [exclusion_reason()],
+    exclusion_reasons => [exclusion_reason()],
     registered_name => atom(),
     message_queue_len => non_neg_integer()
 }.

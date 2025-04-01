@@ -118,7 +118,7 @@ excluded_process_info(Pid, Reasons, Fields) ->
         undefined ->
             undefined;
         {ok, Info0} ->
-            Info1 = Info0#{reason => Reasons},
+            Info1 = Info0#{exclusion_reasons => Reasons},
             {ok, Info1}
     end.
 

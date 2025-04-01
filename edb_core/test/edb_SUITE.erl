@@ -723,7 +723,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
             Me := #{
                 parent := _,
                 current_fun := _,
-                reason := [excluded_pid],
+                exclusion_reasons := [excluded_pid],
                 message_queue_len := _
             }
         },
@@ -739,7 +739,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 message_queue_len := _,
                 registered_name := kernel_sup,
                 application := kernel,
-                reason := [excluded_application]
+                exclusion_reasons := [excluded_application]
             }
         },
         maps:with([KernelSupPid], edb:excluded_processes())
@@ -751,7 +751,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
             InitPid := #{
                 current_fun := _,
                 registered_name := init,
-                reason := [system_component]
+                exclusion_reasons := [system_component]
             }
         },
         maps:with([InitPid], edb:excluded_processes())
@@ -761,7 +761,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
         #{
             SubscribedPid := #{
                 current_fun := _,
-                reason := [debugger_component]
+                exclusion_reasons := [debugger_component]
             }
         },
         maps:with([SubscribedPid], edb:excluded_processes())
@@ -773,14 +773,14 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     Info = #{parent => Me, current_fun => IdleProcMFA, message_queue_len => 0},
 
     ?assertEqual(
-        #{ExcludedPid => Info#{reason => [excluded_pid]}},
+        #{ExcludedPid => Info#{exclusion_reasons => [excluded_pid]}},
         maps:with([ExcludedPid], edb:excluded_processes())
     ),
 
     ?assertEqual(
         #{
             NameablePid1 => Info#{
-                reason => [excluded_regname],
+                exclusion_reasons => [excluded_regname],
                 registered_name => some_named_proc
             }
         },
@@ -792,7 +792,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
             DummyApp1SupPid := #{
                 parent := SupParentPid,
                 application := dummy_app_1,
-                reason := [excluded_application],
+                exclusion_reasons := [excluded_application],
                 registered_name := dummy_app_1_sup
             },
 
@@ -800,7 +800,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
                 application := dummy_app_1,
                 % name is used if available
                 parent := dummy_app_1_sup,
-                reason := [excluded_application],
+                exclusion_reasons := [excluded_application],
                 registered_name := dummy_app_1
             }
         } when is_pid(SupParentPid),
@@ -822,7 +822,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ok = edb:exclude_process(DummyApp1Pid),
 
     ?assertMatch(
-        #{DummyApp1Pid := #{reason := [excluded_application, excluded_pid]}},
+        #{DummyApp1Pid := #{exclusion_reasons := [excluded_application, excluded_pid]}},
         maps:with([DummyApp1Pid], edb:excluded_processes())
     ),
 
@@ -830,7 +830,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertEqual(
         #{
             NameablePid1 => Info#{
-                reason => [excluded_regname],
+                exclusion_reasons => [excluded_regname],
                 registered_name => some_named_proc
             }
         },
@@ -847,7 +847,7 @@ test_excluded_processes_reports_excluded_processes(_Config) ->
     ?assertEqual(
         #{
             NameablePid2 => Info#{
-                reason => [excluded_regname],
+                exclusion_reasons => [excluded_regname],
                 registered_name => some_named_proc
             }
         },
