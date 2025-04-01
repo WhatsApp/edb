@@ -86,6 +86,7 @@
 
 %% Test cases for the test_process_info group
 -export([test_can_select_process_info_fields/1]).
+-export([test_pid_string_info/1]).
 
 %% Test cases for the test_format group
 -export([test_format_works/1]).
@@ -157,7 +158,8 @@ groups() ->
             test_shows_a_path_that_exists_for_otp_sources
         ]},
         {test_process_info, [
-            test_can_select_process_info_fields
+            test_can_select_process_info_fields,
+            test_pid_string_info
         ]},
         {test_format, [
             test_format_works
@@ -2806,6 +2808,16 @@ test_can_select_process_info_fields(_Config) ->
     ?assertEqual(
         #{self() => #{status => running, exclusion_reasons => [excluded_pid]}},
         maps:with([self()], edb:excluded_processes([status, exclusion_reasons]))
+    ),
+    ok.
+
+test_pid_string_info(_Config) ->
+    Pid = spawn_idle_proc(),
+
+    Expected = list_to_binary(pid_to_list(Pid)),
+    ?assertEqual(
+        {ok, #{pid_string => Expected}},
+        edb:process_info(Pid, [pid_string])
     ),
     ok.
 

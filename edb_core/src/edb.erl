@@ -98,6 +98,7 @@ The (new!) Erlang debugger
     | exclusion_reasons
     | message_queue_len
     | parent
+    | pid_string
     | registered_name
     | status.
 
@@ -109,6 +110,7 @@ The (new!) Erlang debugger
     exclusion_reasons => [exclusion_reason()],
     message_queue_len => non_neg_integer(),
     parent => atom() | pid(),
+    pid_string => binary(),
     registered_name => atom(),
     status => process_status()
 }.

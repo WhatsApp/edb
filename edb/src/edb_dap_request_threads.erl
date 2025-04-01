@@ -52,8 +52,8 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := attached}, _Args) ->
-    ProcessesInfo = edb:processes([registered_name, message_queue_len]),
-    Threads = maps:fold(fun thread/3, [], ProcessesInfo),
+    ProcessesInfo = edb:processes([message_queue_len, pid_string, registered_name]),
+    Threads = [thread(Pid, Info) || Pid := Info <- ProcessesInfo],
     #{response => edb_dap_request:success(#{threads => Threads})};
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
@@ -61,37 +61,34 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec thread(pid(), edb:process_info(), [thread()]) -> [thread()].
-thread(Pid, Info, Acc) ->
+-spec thread(pid(), edb:process_info()) -> thread().
+thread(Pid, Info) ->
     Id = edb_dap_id_mappings:pid_to_thread_id(Pid),
-    [
-        #{
-            id => Id,
-            name => thread_name(Pid, Info)
-        }
-        | Acc
-    ].
+    #{
+        id => Id,
+        name => thread_name(Info)
+    }.
 
--spec thread_name(pid(), edb:process_info()) -> binary().
-thread_name(Pid, Info) ->
-    ProcessNameLabel = process_name_label(Pid, Info),
+-spec thread_name(edb:process_info()) -> binary().
+thread_name(Info) ->
+    ProcessNameLabel = process_name_label(Info),
     MessageQueueLenLabel = message_queue_len_label(Info),
-    edb:format(~"~s~s", [ProcessNameLabel, MessageQueueLenLabel]).
+    iolist_to_binary([ProcessNameLabel, MessageQueueLenLabel]).
 
--spec process_name_label(pid(), edb:process_info()) -> binary().
-process_name_label(Pid, Info) ->
+-spec process_name_label(edb:process_info()) -> iodata().
+process_name_label(Info = #{pid_string := PidString}) ->
     case maps:get(registered_name, Info, undefined) of
         undefined ->
-            edb:format(~"~p", [Pid]);
+            PidString;
         RegisteredName ->
-            edb:format(~"~p (~p)", [Pid, RegisteredName])
+            io_lib:format(~"~p (~p)", [PidString, RegisteredName])
     end.
 
--spec message_queue_len_label(edb:process_info()) -> binary().
+-spec message_queue_len_label(edb:process_info()) -> iodata().
 message_queue_len_label(Info) ->
     case maps:get(message_queue_len, Info, 0) of
         0 ->
-            ~"";
+            [];
         N ->
-            edb:format(~" (messages: ~p)", [N])
+            io_lib:format(~" (messages: ~p)", [N])
     end.

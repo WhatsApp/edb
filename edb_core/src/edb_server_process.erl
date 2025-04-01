@@ -126,6 +126,7 @@ process_info(Pid, Fields) ->
         exclusion_reasons => [edb:exclusion_reason()],
         message_queue_len => boolean(),
         parent => boolean(),
+        pid_string => boolean(),
         registered_name => boolean(),
         status => raw_status()
     }.
@@ -164,6 +165,9 @@ make_process_info_fields([message_queue_len | Rest], RawStatus, ExclusionReasons
     make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
 make_process_info_fields([parent | Rest], RawStatus, ExclusionReasons, Acc0) ->
     Acc1 = Acc0#{parent => true},
+    make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
+make_process_info_fields([pid_string | Rest], RawStatus, ExclusionReasons, Acc0) ->
+    Acc1 = Acc0#{pid_string => true},
     make_process_info_fields(Rest, RawStatus, ExclusionReasons, Acc1);
 make_process_info_fields([registered_name | Rest], RawStatus, ExclusionReasons, Acc0) ->
     Acc1 = Acc0#{registered_name => true},
@@ -241,6 +245,7 @@ add_process_info_1(Info, Fields) ->
         | current_loc
         | message_queue_len
         | parent
+        | pid_string
         | registered_name,
     Acc :: [erlang_process_info_item()],
     Items :: [erlang_process_info_item()].
@@ -256,6 +261,8 @@ required_process_info_items([message_queue_len | Rest], Acc) ->
     required_process_info_items(Rest, [message_queue_len | Acc]);
 required_process_info_items([parent | Rest], Acc) ->
     required_process_info_items(Rest, [parent | Acc]);
+required_process_info_items([pid_string | Rest], Acc) ->
+    required_process_info_items(Rest, Acc);
 required_process_info_items([registered_name | Rest], Acc) ->
     required_process_info_items(Rest, [registered_name | Acc]).
 
@@ -272,17 +279,26 @@ add_process_info_2(Pid, Info0, ErlangProcessInfoItems, Fields) ->
             _ -> erlang:process_info(Pid, ErlangProcessInfoItems)
         end,
 
+    Info1 =
+        case Fields of
+            #{pid_string := true} ->
+                PidStr = iolist_to_binary(io_lib:format(~"~p", [Pid])),
+                Info0#{pid_string => PidStr};
+            _ ->
+                Info0
+        end,
+
     case MaybeRawInfo of
         % Pid not alive
         undefined ->
             undefined;
         RawInfo ->
-            Info1 = lists:foldl(
+            Info2 = lists:foldl(
                 fun(Info, Acc) -> fold_process_info(Info, Acc, Fields) end,
-                Info0,
+                Info1,
                 RawInfo
             ),
-            {ok, Info1}
+            {ok, Info2}
     end.
 
 -spec fold_process_info(ProcInfo, Acc, Fields) -> Acc when
