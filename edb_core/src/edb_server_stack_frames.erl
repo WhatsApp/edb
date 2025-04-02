@@ -27,6 +27,7 @@
 -export([raw_stack_frames/1, raw_user_stack_frames/1]).
 -export([user_frames_only/1, without_bottom_terminator_frame/1]).
 -export([stack_frame_vars/5]).
+-export([has_exception_handler/1]).
 
 -spec raw_stack_frames(Pid) -> RawStackFrames when
     Pid :: pid(),
@@ -286,3 +287,14 @@ get_debug_info(Module, Line) when is_atom(Module) ->
 assert_is_var_debug_info(X = {x, N}) when is_integer(N) -> X;
 assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
 assert_is_var_debug_info(V = {value, _}) -> V.
+
+-spec has_exception_handler(Frame) -> boolean() when
+    Frame :: erl_debugger:stack_frame().
+has_exception_handler({_, _, #{slots := Slots}}) ->
+    lists:any(
+        fun
+            ({'catch', _}) -> true;
+            (_) -> false
+        end,
+        Slots
+    ).

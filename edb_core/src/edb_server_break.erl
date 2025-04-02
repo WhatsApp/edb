@@ -211,71 +211,80 @@ prepare_for_stepping(StepType, Pid, Breakpoints0) ->
         not_paused ->
             {error, not_paused};
         StackFrames when is_list(StackFrames) ->
-            StackFramesToInstrument =
+            {StackFramesToInstrument, InstrumentationTypes} =
                 case StepType of
                     step_over ->
-                        StackFrames;
+                        Types = [on_any_required, on_any | [on_exc_handler || _ <- tl(tl(StackFrames))]],
+                        {StackFrames, Types};
                     step_out ->
-                        tl(StackFrames)
+                        Frames = tl(StackFrames),
+                        Types = [on_any_required | [on_exc_handler || _ <- tl(Frames)]],
+                        {Frames, Types}
                 end,
 
             CallStackAddrs = call_stack_addrs(StackFramesToInstrument),
 
             add_steps_on_stack_frames(
-                Pid, StackFramesToInstrument, CallStackAddrs, top_frame_must_succeed, Breakpoints0
+                Pid, StackFramesToInstrument, CallStackAddrs, InstrumentationTypes, Breakpoints0
             )
     end.
 
--spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, Kind, breakpoints()) ->
+-spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, Types, breakpoints()) ->
     {ok, breakpoints()} | {error, Error}
 when
     Pid :: pid(),
     FrameAddrs :: call_stack_addrs(),
     Frames :: [erl_debugger:stack_frame()],
-    Kind :: top_frame_must_succeed | top_frame_can_fail,
+    Types :: [on_any_required | on_any | on_exc_handler],
     Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
-add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, Kind, Breakpoints0) ->
-    %% Proper MFA and line: try to put steps on the surrounding function
-    case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Breakpoints0) of
+add_steps_on_stack_frames(Pid, [TopFrame | MoreFrames], FrameAddrs, [Type | MoreTypes], Breakpoints0) ->
+    case add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Type, Breakpoints0) of
         {ok, Breakpoints1} ->
-            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints1);
-        no_breakpoint_set when Kind =:= top_frame_must_succeed ->
+            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), MoreTypes, Breakpoints1);
+        no_breakpoint_set when Type =:= on_any_required ->
             %% We cannot claim success if no breakpoints were added
             {_, #{function := {Module, _, _}}, _} = TopFrame,
             {error, {cannot_breakpoint, Module}};
-        skipped when Kind =:= top_frame_must_succeed ->
+        skipped when Type =:= on_any_required ->
             edb_server:invariant_violation(stepping_from_unbreakable_frame);
         Failure when Failure =:= skipped; Failure =:= no_breakpoint_set ->
-            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), top_frame_can_fail, Breakpoints0);
+            add_steps_on_stack_frames(Pid, MoreFrames, tl(FrameAddrs), MoreTypes, Breakpoints0);
         {error, Error} ->
             {error, Error}
     end;
-add_steps_on_stack_frames(_Pid, [], [], top_frame_can_fail, Breakpoints) ->
+add_steps_on_stack_frames(_Pid, [], [], [], Breakpoints) ->
     {ok, Breakpoints}.
 
--spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, breakpoints()) ->
+-spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Type, breakpoints()) ->
     {ok, breakpoints()} | no_breakpoint_set | skipped | {error, Error}
 when
     Pid :: pid(),
     TopFrame :: erl_debugger:stack_frame(),
     FrameAddrs :: call_stack_addrs(),
+    Type :: on_any_required | on_any | on_exc_handler,
     Error :: no_abstract_code | {beam_analysis, term()}.
-add_steps_on_stack_frame(Pid, {_, #{function := MFA, line := Line}, _}, FrameAddrs, Breakpoints) when
+add_steps_on_stack_frame(Pid, Frame = {_, #{function := MFA, line := Line}, _}, FrameAddrs, Type, Breakpoints) when
     is_tuple(MFA), is_integer(Line)
 ->
-    {Module, _, _} = MFA,
-    case edb_server_code:fetch_abstract_forms(Module) of
-        {error, _} = Error ->
-            Error;
-        {ok, Forms} ->
-            case edb_server_code:find_fun_containing_line(Line, Forms) of
-                {ok, Form} ->
-                    add_steps_on_function(Pid, MFA, Form, FrameAddrs, Breakpoints);
-                not_found ->
-                    {error, {beam_analysis, {invalid_line, Line}}}
+    ShouldSkip = Type =:= on_exc_handler andalso not edb_server_stack_frames:has_exception_handler(Frame),
+    case ShouldSkip of
+        true ->
+            skipped;
+        false ->
+            {Module, _, _} = MFA,
+            case edb_server_code:fetch_abstract_forms(Module) of
+                {error, _} = Error ->
+                    Error;
+                {ok, Forms} ->
+                    case edb_server_code:find_fun_containing_line(Line, Forms) of
+                        {ok, Form} ->
+                            add_steps_on_function(Pid, MFA, Form, FrameAddrs, Breakpoints);
+                        not_found ->
+                            {error, {beam_analysis, {invalid_line, Line}}}
+                    end
             end
     end;
-add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Breakpoints) ->
+add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Type, _Breakpoints) ->
     % no line-number information or not a user function
     skipped.
 
