@@ -85,7 +85,7 @@ process_name_label(Info = #{pid_string := PidString}) ->
         undefined ->
             PidString;
         RegisteredName ->
-            io_lib:format(~"~p (~p)", [PidString, RegisteredName])
+            io_lib:format(~"~s (~p)", [PidString, RegisteredName])
     end.
 
 -spec message_queue_len_label(edb:process_info()) -> iodata().
