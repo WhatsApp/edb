@@ -15,31 +15,35 @@
 
 -module(edb_server_break).
 
--export([
-    create/0,
-    get_explicits/1,
-    get_explicits/2,
-    get_explicits_hit/1,
-    get_explicit_hit/2,
-    register_breakpoint_event/5,
-    is_process_trapped/2,
-    add_explicit/3,
-    add_explicits/3,
-    clear_explicits/2,
-    clear_explicit/3,
-    prepare_for_stepping/3,
-    resume_processes/2
-]).
+% Creation
+-export([create/0]).
+
+% Explicit brekapoints manipulation
+-export([add_explicit/3, add_explicits/3]).
+-export([get_explicits/1, get_explicits/2]).
+-export([clear_explicit/3, clear_explicits/2]).
+-export([get_explicits_hit/1, get_explicit_hit/2]).
+
+% Stepping
+-export([prepare_for_stepping/3]).
+
+% Execution control
+-export([is_process_trapped/2]).
+-export([register_breakpoint_event/5]).
+-export([resume_processes/2]).
 
 -compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
 % @fb-only
 
--export_type([breakpoints/0]).
+%% --------------------------------------------------------------------
+%% Types
+%% --------------------------------------------------------------------
 
 -type line() :: edb:line().
 
+-export_type([breakpoints/0]).
 -record(breakpoints, {
     %% TODO(T198738599): we should somehow keep track of the identity
     %% of the module instance on which the breakpoint
@@ -73,6 +77,10 @@
 
 -opaque breakpoints() :: #breakpoints{}.
 
+%% --------------------------------------------------------------------
+%% Creation
+%% --------------------------------------------------------------------
+
 -spec create() -> breakpoints().
 create() ->
     #breakpoints{
@@ -83,6 +91,36 @@ create() ->
         vm_breakpoints = #{}
     }.
 
+%% --------------------------------------------------------------------
+%% Explicit breakpoints manipulation
+%% --------------------------------------------------------------------
+-spec add_explicit(module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
+add_explicit(Module, Line, Breakpoints0) ->
+    case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            #breakpoints{explicits = Explicits1} = Breakpoints1,
+            Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
+            Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
+            {ok, Breakpoints2};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec add_explicits(module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when
+    LineResults :: [{line(), Result}],
+    Result :: ok | {error, edb:add_breakpoint_error()}.
+add_explicits(Module, Lines, Breakpoints0) ->
+    lists:mapfoldl(
+        fun(Line, AccBreakpointsIn) ->
+            case add_explicit(Module, Line, AccBreakpointsIn) of
+                {ok, AccBreakpointsOut} -> {{Line, ok}, AccBreakpointsOut};
+                {error, Error} -> {{Line, {error, Error}}, AccBreakpointsIn}
+            end
+        end,
+        Breakpoints0,
+        Lines
+    ).
+
 -spec get_explicits(breakpoints()) -> #{module() => #{line() => []}}.
 get_explicits(#breakpoints{explicits = Explicits}) ->
     Explicits.
@@ -90,6 +128,58 @@ get_explicits(#breakpoints{explicits = Explicits}) ->
 -spec get_explicits(module(), breakpoints()) -> #{line() => []}.
 get_explicits(Module, #breakpoints{explicits = Explicits}) ->
     maps:get(Module, Explicits, #{}).
+
+-spec clear_explicit(module(), line(), breakpoints()) ->
+    {ok, removed | vanished, breakpoints()} | {error, not_found}.
+clear_explicit(Module, Line, Breakpoints0) ->
+    case unregister_explicit(Module, Line, Breakpoints0) of
+        {found, Breakpoints1} ->
+            %% We knew about this breakpoint. Now remove it from the VM.
+            case remove_vm_breakpoint(Module, Line, explicit, Breakpoints1) of
+                {ok, DeletionResult, Breakpoints2} ->
+                    {ok, DeletionResult, Breakpoints2};
+                {error, unknown_vm_breakpoint} ->
+                    % Breakpoint was registered as explicit but not as a reason?
+                    % This should never happen, if it does we have a bug.
+                    edb_server:invariant_violation(inconsistent_explicit_breakpoint)
+            end;
+        not_found ->
+            %% We didn't know about this breakpoint, trying to clear it is a user error.
+            {error, not_found}
+    end.
+
+-spec clear_explicits(module(), breakpoints()) -> {ok, breakpoints()}.
+clear_explicits(Module, Breakpoints0) ->
+    Lines = maps:keys(get_explicits(Module, Breakpoints0)),
+    Breakpoints1 = lists:foldl(
+        fun(Line, AccBreakpointsIn) ->
+            case clear_explicit(Module, Line, AccBreakpointsIn) of
+                {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
+                % A breakpoint line taken from the list cannot be not_found
+                {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
+            end
+        end,
+        Breakpoints0,
+        Lines
+    ),
+    {ok, Breakpoints1}.
+
+-spec unregister_explicit(module(), line(), breakpoints()) -> {found, breakpoints()} | not_found.
+unregister_explicit(Module, Line, Breakpoints0) ->
+    #breakpoints{explicits = Explicits0} = Breakpoints0,
+    BreakpointInfos0 = maps:get(Module, Explicits0, #{}),
+    case edb_server_sets:take_element(Line, BreakpointInfos0) of
+        not_found ->
+            not_found;
+        {found, BreakpointInfos1} ->
+            Explicits1 =
+                case edb_server_sets:is_empty(BreakpointInfos1) of
+                    true -> maps:remove(Module, Explicits0);
+                    false -> Explicits0#{Module := BreakpointInfos1}
+                end,
+            Breakpoints1 = Breakpoints0#breakpoints{explicits = Explicits1},
+            {found, Breakpoints1}
+    end.
 
 -spec get_explicits_hit(breakpoints()) -> #{pid() => #{module := module(), line := line()}}.
 get_explicits_hit(#breakpoints{explicits_hit = ExplicitsHit}) ->
@@ -108,100 +198,9 @@ get_explicit_hit(Pid, #breakpoints{explicits_hit = ExplicitsHit}) ->
             no_breakpoint_hit
     end.
 
--spec register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints) ->
-    {suspend, explicit | step, breakpoints()} | resume
-when
-    Breakpoints :: breakpoints(),
-    Module :: module(),
-    Line :: integer(),
-    Pid :: pid(),
-    Resume :: fun(() -> ok).
-register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
-    case should_be_suspended(Module, Line, Pid, Breakpoints0) of
-        {true, Reason} ->
-            %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
-            Breakpoints1 = register_resume_action(Pid, Resume, Breakpoints0),
-            Breakpoints2 =
-                case Reason of
-                    step ->
-                        Breakpoints1;
-                    explicit ->
-                        register_explicit_hit(Module, Line, Pid, Breakpoints1)
-                end,
-            {ok, Breakpoints3} = clear_steps(Pid, Breakpoints2),
-            {suspend, Reason, Breakpoints3};
-        false ->
-            resume
-    end.
-
--spec should_be_suspended(module(), line(), pid(), breakpoints()) -> {true, explicit | step} | false.
-should_be_suspended(Module, Line, Pid, Breakpoints) ->
-    #breakpoints{explicits = Explicits, steps = Steps} = Breakpoints,
-    case Explicits of
-        #{Module := #{Line := []}} ->
-            %% This is an explicit breakpoint
-            {true, explicit};
-        _ ->
-            case Steps of
-                #{Pid := #{{Module, Line} := Patterns}} ->
-                    % We need stack-frames, and these require the process to be suspended
-                    case edb_server_process:try_suspend_process(Pid) of
-                        true ->
-                            case edb_server_stack_frames:raw_user_stack_frames(Pid) of
-                                not_paused ->
-                                    edb_server:invariant_violation(not_paused_right_after_suspending);
-                                StackFrames when is_list(StackFrames) ->
-                                    ShouldSuspend = lists:any(
-                                        fun(Pattern) -> call_stack_matches(Pattern, StackFrames) end,
-                                        maps:keys(Patterns)
-                                    ),
-                                    case ShouldSuspend of
-                                        true ->
-                                            %% This is a step breakpoint for the current process.
-                                            %% Caller expects this process to be suspended, in this case
-                                            {true, step};
-                                        _ ->
-                                            edb_server_process:try_resume_process(Pid),
-                                            false
-                                    end
-                            end;
-                        false ->
-                            % Process was concurrently killed, etc
-                            false
-                    end;
-                _ ->
-                    false
-            end
-    end.
-
--spec register_explicit_hit(Module, Line, Pid, Breakpoints) -> breakpoints() when
-    Breakpoints :: breakpoints(),
-    Module :: module(),
-    Line :: integer(),
-    Pid :: pid().
-register_explicit_hit(Module, Line, Pid, Breakpoints) ->
-    #breakpoints{explicits_hit = ExplicitsHit} = Breakpoints,
-    NewBPHit = {Module, Line},
-    ExplicitsHit1 = ExplicitsHit#{Pid => NewBPHit},
-    Breakpoints#breakpoints{explicits_hit = ExplicitsHit1}.
-
--spec register_resume_action(Pid, Resume, Breakpoints) -> Breakpoints when
-    Breakpoints :: breakpoints(),
-    Pid :: pid(),
-    Resume :: fun(() -> ok).
-register_resume_action(Pid, Resume, Breakpoints) ->
-    #breakpoints{resume_actions = ResumeActions} = Breakpoints,
-    ResumeActions1 = ResumeActions#{Pid => Resume},
-    Breakpoints#breakpoints{resume_actions = ResumeActions1}.
-
-%% @doc Returns true if the given process is either on an explicit breakpoint or a step breakpoint.
-%% Equivalently, returns true if the given process is on a VM breakpoint.
--spec is_process_trapped(Pid, Breakpoints) -> boolean() when
-    Pid :: pid(),
-    Breakpoints :: breakpoints().
-is_process_trapped(Pid, Breakpoints) ->
-    #breakpoints{resume_actions = ResumeActions} = Breakpoints,
-    maps:is_key(Pid, ResumeActions).
+%% --------------------------------------------------------------------
+%% Stepping
+%% --------------------------------------------------------------------
 
 -spec prepare_for_stepping(StepType, Pid, breakpoints()) -> {ok, breakpoints()} | {error, Error} when
     StepType :: step_over | step_out,
@@ -312,6 +311,122 @@ add_steps_on_function(Pid, MFA, FunForm, FrameAddrs, Breakpoints0) ->
         false -> no_breakpoint_set
     end.
 
+-spec add_step(Pid, Pattern, Module, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
+    Pid :: pid(),
+    Pattern :: call_stack_pattern(),
+    Module :: module(),
+    Line :: line().
+add_step(Pid, Pattern, Module, Line, Breakpoints0) ->
+    case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            #breakpoints{steps = Steps1} = Breakpoints1,
+            Steps2 = edb_server_maps:add(Pid, {Module, Line}, Pattern, [], Steps1),
+            Breakpoints2 = Breakpoints1#breakpoints{steps = Steps2},
+            {ok, Breakpoints2};
+        {error, _} ->
+            % This is not a line where we can set a breakpoint.
+            no_breakpoint_set
+    end.
+
+%% --------------------------------------------------------------------
+%% Execution control
+%% --------------------------------------------------------------------
+
+%% @doc Returns true if the given process is either on an explicit breakpoint or a step breakpoint.
+%% Equivalently, returns true if the given process is on a VM breakpoint.
+-spec is_process_trapped(Pid, Breakpoints) -> boolean() when
+    Pid :: pid(),
+    Breakpoints :: breakpoints().
+is_process_trapped(Pid, Breakpoints) ->
+    #breakpoints{resume_actions = ResumeActions} = Breakpoints,
+    maps:is_key(Pid, ResumeActions).
+
+-spec register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints) ->
+    {suspend, explicit | step, breakpoints()} | resume
+when
+    Breakpoints :: breakpoints(),
+    Module :: module(),
+    Line :: integer(),
+    Pid :: pid(),
+    Resume :: fun(() -> ok).
+register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
+    case should_be_suspended(Module, Line, Pid, Breakpoints0) of
+        {true, Reason} ->
+            %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
+            Breakpoints1 = register_resume_action(Pid, Resume, Breakpoints0),
+            Breakpoints2 =
+                case Reason of
+                    step ->
+                        Breakpoints1;
+                    explicit ->
+                        register_explicit_hit(Module, Line, Pid, Breakpoints1)
+                end,
+            {ok, Breakpoints3} = clear_steps(Pid, Breakpoints2),
+            {suspend, Reason, Breakpoints3};
+        false ->
+            resume
+    end.
+
+-spec should_be_suspended(module(), line(), pid(), breakpoints()) -> {true, explicit | step} | false.
+should_be_suspended(Module, Line, Pid, Breakpoints) ->
+    #breakpoints{explicits = Explicits, steps = Steps} = Breakpoints,
+    case Explicits of
+        #{Module := #{Line := []}} ->
+            %% This is an explicit breakpoint
+            {true, explicit};
+        _ ->
+            case Steps of
+                #{Pid := #{{Module, Line} := Patterns}} ->
+                    % We need stack-frames, and these require the process to be suspended
+                    case edb_server_process:try_suspend_process(Pid) of
+                        true ->
+                            case edb_server_stack_frames:raw_user_stack_frames(Pid) of
+                                not_paused ->
+                                    edb_server:invariant_violation(not_paused_right_after_suspending);
+                                StackFrames when is_list(StackFrames) ->
+                                    ShouldSuspend = lists:any(
+                                        fun(Pattern) -> call_stack_matches(Pattern, StackFrames) end,
+                                        maps:keys(Patterns)
+                                    ),
+                                    case ShouldSuspend of
+                                        true ->
+                                            %% This is a step breakpoint for the current process.
+                                            %% Caller expects this process to be suspended, in this case
+                                            {true, step};
+                                        _ ->
+                                            edb_server_process:try_resume_process(Pid),
+                                            false
+                                    end
+                            end;
+                        false ->
+                            % Process was concurrently killed, etc
+                            false
+                    end;
+                _ ->
+                    false
+            end
+    end.
+
+-spec register_resume_action(Pid, Resume, Breakpoints) -> Breakpoints when
+    Breakpoints :: breakpoints(),
+    Pid :: pid(),
+    Resume :: fun(() -> ok).
+register_resume_action(Pid, Resume, Breakpoints) ->
+    #breakpoints{resume_actions = ResumeActions} = Breakpoints,
+    ResumeActions1 = ResumeActions#{Pid => Resume},
+    Breakpoints#breakpoints{resume_actions = ResumeActions1}.
+
+-spec register_explicit_hit(Module, Line, Pid, Breakpoints) -> breakpoints() when
+    Breakpoints :: breakpoints(),
+    Module :: module(),
+    Line :: integer(),
+    Pid :: pid().
+register_explicit_hit(Module, Line, Pid, Breakpoints) ->
+    #breakpoints{explicits_hit = ExplicitsHit} = Breakpoints,
+    NewBPHit = {Module, Line},
+    ExplicitsHit1 = ExplicitsHit#{Pid => NewBPHit},
+    Breakpoints#breakpoints{explicits_hit = ExplicitsHit1}.
+
 -spec clear_steps(pid(), breakpoints()) -> {ok, breakpoints()}.
 clear_steps(Pid, Breakpoints) ->
     #breakpoints{steps = Steps} = Breakpoints,
@@ -367,101 +482,9 @@ resume_processes(ToResume, Breakpoints) ->
 
     Breakpoints#breakpoints{explicits_hit = ExplicitsHit1, resume_actions = ResumeActions1}.
 
--spec add_step(Pid, Pattern, Module, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
-    Pid :: pid(),
-    Pattern :: call_stack_pattern(),
-    Module :: module(),
-    Line :: line().
-add_step(Pid, Pattern, Module, Line, Breakpoints0) ->
-    case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
-        {ok, Breakpoints1} ->
-            #breakpoints{steps = Steps1} = Breakpoints1,
-            Steps2 = edb_server_maps:add(Pid, {Module, Line}, Pattern, [], Steps1),
-            Breakpoints2 = Breakpoints1#breakpoints{steps = Steps2},
-            {ok, Breakpoints2};
-        {error, _} ->
-            % This is not a line where we can set a breakpoint.
-            no_breakpoint_set
-    end.
-
--spec add_explicits(module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when
-    LineResults :: [{line(), Result}],
-    Result :: ok | {error, edb:add_breakpoint_error()}.
-add_explicits(Module, Lines, Breakpoints0) ->
-    lists:mapfoldl(
-        fun(Line, AccBreakpointsIn) ->
-            case add_explicit(Module, Line, AccBreakpointsIn) of
-                {ok, AccBreakpointsOut} -> {{Line, ok}, AccBreakpointsOut};
-                {error, Error} -> {{Line, {error, Error}}, AccBreakpointsIn}
-            end
-        end,
-        Breakpoints0,
-        Lines
-    ).
-
--spec add_explicit(module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
-add_explicit(Module, Line, Breakpoints0) ->
-    case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
-        {ok, Breakpoints1} ->
-            #breakpoints{explicits = Explicits1} = Breakpoints1,
-            Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
-            Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
-            {ok, Breakpoints2};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
--spec clear_explicits(module(), breakpoints()) -> {ok, breakpoints()}.
-clear_explicits(Module, Breakpoints0) ->
-    Lines = maps:keys(get_explicits(Module, Breakpoints0)),
-    Breakpoints1 = lists:foldl(
-        fun(Line, AccBreakpointsIn) ->
-            case clear_explicit(Module, Line, AccBreakpointsIn) of
-                {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
-                % A breakpoint line taken from the list cannot be not_found
-                {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
-            end
-        end,
-        Breakpoints0,
-        Lines
-    ),
-    {ok, Breakpoints1}.
-
--spec clear_explicit(module(), line(), breakpoints()) ->
-    {ok, removed | vanished, breakpoints()} | {error, not_found}.
-clear_explicit(Module, Line, Breakpoints0) ->
-    case unregister_explicit(Module, Line, Breakpoints0) of
-        {found, Breakpoints1} ->
-            %% We knew about this breakpoint. Now remove it from the VM.
-            case remove_vm_breakpoint(Module, Line, explicit, Breakpoints1) of
-                {ok, DeletionResult, Breakpoints2} ->
-                    {ok, DeletionResult, Breakpoints2};
-                {error, unknown_vm_breakpoint} ->
-                    % Breakpoint was registered as explicit but not as a reason?
-                    % This should never happen, if it does we have a bug.
-                    edb_server:invariant_violation(inconsistent_explicit_breakpoint)
-            end;
-        not_found ->
-            %% We didn't know about this breakpoint, trying to clear it is a user error.
-            {error, not_found}
-    end.
-
--spec unregister_explicit(module(), line(), breakpoints()) -> {found, breakpoints()} | not_found.
-unregister_explicit(Module, Line, Breakpoints0) ->
-    #breakpoints{explicits = Explicits0} = Breakpoints0,
-    BreakpointInfos0 = maps:get(Module, Explicits0, #{}),
-    case edb_server_sets:take_element(Line, BreakpointInfos0) of
-        not_found ->
-            not_found;
-        {found, BreakpointInfos1} ->
-            Explicits1 =
-                case edb_server_sets:is_empty(BreakpointInfos1) of
-                    true -> maps:remove(Module, Explicits0);
-                    false -> Explicits0#{Module := BreakpointInfos1}
-                end,
-            Breakpoints1 = Breakpoints0#breakpoints{explicits = Explicits1},
-            {found, Breakpoints1}
-    end.
+%% --------------------------------------------------------------------
+%% Helpers -- VM breakpoints
+%% --------------------------------------------------------------------
 
 -spec add_vm_breakpoint(module(), line(), vm_breakpoint_reason(), breakpoints()) ->
     {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
@@ -540,7 +563,7 @@ vm_unset_breakpoint(Module, Line) ->
     end.
 
 %% --------------------------------------------------------------------
-%% call-stacks and call-stack patterns
+%% Helpers -- call-stacks and call-stack patterns
 %% --------------------------------------------------------------------
 
 -type call_stack_addrs() :: [CodeAddr :: pos_integer()].
