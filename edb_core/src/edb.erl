@@ -36,7 +36,7 @@ The (new!) Erlang debugger
 -export([get_breakpoints/0, get_breakpoints/1]).
 -export([get_breakpoints_hit/0]).
 
--export([step_over/1, step_out/1]).
+-export([step_over/1, step_in/1, step_out/1]).
 
 -export([processes/1, process_info/2]).
 
@@ -79,12 +79,19 @@ The (new!) Erlang debugger
 -export_type([set_breakpoints_result/0]).
 -type set_breakpoints_result() :: [{line(), Result :: ok | {error, add_breakpoint_error()}}].
 
--export_type([step_error/0]).
+-export_type([step_error/0, step_in_error/0]).
 -type step_error() ::
     no_abstract_code
     | not_paused
     | {cannot_breakpoint, module()}
     | {beam_analysis, term()}.
+
+-type step_in_error() ::
+    step_error()
+    | {call_target,
+        not_found
+        | {not_a_call, Type :: atom()}
+        | unsupported_operator}.
 
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.
@@ -437,6 +444,19 @@ Execution will stop once `Pid` exits the current function.
     Pid :: pid().
 step_out(Pid) ->
     call_server({step_out, Pid}).
+
+-doc """
+Continues the execution on the attached node and returns right away.
+Execution will stop once `Pid` enters the current call target, or if
+an exception raised by any of its arguments is caught.
+
+Returns `{error, {call_target, Reason}}` in case the call-target cannot
+be determined.
+""".
+-spec step_in(Pid) -> ok | {error, step_in_error()} when
+    Pid :: pid().
+step_in(Pid) ->
+    call_server({step_in, Pid}).
 
 -doc """
 Waits until the node gets paused.

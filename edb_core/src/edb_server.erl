@@ -130,6 +130,7 @@ find() ->
     | {processes, [edb:process_info_field()]}
     | {excluded_processes, [edb:process_info_field()]}
     | {step_over, pid()}
+    | {step_in, pid()}
     | {step_out, pid()}
     | {exclude_processes, [procs_spec()]}
     | {unexclude_processes, [procs_spec()]}
@@ -264,9 +265,11 @@ dispatch_call({stack_frames, Pid}, _From, State0) ->
 dispatch_call({stack_frame_vars, Pid, FrameId, MaxTermSize}, _From, State0) ->
     stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0);
 dispatch_call({step_over, Pid}, _From, State0) ->
-    step_impl(step_over, Pid, State0);
+    step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping(step_over, Pid, Breakpoints) end, State0);
 dispatch_call({step_out, Pid}, _From, State0) ->
-    step_impl(step_out, Pid, State0).
+    step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping(step_out, Pid, Breakpoints) end, State0);
+dispatch_call({step_in, Pid}, _From, State0) ->
+    step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping_in(Pid, Breakpoints) end, State0).
 
 -spec handle_info(Info, State :: state()) -> {noreply, state()} when
     Info :: erl_debugger:event_message() | {'DOWN', reference(), process, pid(), term()}.
@@ -489,21 +492,21 @@ continue_impl(State0) ->
         end,
     {reply, {ok, Result}, State1}.
 
--spec step_impl(StepType, Pid, State0) -> {reply, ok | {error, Error}, State1} when
-    StepType :: step_over | step_out,
-    Pid :: pid(),
+-spec step_impl(PrepareStepBreakpoints, State0) -> {reply, ok | {error, Reason}, State1} when
+    PrepareStepBreakpoints :: fun((Breakpoints0) -> {ok, Breakpoints1} | {error, Reason}),
+    Breakpoints0 :: edb_server_break:breakpoints(),
+    Breakpoints1 :: edb_server_break:breakpoints(),
     State0 :: state(),
-    State1 :: state(),
-    Error :: edb:step_error().
-step_impl(StepType, Pid, State0) ->
+    State1 :: state().
+step_impl(PrepareStepBreakpoints, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    case edb_server_break:prepare_for_stepping(StepType, Pid, Breakpoints0) of
+    case PrepareStepBreakpoints(Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {ok, _, State2} = resume_processes(all, continue, State1),
             {reply, ok, State2};
-        {error, Reason} ->
-            {reply, {error, Reason}, State0}
+        {error, _} = Error ->
+            {reply, Error, State0}
     end.
 
 -spec process_info_impl(Pid, RequestedFields, State0) -> {reply, Result, State1} when

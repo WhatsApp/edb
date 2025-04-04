@@ -70,6 +70,13 @@
 -export([test_step_over_on_recursive_call/1]).
 
 %% Test cases for the test_step_out group
+-export([test_step_in_on_static_local_function/1]).
+-export([test_step_in_on_static_external_function/1]).
+-export([test_step_in_on_tail_static_local_function/1]).
+-export([test_step_in_on_tail_static_external_function/1]).
+-export([test_step_in_fails_if_non_fun_target/1]).
+
+%% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
 -export([test_step_out_into_caller_handler/1]).
 -export([test_step_out_with_unbreakpointable_caller/1]).
@@ -141,6 +148,14 @@ groups() ->
             test_step_over_in_unbreakpointable_code,
             test_step_over_on_recursive_call
         ]},
+        {test_step_in, [
+            test_step_in_on_static_local_function,
+            test_step_in_on_static_external_function,
+            test_step_in_on_tail_static_local_function,
+            test_step_in_on_tail_static_external_function,
+
+            test_step_in_fails_if_non_fun_target
+        ]},
         {test_step_out, [
             test_step_out_of_external_closure,
             test_step_out_into_caller_handler,
@@ -172,6 +187,7 @@ all() ->
         {group, test_pause},
         {group, test_breakpoints},
         {group, test_step_over},
+        {group, test_step_in},
         {group, test_step_out},
         {group, test_stackframes},
         {group, test_process_info},
@@ -2125,6 +2141,70 @@ test_step_over_on_recursive_call(_Config) ->
     ok = edb:step_over(Pid),
     {ok, paused} = edb:wait(),
     {ok, [#{line := 128}]} = edb:stack_frames(Pid),
+
+    ok.
+
+%% ------------------------------------------------------------------
+%% Test cases for test_step_in fixture
+%% ------------------------------------------------------------------
+test_step_in_on_static_local_function(_Config) ->
+    Fun = call_static_local,
+    LineCallingFoo = 9,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_on_tail_static_local_function(_Config) ->
+    Fun = call_static_local_tail,
+    LineCallingFoo = 13,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_on_static_external_function(_Config) ->
+    Fun = call_static_external,
+    LineCallingFoo = 16,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_on_tail_static_external_function(_Config) ->
+    Fun = call_static_external_tail,
+    LineCallingFoo = 20,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_fails_if_non_fun_target(_Config) ->
+    M = test_step_in,
+    Fun = call_static_local,
+
+    % Add a breakpoint before the atom `ok` in call_static_local/0
+    ok = edb:add_breakpoint(M, 10),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(M, Fun, []),
+    {ok, paused} = edb:wait(),
+
+    % Sanity check, we are on the expected breakpoint
+    {ok, [#{mfa := {M, Fun, 0}, line := 10}]} = edb:stack_frames(Pid),
+
+    % We can't step-in on the atom `ok`
+    {error, {call_target, {not_a_call, atom}}} = edb:step_in(Pid),
+    ok.
+
+gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo) ->
+    M = test_step_in,
+
+    % Add a breakpoint before the call to foo/1
+    ok = edb:add_breakpoint(M, LineCallingFoo),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(M, Fun, []),
+    {ok, paused} = edb:wait(),
+
+    % Sanity check, we are on the expected breakpoint
+    {ok, [#{mfa := {M, Fun, 0}, line := LineCallingFoo}]} = edb:stack_frames(Pid),
+
+    % Remove the breakpoint, as we only want to stop due to stepping
+    ok = edb:clear_breakpoint(M, LineCallingFoo),
+
+    % Step over, we want to be at the start of foo/1
+    ok = edb:step_in(Pid),
+    {ok, paused} = edb:wait(),
+    {ok, [#{mfa := {M, foo, 1}, line := 6} | _]} = edb:stack_frames(Pid),
 
     ok.
 
