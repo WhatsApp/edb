@@ -348,7 +348,7 @@ send_sync_event(Subscription) ->
     call_server({send_sync_event, Subscription}).
 
 -doc """
-Set a breakpoint on the line of a loaded module on the remote node.
+Set a breakpoint on the line of a loaded module on the attached node.
 """.
 -spec add_breakpoint(Module, Line) -> ok | {error, Reason} when
     Module :: module(),
@@ -358,7 +358,7 @@ add_breakpoint(Module, Line) ->
     call_server({add_breakpoint, Module, Line}).
 
 -doc """
-Clear all previously set breakpoints of a module on the remote node.
+Clear all previously set breakpoints of a module on the attached node.
 """.
 -spec clear_breakpoints(Module) -> ok when
     Module :: module().
@@ -366,7 +366,7 @@ clear_breakpoints(Module) ->
     call_server({clear_breakpoints, Module}).
 
 -doc """
-Clear a previously set breakpoint on the remote node.
+Clear a previously set breakpoint on the attached node.
 """.
 -spec clear_breakpoint(Module, Line) -> ok | {error, not_found} when
     Module :: module(),
@@ -375,7 +375,7 @@ clear_breakpoint(Module, Line) ->
     call_server({clear_breakpoint, Module, Line}).
 
 -doc """
-Set breakpoints for a given module on the remote node.
+Set breakpoints for a given module on the attached node.
 """.
 -spec set_breakpoints(Module, [Line]) -> Result when
     Module :: module(),
@@ -385,14 +385,14 @@ set_breakpoints(Module, Lines) ->
     call_server({set_breakpoints, Module, Lines}).
 
 -doc """
-Get all currently set breakpoints on the remote node.
+Get all currently set breakpoints on the attached node.
 """.
 -spec get_breakpoints() -> #{module() => [breakpoint_info()]}.
 get_breakpoints() ->
     call_server(get_breakpoints).
 
 -doc """
-Get currently set breakpoints for a given module on the remote node.
+Get currently set breakpoints for a given module on the attached node.
 """.
 -spec get_breakpoints(Module) -> [breakpoint_info()] when
     Module :: module().
@@ -400,14 +400,14 @@ get_breakpoints(Module) ->
     call_server({get_breakpoints, Module}).
 
 -doc """
-Pause the execution of the remote node.
+Pause the execution of the attached node.
 """.
 -spec pause() -> ok.
 pause() ->
     call_server(pause).
 
 -doc """
-Continues the execution on the remote node and returns right away.
+Continues the execution on the attached node and returns right away.
 Returns `not_paused` if no process was paused, otherwise `resumed`.
 """.
 -spec continue() -> {ok, resumed | not_paused}.
@@ -415,14 +415,14 @@ continue() ->
     call_server(continue).
 
 -doc """
-Continues the execution on the remote node, until the next expression finishes.
+Continues the execution on the attached node, until the next expression finishes.
 """.
 -spec step_over(pid()) -> ok | {error, step_error()}.
 step_over(Pid) ->
     call_server({step_over, Pid}).
 
 -doc """
-Continues the execution on the remote node, until the current function returns.
+Continues the execution on the attached node, until the current function returns.
 If the function is not tail-recursive, we step over it.
 If the function is tail-recursive, we step into it.
 """.
@@ -450,14 +450,14 @@ wait() ->
     {ok, paused}.
 
 -doc """
-Get the list of processes currently paused at a breakpoint on the remote node.
+Get the list of processes currently paused at a breakpoint on the attached node.
 """.
 -spec get_breakpoints_hit() -> #{pid() => breakpoint_info()}.
 get_breakpoints_hit() ->
     call_server(get_breakpoints_hit).
 
 -doc """
-Get information about a process managed by the debugger on the remote node.
+Get information about a process managed by the debugger on the attached node.
 """.
 -spec process_info(Pid, RequestedFields) -> {ok, process_info()} | undefined when
     Pid :: pid(),
@@ -466,7 +466,7 @@ process_info(Pid, RequestedFields) ->
     call_server({process_info, Pid, RequestedFields}).
 
 -doc """
-Get the set of processes managed by the debugger on the remote node.
+Get the set of processes managed by the debugger on the attached node.
 """.
 -spec processes(RequestedFields) -> #{pid() => process_info()} when
     RequestedFields :: [process_info_field()].
@@ -474,7 +474,7 @@ processes(RequestedFields) ->
     call_server({processes, RequestedFields}).
 
 -doc """
-List the pids that will not be paused by the debugger on the remote node.
+List the pids that will not be paused by the debugger on the attached node.
 """.
 -spec excluded_processes(RequestedFields) -> #{pid() => []} when
     RequestedFields :: [process_info_field()].
@@ -584,7 +584,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     call_server({stack_frame_vars, Pid, FrameId, MaxTermSize}).
 
 -doc """
-Run `io_lib:format(Format, Args)` on the remote node.
+Run `io_lib:format(Format, Args)` on the attached node.
 
 This is useful to get a human-readable representation of terms
 where Pids, Refs, etc. are displayed relative to the node being
