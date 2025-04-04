@@ -415,18 +415,26 @@ continue() ->
     call_server(continue).
 
 -doc """
-Continues the execution on the attached node, until the next expression finishes.
+Continues the execution on the attached node and returns right away.
+Execution will stop once `Pid` finishes executing the next expression.
+
+Caveat:
+  * If the next expression is a *recursive* tail-call, execution will stop
+    when the callee *starts*.
+  * This is unlike  *non-recursive* tail-calls, where execution will stop
+    when the callee *ends*
 """.
--spec step_over(pid()) -> ok | {error, step_error()}.
+-spec step_over(Pid) -> ok | {error, step_error()} when
+    Pid :: pid().
 step_over(Pid) ->
     call_server({step_over, Pid}).
 
 -doc """
-Continues the execution on the attached node, until the current function returns.
-If the function is not tail-recursive, we step over it.
-If the function is tail-recursive, we step into it.
+Continues the execution on the attached node and returns right away.
+Execution will stop once `Pid` exits the current function.
 """.
--spec step_out(pid()) -> ok | {error, step_error()}.
+-spec step_out(Pid) -> ok | {error, step_error()} when
+    Pid :: pid().
 step_out(Pid) ->
     call_server({step_out, Pid}).
 
