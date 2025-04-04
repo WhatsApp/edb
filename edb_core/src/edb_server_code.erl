@@ -16,6 +16,7 @@
 -module(edb_server_code).
 
 -export([fetch_abstract_forms/1]).
+-export([find_fun/3]).
 -export([find_fun_containing_line/2]).
 -export([get_line_span/1]).
 -export([get_call_target/2]).
@@ -83,6 +84,25 @@ fetch_beam_filename(Module) ->
 %% --------------------------------------------------------------------
 %% Dealing with function forms
 %% --------------------------------------------------------------------
+
+-spec find_fun(Name, Arity, Forms) -> {ok, form()} | not_found when
+    Name :: atom(),
+    Arity :: non_neg_integer(),
+    Forms :: forms().
+find_fun(_Name, _Arity, []) ->
+    not_found;
+find_fun(Name, Arity, [Form | Forms]) ->
+    case erl_syntax:type(Form) of
+        function ->
+            FunName = erl_syntax:function_name(Form),
+            FunArity = erl_syntax:function_arity(Form),
+            case erl_syntax:is_atom(FunName, Name) andalso FunArity =:= Arity of
+                true -> {ok, Form};
+                false -> find_fun(Name, Arity, Forms)
+            end;
+        _ ->
+            find_fun(Name, Arity, Forms)
+    end.
 
 -spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
     Line :: line(),

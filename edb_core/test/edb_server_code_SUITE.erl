@@ -24,22 +24,54 @@
 
 %% CT callbacks
 -export([all/0]).
+-export([init_per_testcase/2, end_per_testcase/2]).
 
 %% Test cases
+-export([test_find_fun/1]).
 -export([test_find_fun_containing_line/1]).
 -export([test_get_line_span/1]).
 -export([test_get_call_target/1]).
 
 all() ->
     [
+        test_find_fun,
         test_find_fun_containing_line,
         test_get_line_span,
         test_get_call_target
     ].
 
+init_per_testcase(_TestCase, Config) ->
+    Config.
+
+end_per_testcase(_TestCase, _Config) ->
+    code:purge(test_code_inspection),
+    code:delete(test_code_inspection),
+    code:purge(test_code_inspection).
+
 % -----------------------------------------------------------------------------
 % Test cases
 % -----------------------------------------------------------------------------
+
+test_find_fun(Config) ->
+    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_code_inspection.erl"}, #{
+        load_it => true
+    }),
+    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
+
+    CheckFinds = fun(FA = {Name, Arity}) ->
+        Res = edb_server_code:find_fun(Name, Arity, Forms),
+        ?assertMatch({ok, _}, Res, FA),
+        {ok, Actual} = Res,
+        check_function_form_is(FA, Actual, FA)
+    end,
+
+    CheckFinds({sync, 2}),
+    CheckFinds({cycle, 2}),
+    CheckFinds({just_sync, 1}),
+    CheckFinds({make_closure, 1}),
+    CheckFinds({id, 1}),
+    CheckFinds({swap, 1}),
+    ok.
 
 test_find_fun_containing_line(Config) ->
     {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_code_inspection.erl"}, #{
