@@ -79,12 +79,13 @@ handle(State, #{threadId := ThreadId}) ->
 -spec stepper(State, ThreadId, StepType) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     ThreadId :: edb_dap:thread_id(),
-    StepType :: 'step-over' | 'step-out'.
+    StepType :: 'step-over' | 'step-in' | 'step-out'.
 stepper(#{state := attached}, ThreadId, StepType) ->
     Pid = edb_dap_request:thread_id_to_pid(ThreadId),
     StepFun =
         case StepType of
             'step-over' -> fun edb:step_over/1;
+            'step-in' -> fun edb:step_in/1;
             'step-out' -> fun edb:step_out/1
         end,
     case StepFun(Pid) of
@@ -100,7 +101,9 @@ stepper(#{state := attached}, ThreadId, StepType) ->
                 io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName])
             );
         {error, {beam_analysis, Err}} ->
-            throw({beam_analysis, Err})
+            throw({beam_analysis, Err});
+        {error, CallTargetError = {call_target, _}} ->
+            edb_dap_request_step_in:react_to_call_target_error(CallTargetError)
     end;
 stepper(_UnexpectedState, _, _) ->
     edb_dap_request:unexpected_request().

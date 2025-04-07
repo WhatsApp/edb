@@ -35,16 +35,20 @@
 -export([
     test_next_works/1,
     test_step_out_works/1,
+    test_step_in_works/1,
 
-    test_stepping_errors_if_process_not_paused/1
+    test_stepping_errors_if_process_not_paused/1,
+    test_step_in_errors_on_wrong_target/1
 ]).
 
 all() ->
     [
         test_next_works,
         test_step_out_works,
+        test_step_in_works,
 
-        test_stepping_errors_if_process_not_paused
+        test_stepping_errors_if_process_not_paused,
+        test_step_in_errors_on_wrong_target
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -153,6 +157,37 @@ test_step_out_works(Config) ->
 
     ok.
 
+test_step_in_works(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).             %L01\n",
+                    ~"-export([go/0]).          %L02\n",
+                    ~"go() ->                   %L03\n",
+                    ~"    f(23).                %L04\n",
+                    ~"                          %L05\n",
+                    ~"f(X) ->                   %L06\n",
+                    ~"    X + 1.                %L07\n",
+                    ~""
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
+
+    % Sanity-check: we are on line 4
+    ?assertMatch([#{name := ~"foo:go/0", line := 4} | _], ST0),
+
+    % Step-in!
+    do_step_in_and_wait_until_stopped(Client, ThreadId),
+    ?assertEqual(
+        #{name => ~"foo:f/1", line => 7, vars => #{~"X" => ~"23"}},
+        edb_dap_test_support:get_top_frame(Client, ThreadId)
+    ),
+
+    ok.
+
 test_stepping_errors_if_process_not_paused(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
@@ -185,6 +220,18 @@ test_stepping_errors_if_process_not_paused(Config) ->
         NextResponse
     ),
 
+    StepInResponse = edb_dap_test_client:step_in(Client, #{threadId => ThreadId}),
+    ?assertMatch(
+        #{
+            command := ~"stepIn",
+            success := false,
+            body := #{
+                error := #{format := ~"Process is not paused"}
+            }
+        },
+        StepInResponse
+    ),
+
     StepOutResponse = edb_dap_test_client:step_out(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{
@@ -196,6 +243,36 @@ test_stepping_errors_if_process_not_paused(Config) ->
         },
         StepOutResponse
     ),
+    ok.
+
+test_step_in_errors_on_wrong_target(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).             %L01\n",
+                    ~"-export([go/0]).          %L02\n",
+                    ~"go() ->                   %L03\n",
+                    ~"    ok.                   %L04\n",
+                    ~""
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, _ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
+
+    StepInResponse = edb_dap_test_client:step_in(Client, #{threadId => ThreadId}),
+    ?assertMatch(
+        #{
+            command := ~"stepIn",
+            success := false,
+            body := #{
+                error := #{format := ~"Can't step into an expression of type 'atom'"}
+            }
+        },
+        StepInResponse
+    ),
+
     ok.
 
 %%--------------------------------------------------------------------
@@ -220,6 +297,17 @@ do_step_out_and_wait_until_stopped(Client, ThreadId) ->
     NextResponse = edb_dap_test_client:step_out(Client, #{threadId => ThreadId}),
     ?assertMatch(
         #{command := ~"stepOut", type := response, success := true},
+        NextResponse
+    ),
+    wait_for_stopped_event_with_step_reason(Client, ThreadId).
+
+-spec do_step_in_and_wait_until_stopped(Client, ThreadId) -> ok when
+    Client :: edb_dap_test_client:client(),
+    ThreadId :: integer().
+do_step_in_and_wait_until_stopped(Client, ThreadId) ->
+    NextResponse = edb_dap_test_client:step_in(Client, #{threadId => ThreadId}),
+    ?assertMatch(
+        #{command := ~"stepIn", type := response, success := true},
         NextResponse
     ),
     wait_for_stopped_event_with_step_reason(Client, ThreadId).

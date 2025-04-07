@@ -42,6 +42,7 @@
     pause/2,
     continue/2,
     next/2,
+    step_in/2,
     step_out/2,
     scopes/2,
     variables/2,
@@ -132,6 +133,11 @@ continue(Client, Args) ->
 -spec next(client(), edb_dap_request_next:arguments()) -> edb_dap:response().
 next(Client, Args) ->
     Request = #{type => request, command => ~"next", arguments => Args},
+    call(Client, Request).
+
+-spec step_in(client(), edb_dap_request_step_in:arguments()) -> edb_dap:response().
+step_in(Client, Args) ->
+    Request = #{type => request, command => ~"stepIn", arguments => Args},
     call(Client, Request).
 
 -spec step_out(client(), edb_dap_request_step_out:arguments()) -> edb_dap:response().

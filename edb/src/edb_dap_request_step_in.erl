@@ -24,6 +24,8 @@
 
 -export([parse_arguments/1, handle/2]).
 
+-export([react_to_call_target_error/1]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -67,5 +69,24 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(_State, #{threadId := _ThreadId}) ->
-    edb_dap_request:unsupported(~"step-in is not yet implemented but is coming soon!").
+handle(State, #{threadId := ThreadId}) ->
+    % The stepper will call ?MODULE:react_to_call_target_error/1 if there are issues with the call target
+    edb_dap_request_next:stepper(State, ThreadId, 'step-in').
+
+%% ------------------------------------------------------------------
+%% Error-handling
+%% ------------------------------------------------------------------
+-spec react_to_call_target_error(Error) -> edb_dap_request:reaction() when
+    Error ::
+        {call_target,
+            not_found
+            | {not_a_call, Type :: atom()}
+            | unsupported_operator}.
+react_to_call_target_error({call_target, not_found}) ->
+    edb_dap_request:unsupported(~"Couldn't determine call target");
+react_to_call_target_error({call_target, {not_a_call, Type}}) ->
+    edb_dap_request:precondition_violation(
+        io_lib:format(~"Can't step into an expression of type '~p'", [Type])
+    );
+react_to_call_target_error({call_target, unsupported_operator}) ->
+    edb_dap_request:unsupported(~"This type of call is not currently supported for stepping-in").
