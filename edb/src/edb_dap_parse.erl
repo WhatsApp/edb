@@ -28,6 +28,7 @@ Support for parsing of request arguments, etc
     null/0,
     boolean/0,
     non_neg_integer/0,
+    number/0,
     atom/0,
     atom/1,
     atoms/1,
@@ -93,6 +94,10 @@ boolean() ->
 non_neg_integer() ->
     fun(N) when is_integer(N) andalso N >= 0 -> {ok, N} end.
 
+-spec number() -> parser(number()).
+number() ->
+    fun(N) when is_number(N) -> {ok, N} end.
+
 -spec atom() -> parser(atom()).
 atom() ->
     fun
@@ -100,14 +105,20 @@ atom() ->
         (B) when is_binary(B) -> {ok, binary_to_atom(B)}
     end.
 
--spec atom(A) -> parser(A) when A :: atom().
+-spec atom(A) -> parser(A2) when
+    A :: atom(),
+    % With bounded polymorphism, we'd use A instead of A2
+    A2 :: dynamic().
 atom(A) when is_atom(A) ->
     fun
         F(X) when X =:= A -> {ok, A};
         F(X) when is_binary(X) -> F(binary_to_atom(X))
     end.
 
--spec atoms(A) -> parser(atom()) when A :: [atom()].
+-spec atoms([A]) -> parser(A2) when
+    A :: atom(),
+    % With bounded polymorphism, we'd use A instead of A2
+    A2 :: dynamic().
 atoms(As) when is_list(As) ->
     choice([atom(A) || A <- As]).
 

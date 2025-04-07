@@ -25,6 +25,7 @@
 -export([parse_arguments/1, handle/2]).
 
 -export([stepper/3]).
+-export([parse_stepping_granularity/0]).
 
 %% ------------------------------------------------------------------
 %% Types
@@ -46,12 +47,25 @@
 
 -export_type([arguments/0]).
 
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        threadId => edb_dap_parse:number(),
+        singleThread => {optional, edb_dap_parse:boolean()},
+        granularity => {optional, parse_stepping_granularity()}
+    }.
+
+-spec parse_stepping_granularity() -> edb_dap_parse:parser(edb_dap:stepping_granularity()).
+parse_stepping_granularity() ->
+    edb_dap_parse:atoms([statement, line, instruction]).
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, reject_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),

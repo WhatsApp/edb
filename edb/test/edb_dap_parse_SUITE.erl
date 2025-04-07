@@ -32,6 +32,7 @@
     test_null/1,
     test_boolean/1,
     test_non_neg_integer/1,
+    test_number/1,
     test_atom_0/1,
     test_atom_1/1,
     test_atoms/1,
@@ -68,6 +69,7 @@ groups() ->
             test_null,
             test_boolean,
             test_non_neg_integer,
+            test_number,
             test_atom_0,
             test_atom_1,
             test_atoms,
@@ -120,6 +122,18 @@ test_non_neg_integer(_Config) ->
 
     {error, ~"on field 'count': invalid value"} = parse(Template, #{count => -1}),
     {error, ~"on field 'count': invalid value"} = parse(Template, #{count => ~"42"}),
+
+    ok.
+
+test_number(_Config) ->
+    Template = #{fooId => edb_dap_parse:number()},
+
+    {ok, #{fooId := 1.5}} = parse(Template, #{fooId => 1.5}),
+    {ok, #{fooId := -1.5}} = parse(Template, #{fooId => -1.5}),
+    {ok, #{fooId := 42}} = parse(Template, #{fooId => 42}),
+    {ok, #{fooId := -42}} = parse(Template, #{fooId => -42}),
+
+    {error, ~"on field 'fooId': invalid value"} = parse(Template, #{fooId => ~"42.0"}),
 
     ok.
 

@@ -44,12 +44,21 @@
 
 -export_type([arguments/0]).
 
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        threadId => edb_dap_parse:number(),
+        singleThread => {optional, edb_dap_parse:boolean()},
+        granularity => {optional, edb_dap_request_next:parse_stepping_granularity()}
+    }.
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, reject_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
