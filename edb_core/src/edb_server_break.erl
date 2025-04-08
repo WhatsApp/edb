@@ -292,6 +292,9 @@ add_steps_on_stack_frames(
             edb_server:invariant_violation(stepping_from_unbreakable_frame);
         Failure when Failure =:= skipped; Failure =:= no_breakpoint_set ->
             add_steps_on_stack_frames(Pid, MoreFrames, MoreFrameAddrs, MoreTypes, Breakpoints0);
+        {error, {beam_analysis, dynamically_compiled}} when Type /= on_any_required ->
+            % Dynamically compiled code on the stack (no beam file available), let's not fail
+            add_steps_on_stack_frames(Pid, MoreFrames, MoreFrameAddrs, MoreTypes, Breakpoints0);
         {error, Error} ->
             {error, Error}
     end;
