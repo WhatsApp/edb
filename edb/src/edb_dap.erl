@@ -67,7 +67,7 @@ https://microsoft.github.io/debug-adapter-protocol/specification
 
 -define(CONTENT_LENGTH, <<"Content-Length: ">>).
 % 7 digits will allow max byte size ~10Mb
--define(MAX_CONTENT_LENGTH_LEN, byte_size(?CONTENT_LENGTH) + 7).
+-define(MAX_CONTENT_LENGTH_LEN, (byte_size(?CONTENT_LENGTH) + 7)).
 
 -opaque frame() :: {ContentLength :: pos_integer(), Payload :: binary()}.
 
