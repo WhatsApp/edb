@@ -69,14 +69,7 @@ arguments_template() ->
                 nodeInitCodeInEnvVar => {optional, edb_dap_parse:binary()},
                 stripSourcePrefix => {optional, edb_dap_parse:binary()},
                 timeout => {optional, edb_dap_parse:non_neg_integer()}
-            },
-
-        %% TODO(T217166034) -- REMOVE ONCE VSCODE EXTENSIONS ARE UPDATED
-        launchCommand =>
-            {optional, #{
-                cwd => {optional, edb_dap_parse:binary()},
-                arguments => {optional, edb_dap_parse:list(edb_dap_parse:binary())}
-            }}
+            }
     }.
 
 %% ------------------------------------------------------------------
@@ -92,11 +85,11 @@ parse_arguments(Args) ->
     Args :: arguments().
 handle(
     State = #{state := initialized, client_info := ClientInfo = #{supportsRunInTerminalRequest := true}},
-    Args = #{runInTerminal := RunInTerminal0}
+    Args = #{runInTerminal := RunInTerminal}
 ) ->
     #{config := Config} = Args,
 
-    WantsArgsCanBeInterpretedByShell = maps:get(argsCanBeInterpretedByShell, RunInTerminal0, false),
+    WantsArgsCanBeInterpretedByShell = maps:get(argsCanBeInterpretedByShell, RunInTerminal, false),
     SupportsArgsCanBeInterpretedByShell = maps:get(supportsArgsCanBeInterpretedByShell, ClientInfo, false),
     case {WantsArgsCanBeInterpretedByShell, SupportsArgsCanBeInterpretedByShell} of
         {true, false} ->
@@ -104,24 +97,7 @@ handle(
         _ ->
             ok
     end,
-    %% TODO(T217166034) -- REMOVE ONCE VSCODE EXTENSIONS ARE UPDATED
-    RunInTerminal1 =
-        case Args of
-            #{launchCommand := #{arguments := ExtraArgsComingFromVsCodeExtension}} ->
-                #{args := Args0} = RunInTerminal0,
-                Args1 = Args0 ++ ExtraArgsComingFromVsCodeExtension,
-                RunInTerminal0#{args := Args1};
-            _ ->
-                RunInTerminal0
-        end,
-    RunInTerminal2 =
-        case Args of
-            #{launchCommand := #{cwd := CwdOverridenByVsCodeExtension}} ->
-                RunInTerminal1#{cwd := CwdOverridenByVsCodeExtension};
-            _ ->
-                RunInTerminal1
-        end,
-    do_run_in_terminal(RunInTerminal2, Config, State);
+    do_run_in_terminal(RunInTerminal, Config, State);
 handle(#{state := initialized, client_info := ClientInfo}, #{runInTerminal := _}) ->
     unsupported_by_client(~"runInTerminal", ClientInfo);
 handle(_InvalidState, _Args) ->
