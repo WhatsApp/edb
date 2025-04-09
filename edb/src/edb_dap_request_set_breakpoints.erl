@@ -45,6 +45,8 @@
     sourceModified => boolean()
 }.
 -type response() :: #{breakpoints := [breakpoint()]}.
+
+%%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_Breakpoint
 -type breakpoint() :: #{
     %% The identifier for the breakpoint. It is needed if breakpoint events are
     %% used to update or remove breakpoints.
@@ -98,6 +100,8 @@
     %% Values: 'pending', 'failed'
     reason => binary()
 }.
+
+%%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
 -type sourceBreakpoint() :: #{
     %% The source line of the breakpoint or logpoint.
     line := number(),
@@ -137,12 +141,53 @@
 -export_type([arguments/0, response/0]).
 -export_type([breakpoint/0, sourceBreakpoint/0]).
 
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        source => source_template(),
+        breakpoints => {optional, edb_dap_parse:list(edb_dap_parse:template(sourceBreakpoint_template()))},
+        lines => {optional, edb_dap_parse:list(edb_dap_parse:number())},
+        sourceModified => {optional, edb_dap_parse:boolean()}
+    }.
+
+-spec source_template() -> edb_dap_parse:template().
+source_template() ->
+    #{
+        name => {optional, edb_dap_parse:binary()},
+        path => {optional, edb_dap_parse:binary()},
+        sourceReference => {optional, edb_dap_parse:number()},
+        presentationHint => {optional, edb_dap_parse:atoms([normal, emphasize, deemphasize])},
+        origin => {optional, edb_dap_parse:binary()},
+        sources => {optional, edb_dap_parse:list(fun(X) -> (edb_dap_parse:template(source_template()))(X) end)},
+        % adapterData omitted on purpose, as this is a server generated value, and we never generate any
+        checksums => {optional, edb_dap_parse:list(edb_dap_parse:template(checksum_template()))}
+    }.
+
+-spec sourceBreakpoint_template() -> edb_dap_parse:template().
+sourceBreakpoint_template() ->
+    #{
+        line => edb_dap_parse:number(),
+        column => {optional, edb_dap_parse:number()},
+        condition => {optional, edb_dap_parse:binary()},
+        hitCondition => {optional, edb_dap_parse:binary()},
+        logMessage => {optional, edb_dap_parse:binary()},
+        mode => {optional, edb_dap_parse:binary()}
+    }.
+
+-spec checksum_template() -> edb_dap_parse:template().
+checksum_template() ->
+    #{
+        algorithm => edb_dap_parse:atoms(['MD5', 'SHA1', 'SHA256', 'timestamp']),
+        checksum => edb_dap_parse:binary()
+    }.
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, reject_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),

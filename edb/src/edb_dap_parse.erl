@@ -36,7 +36,8 @@ Support for parsing of request arguments, etc
     empty_list/0,
     list/1,
     nonempty_list/1,
-    map/2
+    map/2,
+    template/1
 ]).
 
 %% --------------------------------------------------------------------
@@ -154,6 +155,11 @@ map(KParser, VParser) ->
     fun(M) when is_map(M) ->
         {ok, #{run_parser(KParser, UnparseAtom(RawK)) => run_parser(VParser, RawV) || RawK := RawV <- M}}
     end.
+
+-spec template(Template) -> parser(map()) when
+    Template :: template().
+template(Template) ->
+    fun(X) -> parse_map(Template, X) end.
 
 %% --------------------------------------------------------------------
 %% Helpers

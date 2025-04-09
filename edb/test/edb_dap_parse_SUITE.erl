@@ -41,7 +41,8 @@
     test_list/1,
     test_nonempty_list/1,
     test_map/1,
-    test_choice/1
+    test_choice/1,
+    test_template/1
 ]).
 
 %% parse function testcases
@@ -78,7 +79,8 @@ groups() ->
             test_list,
             test_nonempty_list,
             test_map,
-            test_choice
+            test_choice,
+            test_template
         ]},
 
         {templates, [
@@ -257,6 +259,14 @@ test_choice(_Config) ->
     {ok, #{k := 42}} = parse(Template, #{k => 42}),
 
     {error, ~"on field 'k': invalid value"} = parse(Template, #{k => ~"foo"}),
+    ok.
+
+test_template(_Config) ->
+    TemplateInner = #{foo => edb_dap_parse:number()},
+    TemplateOutter = #{bar => edb_dap_parse:list(edb_dap_parse:template(TemplateInner))},
+
+    {ok, #{bar := [#{foo := 42}, #{foo := 44}]}} = parse(TemplateOutter, #{bar => [#{foo => 42}, #{foo => 44}]}),
+
     ok.
 
 %%--------------------------------------------------------------------
