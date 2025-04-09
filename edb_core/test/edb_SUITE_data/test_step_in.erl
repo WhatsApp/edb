@@ -1,6 +1,6 @@
 -module(test_step_in).
 -compile([warn_missing_spec_all]).
--export([foo/1, call_static_local/0, call_static_local_tail/0, call_static_external/0, call_static_external_tail/0]).
+-compile([export_all]).
 
 foo(X) ->
     X + 1.
@@ -18,3 +18,6 @@ call_static_external() ->
 
 call_static_external_tail() ->
     ?MODULE:foo(42).
+
+call_under_match() ->
+    43 = foo(42).

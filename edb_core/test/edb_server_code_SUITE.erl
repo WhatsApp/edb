@@ -142,6 +142,7 @@ test_get_call_target(Config) ->
         ~"    local(),                                               %L08\n",
         ~"    (fun foo:bar/1)(Z),                                    %L09\n",
         ~"    (fun local/0)(),                                       %L10\n",
+        ~"    X = foo:bar(Y),                                        %L11\n",
         ~"    ok.                                                    %\n",
         ~"                                                           %\n",
         ~"local() -> ok.                                             %\n"
@@ -171,6 +172,9 @@ test_get_call_target(Config) ->
 
     % Handles calls to local fun refs
     {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(10, Forms),
+
+    % Handles calls as LHS of a match
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(11, Forms),
 
     ok.
 

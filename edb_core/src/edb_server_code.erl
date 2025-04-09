@@ -171,75 +171,106 @@ get_call_target(Line, Forms) ->
         not_found ->
             {error, not_found};
         {ok, Expr} ->
-            case erl_syntax:type(Expr) of
-                application ->
-                    AppOperator = erl_syntax:application_operator(Expr),
-                    case erl_syntax:type(AppOperator) of
-                        atom ->
-                            % Call target is a local function
-                            case find_module_name(Forms) of
-                                {ok, M} ->
-                                    F = erl_syntax:atom_value(AppOperator),
-                                    Args = erl_syntax:application_arguments(Expr),
-                                    A = length(Args),
-                                    {ok, {{M, F, A}, Args}};
-                                not_found ->
-                                    {error, unsupported_operator}
-                            end;
+            case find_module_name(Forms) of
+                not_found ->
+                    {error, not_found};
+                {ok, Module} ->
+                    case search_call_target_in_exprs([Expr], Module) of
+                        {ok, _} = Result ->
+                            Result;
+                        {error, not_found} ->
+                            {error, {no_call_in_expr, erl_syntax:type(Expr)}};
+                        {error, _} = Error ->
+                            Error
+                    end
+            end
+    end.
+
+-type deep_list(A) :: [A | deep_list(A)].
+
+-spec search_call_target_in_exprs(Exprs, Module) ->
+    {ok, {mfa(), Args :: [erl_syntax:syntaxTree()]}}
+    | {error, Reason}
+when
+    Exprs :: deep_list(form()),
+    Module :: module(),
+    Reason :: not_found | unsupported_operator.
+search_call_target_in_exprs([], _Module) ->
+    {error, not_found};
+search_call_target_in_exprs([[] | Exprs], Module) ->
+    search_call_target_in_exprs(Exprs, Module);
+search_call_target_in_exprs([[Expr | Exprs0] | Exprs1], Module) ->
+    search_call_target_in_exprs([Expr | [Exprs0 | Exprs1]], Module);
+search_call_target_in_exprs([Expr | Exprs0], Module) ->
+    case erl_syntax:type(Expr) of
+        application ->
+            AppOperator = erl_syntax:application_operator(Expr),
+            case erl_syntax:type(AppOperator) of
+                atom ->
+                    % Call target is a local function
+                    F = erl_syntax:atom_value(AppOperator),
+                    Args = erl_syntax:application_arguments(Expr),
+                    A = length(Args),
+                    {ok, {{Module, F, A}, Args}};
+                module_qualifier ->
+                    % Call target is an MFA
+                    L = erl_syntax:module_qualifier_argument(AppOperator),
+                    R = erl_syntax:module_qualifier_body(AppOperator),
+                    case {resolve_atom(L), resolve_atom(R)} of
+                        {{ok, M}, {ok, F}} ->
+                            Args = erl_syntax:application_arguments(Expr),
+                            A = length(Args),
+                            {ok, {{M, F, A}, Args}};
+                        _ ->
+                            {error, unsupported_operator}
+                    end;
+                implicit_fun ->
+                    % Call target is a function reference
+                    Ref = erl_syntax:implicit_fun_name(AppOperator),
+                    case erl_syntax:type(Ref) of
                         module_qualifier ->
-                            % Call target is an MFA
-                            L = erl_syntax:module_qualifier_argument(AppOperator),
-                            R = erl_syntax:module_qualifier_body(AppOperator),
-                            case {resolve_atom(L), resolve_atom(R)} of
-                                {{ok, M}, {ok, F}} ->
-                                    Args = erl_syntax:application_arguments(Expr),
-                                    A = length(Args),
-                                    {ok, {{M, F, A}, Args}};
+                            % fun M:F/A
+                            L = erl_syntax:module_qualifier_argument(Ref),
+                            case resolve_atom(L) of
+                                {ok, M} ->
+                                    R = erl_syntax:module_qualifier_body(Ref),
+                                    case resolve_arity_qualifier(M, R) of
+                                        {ok, MFA} ->
+                                            Args = Args = erl_syntax:application_arguments(Expr),
+                                            {ok, {MFA, Args}};
+                                        error ->
+                                            {error, unsupported_operator}
+                                    end;
                                 _ ->
                                     {error, unsupported_operator}
                             end;
-                        implicit_fun ->
-                            % Call target is a function reference
-                            Ref = erl_syntax:implicit_fun_name(AppOperator),
-                            case erl_syntax:type(Ref) of
-                                module_qualifier ->
-                                    % fun M:F/A
-                                    L = erl_syntax:module_qualifier_argument(Ref),
-                                    case resolve_atom(L) of
-                                        {ok, M} ->
-                                            R = erl_syntax:module_qualifier_body(Ref),
-                                            case resolve_arity_qualifier(M, R) of
-                                                {ok, MFA} ->
-                                                    Args = Args = erl_syntax:application_arguments(Expr),
-                                                    {ok, {MFA, Args}};
-                                                error ->
-                                                    {error, unsupported_operator}
-                                            end;
-                                        _ ->
-                                            {error, unsupported_operator}
-                                    end;
-                                arity_qualifier ->
-                                    case find_module_name(Forms) of
-                                        {ok, M} ->
-                                            case resolve_arity_qualifier(M, Ref) of
-                                                {ok, MFA} ->
-                                                    Args = erl_syntax:application_arguments(Expr),
-                                                    {ok, {MFA, Args}};
-                                                error ->
-                                                    {error, unsupported_operator}
-                                            end;
-                                        not_found ->
-                                            {error, unsupported_operator}
-                                    end;
-                                _ ->
+                        arity_qualifier ->
+                            case resolve_arity_qualifier(Module, Ref) of
+                                {ok, MFA} ->
+                                    Args = erl_syntax:application_arguments(Expr),
+                                    {ok, {MFA, Args}};
+                                error ->
                                     {error, unsupported_operator}
                             end;
                         _ ->
                             {error, unsupported_operator}
                     end;
-                Type ->
-                    {error, {no_call_in_expr, Type}}
-            end
+                _ ->
+                    {error, unsupported_operator}
+            end;
+        _ ->
+            % Prioritize sub-exprs of the current expr
+            Exprs1 = [get_candidate_call_target_subexprs(Expr) | Exprs0],
+            search_call_target_in_exprs(Exprs1, Module)
+    end.
+
+-spec get_candidate_call_target_subexprs(Expr) -> [Expr] when Expr :: form().
+get_candidate_call_target_subexprs(Expr) ->
+    case erl_syntax:type(Expr) of
+        match_expr ->
+            [erl_syntax:match_expr_body(Expr)];
+        _ ->
+            []
     end.
 
 -spec resolve_arity_qualifier(Module, ArityQualifier) -> {ok, mfa()} | error when

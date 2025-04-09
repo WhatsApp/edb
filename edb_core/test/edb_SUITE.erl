@@ -69,11 +69,12 @@
 -export([test_step_over_in_unbreakpointable_code/1]).
 -export([test_step_over_on_recursive_call/1]).
 
-%% Test cases for the test_step_out group
+%% Test cases for the test_step_in group
 -export([test_step_in_on_static_local_function/1]).
 -export([test_step_in_on_static_external_function/1]).
 -export([test_step_in_on_tail_static_local_function/1]).
 -export([test_step_in_on_tail_static_external_function/1]).
+-export([test_step_in_on_call_under_match/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 
 %% Test cases for the test_step_out group
@@ -153,6 +154,7 @@ groups() ->
             test_step_in_on_static_external_function,
             test_step_in_on_tail_static_local_function,
             test_step_in_on_tail_static_external_function,
+            test_step_in_on_call_under_match,
 
             test_step_in_fails_if_non_fun_target
         ]},
@@ -2165,6 +2167,11 @@ test_step_in_on_static_external_function(_Config) ->
 test_step_in_on_tail_static_external_function(_Config) ->
     Fun = call_static_external_tail,
     LineCallingFoo = 20,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_on_call_under_match(_Config) ->
+    Fun = call_under_match,
+    LineCallingFoo = 23,
     gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
 
 test_step_in_fails_if_non_fun_target(_Config) ->
