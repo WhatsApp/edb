@@ -563,8 +563,33 @@ resume_processes(ToResume, Breakpoints) ->
 %% Helpers -- VM breakpoints
 %% --------------------------------------------------------------------
 
--spec add_vm_breakpoint(module(), line(), vm_breakpoint_reason(), breakpoints()) ->
-    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
+% erlfmt:ignore-begin
+-define(unbreakpointable_modules,
+    % When stepping on processes that have these modules on their call-stack,
+    % the overhead of having breakpoints on these is too high as too many processes
+    % use them. Once we add native VM support for conditional breakpoints and the overhead
+    % becomes low, we can remove these (T220510085)
+    #{
+        artillery_tracer => true, % fb-only
+        gen_factory => true,  % fb-only
+        wa_request_context => true, % fb-only
+
+        gen_server => true,
+        gen_statem => true
+    }
+).
+% erlfmt:ignore-end
+
+-spec add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+    {ok, Breakpoints1} | {error, edb:add_breakpoint_error()}
+when
+    Module :: module(),
+    Line :: line(),
+    Reason :: vm_breakpoint_reason(),
+    Breakpoints0 :: breakpoints(),
+    Breakpoints1 :: breakpoints().
+add_vm_breakpoint(Module, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
+    {error, {unsupported, Module}};
 add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
@@ -581,8 +606,14 @@ add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
             {error, Error}
     end.
 
--spec remove_vm_breakpoint(module(), line(), vm_breakpoint_reason(), breakpoints()) ->
-    {ok, removed | vanished, breakpoints()} | {error, unknown_vm_breakpoint}.
+-spec remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+    {ok, removed | vanished, Breakpoints1} | {error, unknown_vm_breakpoint}
+when
+    Module :: module(),
+    Line :: line(),
+    Reason :: vm_breakpoint_reason(),
+    Breakpoints0 :: breakpoints(),
+    Breakpoints1 :: breakpoints().
 remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
 
@@ -612,7 +643,9 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
 
 %% Low-level VM breakpoint functions. Do not use directly (but through add/remove).
 
--spec vm_set_breakpoint(module(), line()) -> ok | {error, edb:add_breakpoint_error()}.
+-spec vm_set_breakpoint(Module, Line) -> ok | {error, edb:add_breakpoint_error()} when
+    Module :: module(),
+    Line :: line().
 vm_set_breakpoint(Module, Line) ->
     case erl_debugger:instrumentations() of
         #{line_breakpoint := true} ->
@@ -626,7 +659,9 @@ vm_set_breakpoint(Module, Line) ->
             {error, unsupported}
     end.
 
--spec vm_unset_breakpoint(module(), line()) -> removed | vanished.
+-spec vm_unset_breakpoint(Module, Line) -> removed | vanished when
+    Module :: module(),
+    Line :: line().
 vm_unset_breakpoint(Module, Line) ->
     case erl_debugger:breakpoint(Module, Line, false) of
         ok ->
