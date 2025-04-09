@@ -164,7 +164,7 @@ when
     Forms :: forms(),
     Reason ::
         not_found
-        | {not_a_call, Type :: atom()}
+        | {no_call_in_expr, Type :: atom()}
         | unsupported_operator.
 get_call_target(Line, Forms) ->
     case expr_at_line(Line, Forms) of
@@ -238,7 +238,7 @@ get_call_target(Line, Forms) ->
                             {error, unsupported_operator}
                     end;
                 Type ->
-                    {error, {not_a_call, Type}}
+                    {error, {no_call_in_expr, Type}}
             end
     end.
 

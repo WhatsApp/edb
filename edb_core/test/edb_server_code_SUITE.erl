@@ -157,8 +157,8 @@ test_get_call_target(Config) ->
     % Returns not_found when line has no content
     {error, not_found} = edb_server_code:get_call_target(2, Forms),
 
-    % Returns not_a_call when top-level expression of the line is not a call
-    {error, {not_a_call, match_expr}} = edb_server_code:get_call_target(6, Forms),
+    % Returns no_call_in_expr when top-level expression of the line is not a call
+    {error, {no_call_in_expr, match_expr}} = edb_server_code:get_call_target(6, Forms),
 
     % Handles calls to MFAs
     {ok, {{foo, bar, 2}, [_, _]}} = edb_server_code:get_call_target(7, Forms),

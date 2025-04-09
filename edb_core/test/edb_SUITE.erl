@@ -2182,7 +2182,7 @@ test_step_in_fails_if_non_fun_target(_Config) ->
     {ok, [#{mfa := {M, Fun, 0}, line := 10}]} = edb:stack_frames(Pid),
 
     % We can't step-in on the atom `ok`
-    {error, {call_target, {not_a_call, atom}}} = edb:step_in(Pid),
+    {error, {call_target, {no_call_in_expr, atom}}} = edb:step_in(Pid),
     ok.
 
 gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo) ->

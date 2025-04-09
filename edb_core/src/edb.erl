@@ -91,7 +91,7 @@ A breakpoint may not be added for various reasons:
 -export_type([set_breakpoints_result/0]).
 -type set_breakpoints_result() :: [{line(), Result :: ok | {error, add_breakpoint_error()}}].
 
--export_type([step_error/0, step_in_error/0]).
+-export_type([step_error/0, step_in_error/0, call_target_error/0]).
 -type step_error() ::
     no_abstract_code
     | not_paused
@@ -100,10 +100,12 @@ A breakpoint may not be added for various reasons:
 
 -type step_in_error() ::
     step_error()
-    | {call_target,
-        not_found
-        | {not_a_call, Type :: atom()}
-        | unsupported_operator}.
+    | {call_target, call_target_error()}.
+
+-type call_target_error() ::
+    not_found
+    | {no_call_in_expr, Type :: atom()}
+    | unsupported_operator.
 
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.

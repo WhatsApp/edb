@@ -102,7 +102,7 @@ stepper(#{state := attached}, ThreadId, StepType) ->
             );
         {error, {beam_analysis, Err}} ->
             throw({beam_analysis, Err});
-        {error, CallTargetError = {call_target, _}} ->
+        {error, {call_target, CallTargetError}} ->
             edb_dap_request_step_in:react_to_call_target_error(CallTargetError)
     end;
 stepper(_UnexpectedState, _, _) ->
