@@ -69,6 +69,18 @@ The (new!) Erlang debugger
 }.
 
 -export_type([add_breakpoint_error/0]).
+
+-doc """
+A breakpoint may not be added for various reasons:
+  * `unsupported`: The node does not support line-breakpoint instrumentations
+     (likely for not being started with the `+D` emulator flag).
+  * `{badkey, Module}`: The given module is not loaded.
+  * `{unsupported, Module}`: The module was loaded without suppor for line-breakpoints.
+  * `{badkey, Line}`: The line is not relevant; it could refer to a comment, not exist in
+     the module source, and so on.
+  * `{unsupported, Line}`: It is not possible to set a breakpoint in the given line;
+     for example, if it refers to a function head.
+""".
 -type add_breakpoint_error() ::
     unsupported
     | {unsupported, module()}
@@ -382,7 +394,7 @@ clear_breakpoint(Module, Line) ->
     call_server({clear_breakpoint, Module, Line}).
 
 -doc """
-Set breakpoints for a given module on the attached node.
+Set breakpoints on multiple lines of a given module, on the attached node.
 """.
 -spec set_breakpoints(Module, [Line]) -> Result when
     Module :: module(),

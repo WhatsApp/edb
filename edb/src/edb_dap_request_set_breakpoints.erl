@@ -223,10 +223,23 @@ set_breakpoints(Node, Args = #{source := #{path := Path}}) ->
                 ok ->
                     #{line => Line, verified => true};
                 {error, Reason} ->
-                    Message = edb:format("~p", [Reason]),
+                    Message = format_breakpoint_error(Reason),
                     #{line => Line, verified => false, message => Message, reason => ~"failed"}
             end
         end,
         LineResults
     ),
     #{response => edb_dap_request:success(#{breakpoints => Breakpoints})}.
+
+-spec format_breakpoint_error(Error) -> binary() when
+    Error :: edb:add_breakpoint_error().
+format_breakpoint_error(unsupported) ->
+    ~"The node does not support setting breakpoints: +D is needed as emulator flag";
+format_breakpoint_error({badkey, Mod}) when is_atom(Mod) ->
+    ~"Module not found";
+format_breakpoint_error({unsupported, Mod}) when is_atom(Mod) ->
+    ~"The module does not have support for setting breakpoints";
+format_breakpoint_error({badkey, Line}) when is_integer(Line) ->
+    ~"Line is not executable";
+format_breakpoint_error({unsupported, Line}) when is_integer(Line) ->
+    ~"Can't set a breakpoint on this line".
