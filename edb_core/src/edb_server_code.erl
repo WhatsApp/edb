@@ -267,6 +267,8 @@ search_call_target_in_exprs([Expr | Exprs0], Module) ->
 -spec get_candidate_call_target_subexprs(Expr) -> [Expr] when Expr :: form().
 get_candidate_call_target_subexprs(Expr) ->
     case erl_syntax:type(Expr) of
+        catch_expr ->
+            [erl_syntax:catch_expr_body(Expr)];
         match_expr ->
             [erl_syntax:match_expr_body(Expr)];
         _ ->

@@ -143,6 +143,7 @@ test_get_call_target(Config) ->
         ~"    (fun foo:bar/1)(Z),                                    %L09\n",
         ~"    (fun local/0)(),                                       %L10\n",
         ~"    X = foo:bar(Y),                                        %L11\n",
+        ~"    X = catch local(),                                     %L12\n",
         ~"    ok.                                                    %\n",
         ~"                                                           %\n",
         ~"local() -> ok.                                             %\n"
@@ -175,6 +176,9 @@ test_get_call_target(Config) ->
 
     % Handles calls as LHS of a match
     {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(11, Forms),
+
+    % Handles calls under a catch statement
+    {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(12, Forms),
 
     ok.
 

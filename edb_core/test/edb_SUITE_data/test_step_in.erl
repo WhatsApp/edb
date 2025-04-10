@@ -21,3 +21,7 @@ call_static_external_tail() ->
 
 call_under_match() ->
     43 = foo(42).
+
+call_under_catch() ->
+    43 = catch foo(42),
+    ok.
