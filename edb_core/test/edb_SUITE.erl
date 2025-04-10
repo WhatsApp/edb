@@ -76,6 +76,7 @@
 -export([test_step_in_on_tail_static_external_function/1]).
 -export([test_step_in_on_call_under_match/1]).
 -export([test_step_in_under_catch_statement/1]).
+-export([test_step_in_case_statement/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 
 %% Test cases for the test_step_out group
@@ -157,6 +158,7 @@ groups() ->
             test_step_in_on_tail_static_external_function,
             test_step_in_on_call_under_match,
             test_step_in_under_catch_statement,
+            test_step_in_case_statement,
 
             test_step_in_fails_if_non_fun_target
         ]},
@@ -2179,6 +2181,11 @@ test_step_in_on_call_under_match(_Config) ->
 test_step_in_under_catch_statement(_Config) ->
     Fun = call_under_catch,
     LineCallingFoo = 26,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_case_statement(_Config) ->
+    Fun = call_under_case,
+    LineCallingFoo = 30,
     gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
 
 test_step_in_fails_if_non_fun_target(_Config) ->

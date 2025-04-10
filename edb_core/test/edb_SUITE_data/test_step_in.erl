@@ -25,3 +25,8 @@ call_under_match() ->
 call_under_catch() ->
     43 = catch foo(42),
     ok.
+
+call_under_case() ->
+    case foo(42) of
+        _ -> ok
+    end.

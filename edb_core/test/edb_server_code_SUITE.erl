@@ -144,6 +144,12 @@ test_get_call_target(Config) ->
         ~"    (fun local/0)(),                                       %L10\n",
         ~"    X = foo:bar(Y),                                        %L11\n",
         ~"    X = catch local(),                                     %L12\n",
+        ~"    case foo:blah() of                                     %L13\n",
+        ~"        ok -> blah                                         %L14\n",
+        ~"    end,                                                   %L15\n",
+        ~"    case X of                                              %L16\n",
+        ~"        _ -> foo:blah()                                    %L17\n",
+        ~"    end,                                                   %L18\n",
         ~"    ok.                                                    %\n",
         ~"                                                           %\n",
         ~"local() -> ok.                                             %\n"
@@ -179,6 +185,12 @@ test_get_call_target(Config) ->
 
     % Handles calls under a catch statement
     {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(12, Forms),
+
+    % Handles calls in a case statement
+    {ok, {{foo, blah, 0}, []}} = edb_server_code:get_call_target(13, Forms),
+
+    % Doesn't pick calls in branches of a case statement
+    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(16, Forms),
 
     ok.
 
