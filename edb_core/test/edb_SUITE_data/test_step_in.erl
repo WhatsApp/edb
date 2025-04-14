@@ -30,3 +30,6 @@ call_under_case() ->
     case foo(42) of
         _ -> ok
     end.
+
+call_under_try() ->
+    try foo(42) catch _ -> ok end.

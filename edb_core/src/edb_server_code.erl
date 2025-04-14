@@ -273,6 +273,11 @@ get_candidate_call_target_subexprs(Expr) ->
             [erl_syntax:catch_expr_body(Expr)];
         match_expr ->
             [erl_syntax:match_expr_body(Expr)];
+        try_expr ->
+            case erl_syntax:try_expr_body(Expr) of
+                [FirstExpr | _] -> [FirstExpr];
+                [] -> []
+            end;
         _ ->
             []
     end.

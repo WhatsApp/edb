@@ -131,29 +131,39 @@ test_get_line_span(Config) ->
     ok.
 
 test_get_call_target(Config) ->
-    ModuleSource = [
-        ~"-module(call_targets).                                     %L01\n",
-        ~"                                                           %L02\n",
-        ~"-export([fixtures/0]).                                     %L03\n",
-        ~"                                                           %L04\n",
-        ~"fixtures() ->                                              %L05\n",
-        ~"    Y = 42, 'not':toplevel(a, b),                          %L06\n",
-        ~"    foo:bar(13, Y), Z=43,                                  %L07\n",
-        ~"    local(),                                               %L08\n",
-        ~"    (fun foo:bar/1)(Z),                                    %L09\n",
-        ~"    (fun local/0)(),                                       %L10\n",
-        ~"    X = foo:bar(Y),                                        %L11\n",
-        ~"    X = catch local(),                                     %L12\n",
-        ~"    case foo:blah() of                                     %L13\n",
-        ~"        ok -> blah                                         %L14\n",
-        ~"    end,                                                   %L15\n",
-        ~"    case X of                                              %L16\n",
-        ~"        _ -> foo:blah()                                    %L17\n",
-        ~"    end,                                                   %L18\n",
-        ~"    ok.                                                    %\n",
-        ~"                                                           %\n",
-        ~"local() -> ok.                                             %\n"
-    ],
+    ModuleSource = ~"""
+        -module(call_targets).                                     %L01
+                                                                   %L02
+        -export([fixtures/0]).                                     %L03
+                                                                   %L04
+        fixtures() ->                                              %L05
+            Y = 42, 'not':toplevel(a, b),                          %L06
+            foo:bar(13, Y), Z=43,                                  %L07
+            local(),                                               %L08
+            (fun foo:bar/1)(Z),                                    %L09
+            (fun local/0)(),                                       %L10
+            X = foo:bar(Y),                                        %L11
+            X = catch local(),                                     %L12
+            case foo:blah() of                                     %L13
+                ok -> blah                                         %L14
+            end,                                                   %L15
+            case X of                                              %L16
+                _ -> foo:blah()                                    %L17
+            end,                                                   %L18
+            try X = hey:ho(42), X + 1 of                           %L19
+                _ -> foo:bar()                                     %L20
+            catch                                                  %L21
+                _:_ -> foo:bar()                                   %L22
+            end,                                                   %L23
+            try X = 42, hey:ho(X) of                               %L24
+                _ -> ok                                            %L25
+            catch                                                  %L26
+                _:_ -> ok                                          %L27
+            end,                                                   %L28
+            ok.                                                    %
+                                                                   %
+        local() -> ok.                                             %
+    """,
     {ok, _, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
         load_it => true
     }),
@@ -191,6 +201,12 @@ test_get_call_target(Config) ->
 
     % Doesn't pick calls in branches of a case statement
     {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(16, Forms),
+
+    % Handles calls in a try statement
+    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(19, Forms),
+
+    % Only considers the first statement in a try-statement
+    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(24, Forms),
 
     ok.
 
