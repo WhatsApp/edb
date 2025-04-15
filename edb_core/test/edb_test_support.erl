@@ -121,15 +121,20 @@ compile_module_2(SourceFile, Opts) ->
     FilePathStr = file_name_all_to_string(SourceFile),
     Ebindir = filename:join(WorkDir, "ebin"),
     ok = filelib:ensure_path(Ebindir),
-    {ok, Module} = compile:file(FilePathStr, [{outdir, Ebindir} | CompileOpts]),
-    case Opts of
-        #{load_it := true} ->
-            BeamFilePath = filename:join(Ebindir, filename:basename(FilePathStr, ".erl")),
-            {module, Module} = code:load_abs(BeamFilePath);
-        _ ->
-            ok
-    end,
-    {ok, Module, safe_string_to_binary(FilePathStr)}.
+    ModuleName = filename:basename(FilePathStr, ".erl"),
+    case compile:file(FilePathStr, [{outdir, Ebindir}, return_errors | CompileOpts]) of
+        {ok, Module} ->
+            case Opts of
+                #{load_it := true} ->
+                    BeamFilePath = filename:join(Ebindir, ModuleName),
+                    {module, Module} = code:load_abs(BeamFilePath);
+                _ ->
+                    ok
+            end,
+            {ok, Module, safe_string_to_binary(FilePathStr)};
+        {error, [{_, Errors} | _], _Warns} ->
+            error({compile_error, ModuleName, Errors})
+    end.
 
 %% --------------------------------------------------------------------
 %% Peer nodes
