@@ -192,25 +192,20 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := configuring, node := Node}, Args) ->
-    set_breakpoints(Node, Args);
-handle(#{state := attached, node := Node}, Args) ->
-    set_breakpoints(Node, Args);
+handle(#{state := configuring}, Args) ->
+    set_breakpoints(Args);
+handle(#{state := attached}, Args) ->
+    set_breakpoints(Args);
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec set_breakpoints(Node, Args) -> edb_dap_request:reaction(response()) when
-    Node :: node(),
+-spec set_breakpoints(Args) -> edb_dap_request:reaction(response()) when
     Args :: arguments().
-set_breakpoints(Node, Args = #{source := #{path := Path}}) ->
+set_breakpoints(Args = #{source := #{path := Path}}) ->
     Module = binary_to_atom(filename:basename(Path, ".erl")),
-
-    % TODO(T202772655): Remove once edb:set_breakpoint/2 takes care of auto-loading modules
-    % elp:ignore W0014 (cross_node_eval)
-    erpc:call(Node, code, ensure_loaded, [Module]),
 
     SourceBreakpoints = maps:get(breakpoints, Args, []),
     SourceBreakpointLines = [Line || #{line := Line} <- SourceBreakpoints],
@@ -236,7 +231,7 @@ set_breakpoints(Node, Args = #{source := #{path := Path}}) ->
 format_breakpoint_error(unsupported) ->
     ~"The node does not support setting breakpoints: +D is needed as emulator flag";
 format_breakpoint_error({badkey, Mod}) when is_atom(Mod) ->
-    ~"Module not found";
+    ~"Module not found or failing to load";
 format_breakpoint_error({unsupported, Mod}) when is_atom(Mod) ->
     ~"The module does not have support for setting breakpoints";
 format_breakpoint_error({badkey, Line}) when is_integer(Line) ->

@@ -74,7 +74,7 @@ The (new!) Erlang debugger
 A breakpoint may not be added for various reasons:
   * `unsupported`: The node does not support line-breakpoint instrumentations
      (likely for not being started with the `+D` emulator flag).
-  * `{badkey, Module}`: The given module is not loaded.
+  * `{badkey, Module}`: The given module does not exist or can't be loaded.
   * `{unsupported, Module}`: The module was loaded without suppor for line-breakpoints.
   * `{badkey, Line}`: The line is not relevant; it could refer to a comment, not exist in
      the module source, and so on.
@@ -397,6 +397,8 @@ clear_breakpoint(Module, Line) ->
 
 -doc """
 Set breakpoints on multiple lines of a given module, on the attached node.
+
+Notice that `Module` may get loaded as a side-effect of this call.
 """.
 -spec set_breakpoints(Module, [Line]) -> Result when
     Module :: module(),

@@ -142,7 +142,7 @@ test_error_set_breakpoint_unknown_module(Config) ->
                         [
                             #{
                                 line := 42,
-                                message := ~"Module not found",
+                                message := ~"Module not found or failing to load",
                                 reason := ~"failed",
                                 verified := false
                             }

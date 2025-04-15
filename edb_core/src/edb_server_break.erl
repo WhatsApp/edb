@@ -97,14 +97,19 @@ create() ->
 %% --------------------------------------------------------------------
 -spec add_explicit(module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
 add_explicit(Module, Line, Breakpoints0) ->
-    case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
-        {ok, Breakpoints1} ->
-            #breakpoints{explicits = Explicits1} = Breakpoints1,
-            Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
-            Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
-            {ok, Breakpoints2};
-        {error, Reason} ->
-            {error, Reason}
+    case code:ensure_loaded(Module) of
+        {module, Module} ->
+            case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
+                {ok, Breakpoints1} ->
+                    #breakpoints{explicits = Explicits1} = Breakpoints1,
+                    Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
+                    Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
+                    {ok, Breakpoints2};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, _} ->
+            {error, {badkey, Module}}
     end.
 
 -spec add_explicits(module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when

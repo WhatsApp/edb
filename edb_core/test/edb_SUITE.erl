@@ -53,6 +53,7 @@
 -export([test_get_breakpoints_works_per_module/1]).
 -export([test_set_breakpoints_sets_breakpoints/1]).
 -export([test_set_breakpoints_returns_result_per_line/1]).
+-export([test_set_breakpoints_loads_the_module_if_necessary/1]).
 
 %% Test cases for the test_step_over group
 -export([test_step_over_goes_to_next_line/1]).
@@ -135,7 +136,8 @@ groups() ->
             test_get_breakpoints_reports_current_set_breakpoints,
             test_get_breakpoints_works_per_module,
             test_set_breakpoints_sets_breakpoints,
-            test_set_breakpoints_returns_result_per_line
+            test_set_breakpoints_returns_result_per_line,
+            test_set_breakpoints_loads_the_module_if_necessary
         ]},
         {test_step_over, [
             test_step_over_goes_to_next_line,
@@ -1439,6 +1441,39 @@ test_set_breakpoints_returns_result_per_line(_Config) ->
         [],
         edb_test_support:collected_events()
     ),
+    ok.
+
+test_set_breakpoints_loads_the_module_if_necessary(Config) ->
+    ModuleSource = ~"""
+    -module(some_module).
+    -export([go/0]).
+    go() ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => false
+    }),
+
+    % Sanity-check: the module is not initially loaded
+    ?assertNot(code:is_loaded(Module)),
+
+    % We set a breakpoint on the module, it will get loaded as a side-effect
+    ?assertEqual(
+        [{4, ok}],
+        edb:set_breakpoints(Module, [4])
+    ),
+    ?assertMatch({file, _}, code:is_loaded(Module)),
+
+    code:delete(Module),
+
+    % We fail if the the module can't be loaded
+    NonExistentModule = some_non_existent_module,
+    ?assertEqual(
+        [{4, {error, {badkey, NonExistentModule}}}],
+        edb:set_breakpoints(NonExistentModule, [4])
+    ),
+
     ok.
 
 %% ------------------------------------------------------------------
