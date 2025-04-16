@@ -24,7 +24,7 @@
 
 %% Compiling test modues
 -export_type([module_spec/0, compile_opts/0]).
--export([compile_module/3]).
+-export([compile_modules/3, compile_module/3]).
 
 %% Peer nodes
 -export_type([peer/0, start_peer_node_opts/0, start_peer_result/0]).
@@ -53,6 +53,20 @@
     load_it := boolean(),
     flags := [compile:option()]
 }.
+
+-spec compile_modules(CtConfig, ModuleSpecs, Opts) -> {ok, #{Module => FilePath}} when
+    CtConfig :: ct_suite:ct_config(),
+    ModuleSpecs :: [module_spec()],
+    Opts :: compile_opts(),
+    Module :: module(),
+    FilePath :: binary().
+compile_modules(CtConfig, ModuleSpecs, Opts0) ->
+    {ok,
+        #{
+            Module => FilePath
+         || ModuleSpec <- ModuleSpecs,
+            {ok, Module, FilePath} <- [compile_module(CtConfig, ModuleSpec, Opts0)]
+        }}.
 
 -spec compile_module(CtConfig, ModuleSpec, Opts) -> {ok, Module, FilePath} when
     CtConfig :: ct_suite:ct_config(),

@@ -80,6 +80,7 @@
 -export([test_step_in_case_statement/1]).
 -export([test_step_in_try_statement/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
+-export([test_step_in_loads_module_if_necessary/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
@@ -164,7 +165,9 @@ groups() ->
             test_step_in_case_statement,
             test_step_in_try_statement,
 
-            test_step_in_fails_if_non_fun_target
+            test_step_in_fails_if_non_fun_target,
+
+            test_step_in_loads_module_if_necessary
         ]},
         {test_step_out, [
             test_step_out_of_external_closure,
@@ -2246,6 +2249,56 @@ test_step_in_fails_if_non_fun_target(_Config) ->
 
     % We can't step-in on the atom `ok`
     {error, {call_target, {no_call_in_expr, atom}}} = edb:step_in(Pid),
+    ok.
+
+test_step_in_loads_module_if_necessary(Config) ->
+    % Compile these modules but don't load them
+    BlahSource = ~"""
+    -module(blah).
+    -export([go/0]).
+    go() ->
+        lazy_module:run().
+    """,
+    LazyModuleSource = ~"""
+    -module(lazy_module).
+    -export([run/0]).
+    run() ->
+        catch non_existent_module:do_stuff().
+    """,
+    {ok, #{blah := _, lazy_module := _}} = edb_test_support:compile_modules(
+        Config,
+        [{source, BlahSource}, {source, LazyModuleSource}],
+        #{
+            flags => [debug_info, beam_debug_info],
+            load_it => false
+        }
+    ),
+
+    % Add a breakpoint before calling lazy_module:run()
+    ok = edb:add_breakpoint(blah, 4),
+
+    % Start a process and wait until it hits the breakpoint
+    Pid = erlang:spawn(blah, go, []),
+    {ok, paused} = edb:wait(),
+
+    % Sanity-check: lazy_module is not loaded
+    ?assertNot(code:is_loaded(lazy_module)),
+
+    % Stepping in succeeds, and loads the module
+    ok = edb:step_in(Pid),
+
+    % The module was loaded
+    ?assertMatch({file, _}, code:is_loaded(lazy_module)),
+    {ok, paused} = edb:wait(),
+
+    % Sanity-check non_existent_module is definitely not loaded
+    ?assertNot(code:is_loaded(non_existent_module)),
+
+    ?assertEqual(
+        {error, {call_target, {module_not_found, non_existent_module}}},
+        edb:step_in(Pid)
+    ),
+
     ok.
 
 gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo) ->

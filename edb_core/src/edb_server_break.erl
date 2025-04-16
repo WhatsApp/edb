@@ -243,32 +243,38 @@ prepare_for_stepping_in(Pid, Breakpoints0) ->
                 {error, _} = Error ->
                     Error;
                 {ok, MFA = {Mod, Fun, Arity}} ->
-                    case edb_server_code:fetch_abstract_forms(Mod) of
-                        {error, _} = Error ->
-                            Error;
-                        {ok, ModForms} ->
-                            case edb_server_code:find_fun(Fun, Arity, ModForms) of
-                                not_found ->
-                                    {error, {call_target, not_found}};
-                                {ok, FunForm} ->
-                                    {_, #{function := CurrentMFA}, _} = TopFrame,
-                                    Addrs = call_stack_addrs(StackFrames),
-                                    BasePatterns = [
-                                        % Base pattern for non-tail-calls
-                                        [CurrentMFA | tl(Addrs)],
+                    case code:ensure_loaded(Mod) of
+                        {error, _} ->
+                            {error, {call_target, {module_not_found, Mod}}};
+                        {module, Mod} ->
+                            case edb_server_code:fetch_abstract_forms(Mod) of
+                                {error, _} = Error ->
+                                    Error;
+                                {ok, ModForms} ->
+                                    case edb_server_code:find_fun(Fun, Arity, ModForms) of
+                                        not_found ->
+                                            {error, {call_target, not_found}};
+                                        {ok, FunForm} ->
+                                            {_, #{function := CurrentMFA}, _} = TopFrame,
 
-                                        % Base pattern for tail-calls
-                                        tl(Addrs)
-                                    ],
-                                    case add_steps_on_function(Pid, MFA, FunForm, BasePatterns, Breakpoints0) of
-                                        no_breakpoint_set ->
-                                            {error, {cannot_breakpoint, Mod}};
-                                        {ok, Breakpoints1} ->
-                                            RelevantFrames = StackFrames,
-                                            Types = [on_exc_handler || _ <- RelevantFrames],
-                                            add_steps_on_stack_frames(
-                                                Pid, RelevantFrames, Addrs, Types, Breakpoints1
-                                            )
+                                            Addrs = call_stack_addrs(StackFrames),
+                                            BasePatterns = [
+                                                % Base pattern for non-tail-calls
+                                                [CurrentMFA | tl(Addrs)],
+
+                                                % Base pattern for tail-calls
+                                                tl(Addrs)
+                                            ],
+                                            case add_steps_on_function(Pid, MFA, FunForm, BasePatterns, Breakpoints0) of
+                                                no_breakpoint_set ->
+                                                    {error, {cannot_breakpoint, Mod}};
+                                                {ok, Breakpoints1} ->
+                                                    RelevantFrames = StackFrames,
+                                                    Types = [on_exc_handler || _ <- RelevantFrames],
+                                                    add_steps_on_stack_frames(
+                                                        Pid, RelevantFrames, Addrs, Types, Breakpoints1
+                                                    )
+                                            end
                                     end
                             end
                     end

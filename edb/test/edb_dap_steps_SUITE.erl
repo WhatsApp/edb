@@ -25,21 +25,16 @@
 -include_lib("stdlib/include/assert.hrl").
 
 %% CT callbacks
--export([
-    all/0,
-    init_per_testcase/2,
-    end_per_testcase/2
-]).
+-export([all/0]).
+-export([init_per_testcase/2, end_per_testcase/2]).
 
 %% Test cases
--export([
-    test_next_works/1,
-    test_step_out_works/1,
-    test_step_in_works/1,
-
-    test_stepping_errors_if_process_not_paused/1,
-    test_step_in_errors_on_wrong_target/1
-]).
+-export([test_next_works/1]).
+-export([test_step_out_works/1]).
+-export([test_step_in_works/1]).
+-export([test_stepping_errors_if_process_not_paused/1]).
+-export([test_step_in_errors_on_wrong_target/1]).
+-export([test_step_in_error_on_module_not_found/1]).
 
 all() ->
     [
@@ -48,7 +43,8 @@ all() ->
         test_step_in_works,
 
         test_stepping_errors_if_process_not_paused,
-        test_step_in_errors_on_wrong_target
+        test_step_in_errors_on_wrong_target,
+        test_step_in_error_on_module_not_found
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -268,6 +264,36 @@ test_step_in_errors_on_wrong_target(Config) ->
             success := false,
             body := #{
                 error := #{format := ~"No call found in expression of type 'atom'"}
+            }
+        },
+        StepInResponse
+    ),
+
+    ok.
+
+test_step_in_error_on_module_not_found(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                     %L01\n",
+                    ~"-export([go/0]).                  %L02\n",
+                    ~"go() ->                           %L03\n",
+                    ~"    non_existent_mod:blah().      %L04\n",
+                    ~""
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, _ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
+
+    StepInResponse = edb_dap_test_client:step_in(Client, #{threadId => ThreadId}),
+    ?assertMatch(
+        #{
+            command := ~"stepIn",
+            success := false,
+            body := #{
+                error := #{format := ~"Target module 'non_existent_mod' couldn't be loaded"}
             }
         },
         StepInResponse
