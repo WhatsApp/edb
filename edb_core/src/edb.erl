@@ -106,7 +106,8 @@ A breakpoint may not be added for various reasons:
     not_found
     | {no_call_in_expr, Type :: atom()}
     | unsupported_operator
-    | {module_not_found, module()}.
+    | {module_not_found, module()}
+    | {function_not_found, mfa()}.
 
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.

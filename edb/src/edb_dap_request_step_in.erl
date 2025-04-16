@@ -90,4 +90,8 @@ react_to_call_target_error(unsupported_operator) ->
 react_to_call_target_error({module_not_found, Module}) ->
     edb_dap_request:precondition_violation(
         io_lib:format(~"Target module '~p' couldn't be loaded", [Module])
+    );
+react_to_call_target_error({function_not_found, {M, F, A}}) ->
+    edb_dap_request:precondition_violation(
+        io_lib:format(~"Target function '~p:~p/~p' not found", [M, F, A])
     ).

@@ -253,7 +253,7 @@ prepare_for_stepping_in(Pid, Breakpoints0) ->
                                 {ok, ModForms} ->
                                     case edb_server_code:find_fun(Fun, Arity, ModForms) of
                                         not_found ->
-                                            {error, {call_target, not_found}};
+                                            {error, {call_target, {function_not_found, MFA}}};
                                         {ok, FunForm} ->
                                             {_, #{function := CurrentMFA}, _} = TopFrame,
 

@@ -80,6 +80,7 @@
 -export([test_step_in_case_statement/1]).
 -export([test_step_in_try_statement/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
+-export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
 
 %% Test cases for the test_step_out group
@@ -166,6 +167,7 @@ groups() ->
             test_step_in_try_statement,
 
             test_step_in_fails_if_non_fun_target,
+            test_step_in_fails_if_fun_not_found,
 
             test_step_in_loads_module_if_necessary
         ]},
@@ -2249,6 +2251,32 @@ test_step_in_fails_if_non_fun_target(_Config) ->
 
     % We can't step-in on the atom `ok`
     {error, {call_target, {no_call_in_expr, atom}}} = edb:step_in(Pid),
+    ok.
+
+test_step_in_fails_if_fun_not_found(Config) ->
+    Source = ~"""
+    -module(foo).                            %L1
+    -export([go/0]).                         %L2
+    go() ->                                  %L3
+        catch ?MODULE:does_not_exsit().      %L4
+    """,
+
+    {ok, Mod, _} = edb_test_support:compile_module(Config, {source, Source}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    % Add a breakpoint before the call to does_no:exist/0
+    ok = edb:add_breakpoint(Mod, 4),
+
+    % Start a process and wait until it hits the breakpoint
+    Pid = erlang:spawn(Mod, go, []),
+    {ok, paused} = edb:wait(),
+
+    ?assertEqual(
+        {error, {call_target, {function_not_found, {Mod, does_not_exsit, 0}}}},
+        edb:step_in(Pid)
+    ),
     ok.
 
 test_step_in_loads_module_if_necessary(Config) ->

@@ -35,6 +35,7 @@
 -export([test_stepping_errors_if_process_not_paused/1]).
 -export([test_step_in_errors_on_wrong_target/1]).
 -export([test_step_in_error_on_module_not_found/1]).
+-export([test_step_in_error_on_function_not_found/1]).
 
 all() ->
     [
@@ -44,7 +45,8 @@ all() ->
 
         test_stepping_errors_if_process_not_paused,
         test_step_in_errors_on_wrong_target,
-        test_step_in_error_on_module_not_found
+        test_step_in_error_on_module_not_found,
+        test_step_in_error_on_function_not_found
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -294,6 +296,36 @@ test_step_in_error_on_module_not_found(Config) ->
             success := false,
             body := #{
                 error := #{format := ~"Target module 'non_existent_mod' couldn't be loaded"}
+            }
+        },
+        StepInResponse
+    ),
+
+    ok.
+
+test_step_in_error_on_function_not_found(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).           %L01\n",
+                    ~"-export([go/0]).        %L02\n",
+                    ~"go() ->                 %L03\n",
+                    ~"    ?MODULE:blah().     %L04\n",
+                    ~""
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, ThreadId, _ST0} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
+
+    StepInResponse = edb_dap_test_client:step_in(Client, #{threadId => ThreadId}),
+    ?assertMatch(
+        #{
+            command := ~"stepIn",
+            success := false,
+            body := #{
+                error := #{format := ~"Target function 'foo:blah/0' not found"}
             }
         },
         StepInResponse
