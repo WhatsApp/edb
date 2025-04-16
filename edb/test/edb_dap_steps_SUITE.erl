@@ -311,7 +311,7 @@ test_step_in_error_on_function_not_found(Config) ->
                     ~"-module(foo).           %L01\n",
                     ~"-export([go/0]).        %L02\n",
                     ~"go() ->                 %L03\n",
-                    ~"    ?MODULE:blah().     %L04\n",
+                    ~"    erlang:blah().      %L04\n",
                     ~""
                 ]}
             ]
@@ -325,7 +325,7 @@ test_step_in_error_on_function_not_found(Config) ->
             command := ~"stepIn",
             success := false,
             body := #{
-                error := #{format := ~"Target function 'foo:blah/0' not found"}
+                error := #{format := ~"Target function 'erlang:blah/0' not found"}
             }
         },
         StepInResponse

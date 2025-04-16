@@ -65,18 +65,29 @@ fetch_abstract_forms(Module) ->
 
 -spec fetch_beam_filename(Module) -> {ok, file:filename()} | {error, Error} when
     Module :: module(),
-    Error :: non_existing | cover_compiled | preloaded | dynamically_compiled.
+    Error :: non_existing | cover_compiled | dynamically_compiled.
 fetch_beam_filename(Module) ->
-    case code:which(Module) of
-        non_existing ->
-            {error, non_existing};
-        cover_compiled ->
-            {error, cover_compiled};
-        preloaded ->
-            {error, preloaded};
-        Filename ->
-            case string:lowercase(filename:extension(Filename)) of
-                ".beam" -> {ok, Filename};
+    Result =
+        case code:which(Module) of
+            non_existing ->
+                {error, non_existing};
+            cover_compiled ->
+                {error, cover_compiled};
+            preloaded ->
+                ModuleFileName = atom_to_list(Module) ++ ".beam",
+                case code:where_is_file(ModuleFileName) of
+                    non_existing -> {error, non_existing};
+                    Filename -> {ok, Filename}
+                end;
+            Filename ->
+                {ok, Filename}
+        end,
+    case Result of
+        Error = {error, _} ->
+            Error;
+        {ok, BeamFile} ->
+            case string:lowercase(filename:extension(BeamFile)) of
+                ".beam" -> {ok, BeamFile};
                 _ -> {error, dynamically_compiled}
             end
     end.
