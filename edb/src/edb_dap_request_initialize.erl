@@ -84,7 +84,7 @@ arguments_template() ->
     #{
         clientID => {optional, edb_dap_parse:binary()},
         clientName => {optional, edb_dap_parse:binary()},
-        adapterID => {optional, edb_dap_parse:binary()},
+        adapterID => edb_dap_parse:binary(),
         locale => {optional, edb_dap_parse:binary()},
         linesStartAt1 => {optional, edb_dap_parse:boolean()},
         columnsStartAt1 => {optional, edb_dap_parse:boolean()},
