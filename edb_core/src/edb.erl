@@ -598,7 +598,7 @@ stack_frames(Pid) ->
 -doc """
 Get the local variables for a paused processes at a give frame.
 
-Equivalent to `stack_frame_vars(Pid, 2048)`.
+Equivalent to `stack_frame_vars(Pid, FrameId, 2048)`.
 """.
 -spec stack_frame_vars(Pid, FrameId) -> not_paused | undefined | {ok, Result} when
     Pid :: pid(),
