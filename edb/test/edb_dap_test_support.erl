@@ -219,13 +219,12 @@ get_scopes(Client, FrameId) ->
             #{ScopeName => Scope || Scope = #{name := ScopeName} <- Scopes}
     end.
 
--spec get_variables(Client, Scope) -> #{VarName => VarInfo} when
+-spec get_variables(Client, VarRef) -> #{VarName => VarInfo} when
     Client :: client(),
-    Scope :: edb_dap_request_scopes:scope(),
+    VarRef :: number(),
     VarName :: binary(),
     VarInfo :: edb_dap_request_variables:variable().
-get_variables(Client, Scope) ->
-    #{variablesReference := VarRef} = Scope,
+get_variables(Client, VarRef) ->
     case edb_dap_test_client:variables(Client, #{variablesReference => VarRef}) of
         #{
             command := ~"variables",
@@ -243,8 +242,8 @@ get_variables(Client, Scope) ->
 get_top_frame(Client, ThreadId) ->
     [TopFrame | _] = get_stack_trace(Client, ThreadId),
     #{id := FrameId, name := Name, line := Line} = TopFrame,
-    #{~"Locals" := LocalsScope} = get_scopes(Client, FrameId),
-    Locals = get_variables(Client, LocalsScope),
+    #{~"Locals" := #{variablesReference := VarRef}} = get_scopes(Client, FrameId),
+    Locals = get_variables(Client, VarRef),
     #{
         name => Name,
         line => Line,

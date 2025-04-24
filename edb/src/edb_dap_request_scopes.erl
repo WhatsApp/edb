@@ -109,7 +109,7 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
                     #{
                         name => <<"Locals">>,
                         presentationHint => <<"locals">>,
-                        variablesReference => edb_dap_id_mappings:frame_scope_to_var_reference(#{
+                        variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => locals
                         }),
                         expensive => false
@@ -120,7 +120,7 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
                     #{
                         name => <<"Registers">>,
                         presentationHint => <<"registers">>,
-                        variablesReference => edb_dap_id_mappings:frame_scope_to_var_reference(#{
+                        variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => registers
                         }),
                         expensive => false
@@ -136,7 +136,7 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
                 [
                     #{
                         name => <<"Messages">>,
-                        variablesReference => edb_dap_id_mappings:frame_scope_to_var_reference(#{
+                        variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => messages
                         }),
                         expensive => false

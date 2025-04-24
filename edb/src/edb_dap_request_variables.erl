@@ -61,7 +61,7 @@
 
 -type response_body() ::
     #{
-        %  All (or a range) of variables for the given variable reference.
+        % All (or a range) of variables for the given variable reference.
         variables := [variable()]
     }.
 
@@ -177,54 +177,76 @@
 
 -export_type([arguments/0, response_body/0, variable/0, value_format/0, variable_presentation_hint/0]).
 
+-spec value_format_template() -> edb_dap_parse:template().
+value_format_template() ->
+    #{
+        hex => {optional, edb_dap_parse:boolean()}
+    }.
+
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        variablesReference => edb_dap_parse:number(),
+        filter => {optional, edb_dap_parse:atoms([indexed, named])},
+        start => {optional, edb_dap_parse:number()},
+        count => {optional, edb_dap_parse:number()},
+        format => {optional, value_format_template()}
+    }.
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, allow_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := attached, node := Node}, #{variablesReference := VariablesReference}) ->
-    #{frame := FrameId, scope := Scope} = variable_ref_to_frame_scope(VariablesReference),
-    #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
-    case Scope of
-        messages ->
-            % elp:ignore W0014 (cross_node_eval)
-            case erpc:call(Node, erlang, process_info, [Pid, messages]) of
-                {messages, Messages0} when is_list(Messages0) ->
-                    % Ideally we'd have a `erl_debugger:peek_message/1` function
-                    % which would allow us to peek at the message queue and return
-                    % a too_large entry if the message is too large.
-                    Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
-                    #{
-                        response => edb_dap_request:success(#{
-                            variables => unnamed_variables(~"", Messages)
-                        })
-                    };
+    case variable_ref_to_frame_scope_or_structured(VariablesReference) of
+        #{frame := FrameId, scope := Scope} ->
+            #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
+            case Scope of
+                messages ->
+                    % elp:ignore W0014 (cross_node_eval)
+                    case erpc:call(Node, erlang, process_info, [Pid, messages]) of
+                        {messages, Messages0} when is_list(Messages0) ->
+                            % Ideally we'd have a `erl_debugger:peek_message/1` function
+                            % which would allow us to peek at the message queue and return
+                            % a too_large entry if the message is too large.
+                            Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
+                            #{
+                                response => edb_dap_request:success(#{
+                                    variables => unnamed_variables(~"", Messages)
+                                })
+                            };
+                        _ ->
+                            throw({failed_to_get_messages, {Pid, FrameNo}})
+                    end;
                 _ ->
-                    throw({failed_to_get_messages, {Pid, FrameNo}})
+                    case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
+                        not_paused ->
+                            edb_dap_request:not_paused(Pid);
+                        undefined ->
+                            throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
+                        {ok, Result} ->
+                            Variables =
+                                case Scope of
+                                    locals ->
+                                        [variable(Name, Value) || Name := Value <- maps:get(vars, Result, #{})];
+                                    registers ->
+                                        XRegs = unnamed_variables(~"X", maps:get(xregs, Result, [])),
+                                        YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
+                                        XRegs ++ YRegs
+                                end,
+                            #{response => edb_dap_request:success(#{variables => Variables})}
+                    end
             end;
-        _ ->
-            case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
-                not_paused ->
-                    edb_dap_request:not_paused(Pid);
-                undefined ->
-                    throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
-                {ok, Result} ->
-                    Variables =
-                        case Scope of
-                            locals ->
-                                [variable(Name, Value) || Name := Value <- maps:get(vars, Result, #{})];
-                            registers ->
-                                XRegs = unnamed_variables(~"X", maps:get(xregs, Result, [])),
-                                YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
-                                XRegs ++ YRegs
-                        end,
-                    #{response => edb_dap_request:success(#{variables => Variables})}
-            end
+        #{elements := Elements} = _Structured ->
+            Variables = [variable(Name, Value) || {Name, Value} <- Elements],
+            #{response => edb_dap_request:success(#{variables => Variables})}
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
@@ -232,10 +254,10 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec variable_ref_to_frame_scope(VarRef) -> edb_dap_id_mappings:frame_scope() when
+-spec variable_ref_to_frame_scope_or_structured(VarRef) -> edb_dap_id_mappings:frame_scope_or_structured() when
     VarRef :: edb_dap_id_mappings:id().
-variable_ref_to_frame_scope(VarRef) ->
-    case edb_dap_id_mappings:var_reference_to_frame_scope(VarRef) of
+variable_ref_to_frame_scope_or_structured(VarRef) ->
+    case edb_dap_id_mappings:var_reference_to_frame_scope_or_structured(VarRef) of
         {ok, FrameScope} -> FrameScope;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
     end.
@@ -263,8 +285,31 @@ variable(Name, Value) ->
     #{
         name => Name,
         value => variable_value(Value),
-        variablesReference => 0
+        variablesReference => variables_reference(Value)
     }.
+
+-spec variables_reference(edb:value()) -> number().
+variables_reference({value, Value}) ->
+    case try_to_structured(Value) of
+        {ok, Structured} ->
+            edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(Structured);
+        not_structured ->
+            0
+    end;
+variables_reference(_) ->
+    0.
+
+-spec try_to_structured(term()) -> {ok, edb_dap_id_mappings:structured()} | not_structured.
+try_to_structured(L) when is_list(L) ->
+    Elements = [{integer_to_binary(Idx), {value, Value}} || {Idx, Value} <- lists:enumerate(L)],
+    {ok, #{elements => Elements}};
+try_to_structured(T) when is_tuple(T) ->
+    try_to_structured(tuple_to_list(T));
+try_to_structured(M) when is_map(M) ->
+    Elements = [{variable_value({value, Name}), {value, Value}} || Name := Value <- M],
+    {ok, #{elements => lists:sort(Elements)}};
+try_to_structured(_) ->
+    not_structured.
 
 -spec unnamed_variables(binary(), [edb:value()]) -> [variable()].
 unnamed_variables(Prefix, Values) ->
@@ -279,4 +324,20 @@ unnamed_variables(Prefix, Values) ->
 variable_value({too_large, Size, Max}) ->
     edb_dap:to_binary(io_lib:format("Too Large (~p vs ~p)", [Size, Max]));
 variable_value({value, Value}) ->
-    edb:format("~p", [Value]).
+    format_value("~p", Value).
+
+% The `edb:format/2` function is expensive, since it performs a RPC call to the
+% debugged node. For basic values such as numbers and atoms that don't have a remote
+% representation, we can use local formatting.
+-spec format_value(Format, Value) -> binary() when
+    Format :: io:format(), Value :: term().
+format_value(Format, Value) when is_number(Value); is_atom(Value) ->
+    case io_lib:format(Format, [Value]) of
+        Chars when is_list(Chars) ->
+            String = lists:flatten(Chars),
+            case unicode:characters_to_binary(String) of
+                Binary when is_binary(Binary) -> Binary
+            end
+    end;
+format_value(Format, Value) ->
+    edb:format(Format, [Value]).

@@ -39,7 +39,7 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export([start_link_thread_ids_server/0, start_link_frame_ids_server/0, start_link_var_reference_ids_server/0]).
 -export([pid_to_thread_id/1, pids_to_thread_ids/1, thread_id_to_pid/1]).
 -export([pid_frame_to_frame_id/1, frame_id_to_pid_frame/1]).
--export([var_reference_to_frame_scope/1, frame_scope_to_var_reference/1]).
+-export([var_reference_to_frame_scope_or_structured/1, frame_scope_or_structured_to_var_reference/1]).
 -export([reset/0]).
 
 %% gen_server callbacks
@@ -53,6 +53,8 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export_type([id/0]).
 -export_type([pid_frame/0]).
 -export_type([frame_scope/0]).
+-export_type([structured/0]).
+-export_type([frame_scope_or_structured/0]).
 
 %% @doc An integer that fits in a 64-bit float
 %%
@@ -61,7 +63,9 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 
 -type pid_frame() :: #{pid := pid(), frame_no := non_neg_integer()}.
 -type scope() :: locals | registers | messages.
+-type frame_scope_or_structured() :: frame_scope() | structured().
 -type frame_scope() :: #{frame := id(), scope := scope()}.
+-type structured() :: #{elements := [{binary(), edb:value()}]}.
 
 -type state(A) :: id_mapping(A).
 
@@ -105,12 +109,16 @@ pid_frame_to_frame_id(FrameId = #{pid := Pid, frame_no := No}) when is_pid(Pid),
 frame_id_to_pid_frame(Id) when is_integer(Id) ->
     gen_server:call(?FRAME_IDS_SERVER, {from_id, Id}).
 
--spec frame_scope_to_var_reference(frame_scope()) -> id().
-frame_scope_to_var_reference(#{frame := Id, scope := Scope} = FrameScope) when is_integer(Id), is_atom(Scope) ->
+-spec frame_scope_or_structured_to_var_reference(frame_scope_or_structured()) -> id().
+frame_scope_or_structured_to_var_reference(#{elements := Elements} = Structured) when is_list(Elements) ->
+    gen_server:call(?VAR_REFERENCE_IDS_SERVER, {get_id, Structured});
+frame_scope_or_structured_to_var_reference(#{frame := Id, scope := Scope} = FrameScope) when
+    is_integer(Id), is_atom(Scope)
+->
     gen_server:call(?VAR_REFERENCE_IDS_SERVER, {get_id, FrameScope}).
 
--spec var_reference_to_frame_scope(id()) -> {ok, frame_scope()} | {error, not_found}.
-var_reference_to_frame_scope(VarReference) when is_integer(VarReference) ->
+-spec var_reference_to_frame_scope_or_structured(id()) -> {ok, frame_scope_or_structured()} | {error, not_found}.
+var_reference_to_frame_scope_or_structured(VarReference) when is_integer(VarReference) ->
     gen_server:call(?VAR_REFERENCE_IDS_SERVER, {from_id, VarReference}).
 
 -spec reset() -> ok.
@@ -144,6 +152,8 @@ init(ServerType) ->
             ?VAR_REFERENCE_IDS_SERVER ->
                 fun
                     (VarReference = #{frame := FrameId, scope := Scope}) when is_integer(FrameId), is_atom(Scope) ->
+                        {ok, VarReference};
+                    (VarReference = #{elements := Elements}) when is_list(Elements) ->
                         {ok, VarReference};
                     (_) ->
                         invalid
