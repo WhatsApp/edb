@@ -160,6 +160,8 @@ test_get_call_target(Config) ->
             catch                                                  %L26
                 _:_ -> ok                                          %L27
             end,                                                   %L28
+            begin X = foo:bar(42), X + 1 end,                      %L29
+            begin X = 42, foo:bar(X + 1) end,                      %L30
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -207,6 +209,12 @@ test_get_call_target(Config) ->
 
     % Only considers the first statement in a try-statement
     {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(24, Forms),
+
+    % Handles calls in a block
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(29, Forms),
+
+    % Only considers the first statement in a block
+    {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_target(30, Forms),
 
     ok.
 
