@@ -33,3 +33,6 @@ call_under_case() ->
 
 call_under_try() ->
     try foo(42) catch _ -> ok end.
+
+call_under_binop() ->
+    42 + foo(43).

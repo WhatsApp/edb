@@ -79,6 +79,7 @@
 -export([test_step_in_under_catch_statement/1]).
 -export([test_step_in_case_statement/1]).
 -export([test_step_in_try_statement/1]).
+-export([test_step_in_binop/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 -export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
@@ -165,6 +166,7 @@ groups() ->
             test_step_in_under_catch_statement,
             test_step_in_case_statement,
             test_step_in_try_statement,
+            test_step_in_binop,
 
             test_step_in_fails_if_non_fun_target,
             test_step_in_fails_if_fun_not_found,
@@ -2233,6 +2235,11 @@ test_step_in_case_statement(_Config) ->
 test_step_in_try_statement(_Config) ->
     Fun = call_under_try,
     LineCallingFoo = 35,
+    gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
+
+test_step_in_binop(_Config) ->
+    Fun = call_under_binop,
+    LineCallingFoo = 38,
     gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
 
 test_step_in_fails_if_non_fun_target(_Config) ->

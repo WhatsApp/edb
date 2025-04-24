@@ -162,6 +162,10 @@ test_get_call_target(Config) ->
             end,                                                   %L28
             begin X = foo:bar(42), X + 1 end,                      %L29
             begin X = 42, foo:bar(X + 1) end,                      %L30
+            X + foo:bar(Y),                                        %L31
+            hey:ho(X) + Y,                                         %L32
+            hey:ho(X) + foo:bar(Y),                                %L33
+
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -215,6 +219,11 @@ test_get_call_target(Config) ->
 
     % Only considers the first statement in a block
     {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_target(30, Forms),
+
+    % Can step-into either LHS and RHS of a binop, but not both
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(31, Forms),
+    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(32, Forms),
+    {error, ambiguous_target} = edb_server_code:get_call_target(33, Forms),
 
     ok.
 
