@@ -227,15 +227,15 @@ search_call_targets_in_exprs([Expr | Exprs0], Module, Line, Acc) ->
                         {ok, {{Module, F, A}, Args}};
                     module_qualifier ->
                         % Call target is an MFA
-                        L = erl_syntax:module_qualifier_argument(AppOperator),
-                        R = erl_syntax:module_qualifier_body(AppOperator),
-                        case {resolve_atom(L), resolve_atom(R)} of
-                            {{ok, M}, {ok, F}} ->
-                                Args = erl_syntax:application_arguments(Expr),
-                                A = length(Args),
-                                {ok, {{M, F, A}, Args}};
-                            _ ->
-                                {error, unsupported_operator}
+                        maybe
+                            L = erl_syntax:module_qualifier_argument(AppOperator),
+                            R = erl_syntax:module_qualifier_body(AppOperator),
+                            {{ok, M}, {ok, F}} ?= {resolve_atom(L), resolve_atom(R)},
+                            Args = erl_syntax:application_arguments(Expr),
+                            A = length(Args),
+                            {ok, {{M, F, A}, Args}}
+                        else
+                            _ -> {error, unsupported_operator}
                         end;
                     implicit_fun ->
                         % Call target is a function reference
@@ -244,24 +244,21 @@ search_call_targets_in_exprs([Expr | Exprs0], Module, Line, Acc) ->
                             module_qualifier ->
                                 % fun M:F/A
                                 L = erl_syntax:module_qualifier_argument(Ref),
-                                case resolve_atom(L) of
-                                    {ok, M} ->
-                                        R = erl_syntax:module_qualifier_body(Ref),
-                                        case resolve_arity_qualifier(M, R) of
-                                            {ok, MFA} ->
-                                                Args = Args = erl_syntax:application_arguments(Expr),
-                                                {ok, {MFA, Args}};
-                                            error ->
-                                                {error, unsupported_operator}
-                                        end;
-                                    _ ->
-                                        {error, unsupported_operator}
+                                maybe
+                                    {ok, M} ?= resolve_atom(L),
+                                    R = erl_syntax:module_qualifier_body(Ref),
+                                    {ok, MFA} ?= resolve_arity_qualifier(M, R),
+                                    Args = erl_syntax:application_arguments(Expr),
+                                    {ok, {MFA, Args}}
+                                else
+                                    _ -> {error, unsupported_operator}
                                 end;
                             arity_qualifier ->
-                                case resolve_arity_qualifier(Module, Ref) of
-                                    {ok, MFA} ->
-                                        Args = erl_syntax:application_arguments(Expr),
-                                        {ok, {MFA, Args}};
+                                maybe
+                                    {ok, MFA} ?= resolve_arity_qualifier(Module, Ref),
+                                    Args = erl_syntax:application_arguments(Expr),
+                                    {ok, {MFA, Args}}
+                                else
                                     error ->
                                         {error, unsupported_operator}
                                 end;
@@ -314,22 +311,15 @@ get_candidate_call_target_subexprs(Expr) ->
     Module :: module(),
     ArityQualifier :: erl_syntax:syntaxTree().
 resolve_arity_qualifier(Module, ArityQualifier) ->
-    case erl_syntax:type(ArityQualifier) of
-        arity_qualifier ->
-            L = erl_syntax:arity_qualifier_body(ArityQualifier),
-            case resolve_atom(L) of
-                {ok, F} ->
-                    R = erl_syntax:arity_qualifier_argument(ArityQualifier),
-                    case erl_syntax:type(R) of
-                        integer ->
-                            A = erl_syntax:integer_value(R),
-                            {ok, {Module, F, A}};
-                        _ ->
-                            error
-                    end;
-                _ ->
-                    error
-            end;
+    maybe
+        arity_qualifier ?= erl_syntax:type(ArityQualifier),
+        L = erl_syntax:arity_qualifier_body(ArityQualifier),
+        {ok, F} ?= resolve_atom(L),
+        R = erl_syntax:arity_qualifier_argument(ArityQualifier),
+        integer ?= erl_syntax:type(R),
+        A = erl_syntax:integer_value(R),
+        {ok, {Module, F, A}}
+    else
         _ ->
             error
     end.
@@ -396,21 +386,14 @@ guess_module_source(Module) ->
 find_module_name([]) ->
     not_found;
 find_module_name([Form | Forms]) ->
-    case erl_syntax:type(Form) of
-        attribute ->
-            L = erl_syntax:attribute_name(Form),
-            Rs = erl_syntax:attribute_arguments(Form),
-            case {resolve_atom(L), Rs} of
-                {{ok, module}, [R]} ->
-                    case resolve_atom(R) of
-                        {ok, Module} -> {ok, Module};
-                        _ -> find_module_name(Forms)
-                    end;
-                _ ->
-                    find_module_name(Forms)
-            end;
-        _ ->
-            find_module_name(Forms)
+    maybe
+        attribute ?= erl_syntax:type(Form),
+        L = erl_syntax:attribute_name(Form),
+        Rs = erl_syntax:attribute_arguments(Form),
+        {{ok, module}, [R]} ?= {resolve_atom(L), Rs},
+        {ok, _Module} ?= resolve_atom(R)
+    else
+        _ -> find_module_name(Forms)
     end.
 
 -spec form_line(form()) -> line().
