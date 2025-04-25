@@ -35,4 +35,7 @@ call_under_try() ->
     try foo(42) catch _ -> ok end.
 
 call_under_binop() ->
-    42 + foo(43).
+    foo(42) + bar(43).
+
+bar(Y) ->
+    Y * 2.

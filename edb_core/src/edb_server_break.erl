@@ -239,43 +239,73 @@ prepare_for_stepping_in(Pid, Breakpoints0) ->
         not_paused ->
             {error, not_paused};
         [TopFrame | _] = StackFrames ->
-            case get_target_for_step_in(TopFrame) of
+            case get_targets_for_step_in(TopFrame) of
                 {error, _} = Error ->
                     Error;
-                {ok, MFA = {Mod, Fun, Arity}} ->
-                    case code:ensure_loaded(Mod) of
-                        {error, _} ->
-                            {error, {call_target, {module_not_found, Mod}}};
-                        {module, Mod} ->
-                            case edb_server_code:fetch_abstract_forms(Mod) of
-                                {error, _} = Error ->
-                                    Error;
-                                {ok, ModForms} ->
-                                    case edb_server_code:find_fun(Fun, Arity, ModForms) of
-                                        not_found ->
-                                            {error, {call_target, {function_not_found, MFA}}};
-                                        {ok, FunForm} ->
-                                            {_, #{function := CurrentMFA}, _} = TopFrame,
+                {ok, TargetMFAs} ->
+                    {_, #{function := CurrentMFA}, _} = TopFrame,
+                    Addrs = call_stack_addrs(StackFrames),
 
-                                            Addrs = call_stack_addrs(StackFrames),
-                                            BasePatterns = [
-                                                % Base pattern for non-tail-calls
-                                                [CurrentMFA | tl(Addrs)],
+                    AddStepsOnStepInTargetsResult = lists:foldl(
+                        fun
+                            (_TargetMFA, {{error, _}, _} = Error) ->
+                                Error;
+                            (TargetMFA, {ok, BreakpointsN}) ->
+                                case add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, BreakpointsN) of
+                                    Error = {error, _} -> {Error, BreakpointsN};
+                                    OkResult -> OkResult
+                                end
+                        end,
+                        {ok, Breakpoints0},
+                        TargetMFAs
+                    ),
+                    case AddStepsOnStepInTargetsResult of
+                        {Error = {error, _}, Breakpoints1} ->
+                            _Breakpoints2 = clear_steps(Pid, Breakpoints1),
+                            Error;
+                        {ok, Breakpoints1} ->
+                            RelevantFrames = StackFrames,
+                            Types = [on_exc_handler || _ <- RelevantFrames],
+                            add_steps_on_stack_frames(
+                                Pid, RelevantFrames, Addrs, Types, Breakpoints1
+                            )
+                    end
+            end
+    end.
 
-                                                % Base pattern for tail-calls
-                                                tl(Addrs)
-                                            ],
-                                            case add_steps_on_function(Pid, MFA, FunForm, BasePatterns, Breakpoints0) of
-                                                no_breakpoint_set ->
-                                                    {error, {cannot_breakpoint, Mod}};
-                                                {ok, Breakpoints1} ->
-                                                    RelevantFrames = StackFrames,
-                                                    Types = [on_exc_handler || _ <- RelevantFrames],
-                                                    add_steps_on_stack_frames(
-                                                        Pid, RelevantFrames, Addrs, Types, Breakpoints1
-                                                    )
-                                            end
-                                    end
+-spec add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, breakpoints()) ->
+    {ok, breakpoints()} | {error, edb:step_in_error()}
+when
+    Pid :: pid(),
+    CurrentMFA :: mfa(),
+    TargetMFA :: mfa(),
+    Addrs :: call_stack_addrs().
+add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
+    {Mod, Fun, Arity} = TargetMFA,
+    case code:ensure_loaded(Mod) of
+        {error, _} ->
+            {error, {call_target, {module_not_found, Mod}}};
+        {module, Mod} ->
+            case edb_server_code:fetch_abstract_forms(Mod) of
+                {error, _} = Error ->
+                    Error;
+                {ok, ModForms} ->
+                    case edb_server_code:find_fun(Fun, Arity, ModForms) of
+                        not_found ->
+                            {error, {call_target, {function_not_found, TargetMFA}}};
+                        {ok, FunForm} ->
+                            BasePatterns = [
+                                % Base pattern for non-tail-calls
+                                [CurrentMFA | tl(Addrs)],
+
+                                % Base pattern for tail-calls
+                                tl(Addrs)
+                            ],
+                            case add_steps_on_function(Pid, TargetMFA, FunForm, BasePatterns, Breakpoints0) of
+                                no_breakpoint_set ->
+                                    {error, {cannot_breakpoint, Mod}};
+                                Result ->
+                                    Result
                             end
                     end
             end
@@ -399,21 +429,22 @@ add_step(Pid, Patterns, Module, Line, Breakpoints0) ->
             no_breakpoint_set
     end.
 
--spec get_target_for_step_in(TopFrame) -> {ok, mfa()} | {error, edb:step_in_error()} when
+-spec get_targets_for_step_in(TopFrame) -> {ok, nonempty_list(mfa())} | {error, edb:step_in_error()} when
     TopFrame :: erl_debugger:stack_frame().
-get_target_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_integer(Line) ->
+get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_integer(Line) ->
     case edb_server_code:fetch_abstract_forms(M) of
         {error, _} = Error ->
             Error;
         {ok, Forms} ->
-            case edb_server_code:get_call_target(Line, Forms) of
-                {ok, {MFA, _Args}} ->
-                    {ok, MFA};
+            case edb_server_code:get_call_targets(Line, Forms) of
+                {ok, CallTargets} ->
+                    MFAs = [MFA || {MFA, _Args} <- CallTargets],
+                    {ok, MFAs};
                 {error, CallTargetError} ->
                     {error, {call_target, CallTargetError}}
             end
     end;
-get_target_for_step_in(_TopFrame) ->
+get_targets_for_step_in(_TopFrame) ->
     edb_server:invariant_violation(stepping_from_unbreakable_frame).
 
 %% --------------------------------------------------------------------

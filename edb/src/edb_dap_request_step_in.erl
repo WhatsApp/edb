@@ -85,8 +85,6 @@ react_to_call_target_error({no_call_in_expr, Type}) ->
     edb_dap_request:precondition_violation(
         io_lib:format(~"No call found in expression of type '~p'", [Type])
     );
-react_to_call_target_error(ambiguous_target) ->
-    edb_dap_request:unsupported(~"There are various calls and the execution order is not known");
 react_to_call_target_error(unsupported_operator) ->
     edb_dap_request:unsupported(~"This type of call is not currently supported for stepping-in");
 react_to_call_target_error({module_not_found, Module}) ->

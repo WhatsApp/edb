@@ -19,7 +19,7 @@
 -export([find_fun/3]).
 -export([find_fun_containing_line/2]).
 -export([get_line_span/1]).
--export([get_call_target/2]).
+-export([get_call_targets/2]).
 -export([module_source/1]).
 
 -compile(warn_missing_spec_all).
@@ -167,18 +167,18 @@ get_line_span(Form) ->
 % --------------------------------------------------------------------
 % get_call_target: Call-target analysis for stepping-in, etc
 % --------------------------------------------------------------------
--spec get_call_target(Line, Forms) ->
-    {ok, {mfa(), Args :: [erl_syntax:syntaxTree()]}}
+-spec get_call_targets(Line, Forms) ->
+    {ok, nonempty_list(CallTarget)}
     | {error, Reason}
 when
     Line :: line(),
     Forms :: forms(),
+    CallTarget :: {mfa(), Args :: [erl_syntax:syntaxTree()]},
     Reason ::
         not_found
         | {no_call_in_expr, Type :: atom()}
-        | ambiguous_target
         | unsupported_operator.
-get_call_target(Line, Forms) ->
+get_call_targets(Line, Forms) ->
     case expr_at_line(Line, Forms) of
         not_found ->
             {error, not_found};
@@ -188,12 +188,10 @@ get_call_target(Line, Forms) ->
                     {error, not_found};
                 {ok, Module} ->
                     case search_call_targets_in_exprs([Expr], Module, Line, []) of
-                        {ok, [CallTarget]} ->
-                            {ok, CallTarget};
                         {ok, []} ->
                             {error, {no_call_in_expr, erl_syntax:type(Expr)}};
-                        {ok, _} ->
-                            {error, ambiguous_target};
+                        {ok, CallTargets} ->
+                            {ok, CallTargets};
                         {error, _} = Error ->
                             Error
                     end

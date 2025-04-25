@@ -105,7 +105,6 @@ A breakpoint may not be added for various reasons:
 -type call_target_error() ::
     not_found
     | {no_call_in_expr, Type :: atom()}
-    | ambiguous_target
     | unsupported_operator
     | {module_not_found, module()}
     | {function_not_found, mfa()}.

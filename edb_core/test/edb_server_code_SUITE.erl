@@ -187,64 +187,62 @@ test_get_call_target(Config) ->
     {ok, Forms} = edb_server_code:fetch_abstract_forms(call_targets),
 
     % Returns not_found when line doesn't exit
-    {error, not_found} = edb_server_code:get_call_target(100_000, Forms),
+    {error, not_found} = edb_server_code:get_call_targets(100_000, Forms),
 
     % Returns not_found when line has no content
-    {error, not_found} = edb_server_code:get_call_target(2, Forms),
+    {error, not_found} = edb_server_code:get_call_targets(2, Forms),
 
     % Returns no_call_in_expr when top-level expression of the line is not a call
-    {error, {no_call_in_expr, match_expr}} = edb_server_code:get_call_target(6, Forms),
+    {error, {no_call_in_expr, match_expr}} = edb_server_code:get_call_targets(6, Forms),
 
     % Handles calls to MFAs
-    {ok, {{foo, bar, 2}, [_, _]}} = edb_server_code:get_call_target(7, Forms),
+    {ok, [{{foo, bar, 2}, [_, _]}]} = edb_server_code:get_call_targets(7, Forms),
 
     % Handles calls to locals
-    {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(8, Forms),
+    {ok, [{{call_targets, local, 0}, []}]} = edb_server_code:get_call_targets(8, Forms),
 
     % Handles calls to external fun refs
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(9, Forms),
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(9, Forms),
 
     % Handles calls to local fun refs
-    {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(10, Forms),
+    {ok, [{{call_targets, local, 0}, []}]} = edb_server_code:get_call_targets(10, Forms),
 
     % Handles calls as LHS of a match
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(11, Forms),
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(11, Forms),
 
     % Handles calls under a catch statement
-    {ok, {{call_targets, local, 0}, []}} = edb_server_code:get_call_target(12, Forms),
+    {ok, [{{call_targets, local, 0}, []}]} = edb_server_code:get_call_targets(12, Forms),
 
     % Handles calls in a case statement
-    {ok, {{foo, blah, 0}, []}} = edb_server_code:get_call_target(13, Forms),
+    {ok, [{{foo, blah, 0}, []}]} = edb_server_code:get_call_targets(13, Forms),
 
     % Doesn't pick calls in a case when the expression is on a different line
-    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(16, Forms),
+    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_targets(16, Forms),
 
     % Doesn't pick calls in branches of a case statement
-    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(20, Forms),
+    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_targets(20, Forms),
 
     % Handles calls in a try statement
-    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(23, Forms),
+    {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(23, Forms),
 
     % Only considers the first statement in a try-statement
-    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(28, Forms),
+    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_targets(28, Forms),
 
     % Doesn't pick calls in a try when the call is on a different line
-    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(33, Forms),
+    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_targets(33, Forms),
 
     % Handles calls in a block
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(37, Forms),
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(37, Forms),
 
     % Only considers the first statement in a block
-    {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_target(38, Forms),
+    {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_targets(38, Forms),
 
-    % Can step-into either LHS and RHS of a binop...
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(39, Forms),
-    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(40, Forms),
-    % ...but not both...
-    {error, ambiguous_target} = edb_server_code:get_call_target(41, Forms),
-    % ... unless only on of the is on the current line
-    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(42, Forms),
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(45, Forms),
+    % Can step-into either LHS and RHS of a binop, non-deterministically if they are on the same line
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(39, Forms),
+    {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(40, Forms),
+    {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(41, Forms),
+    {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(42, Forms),
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(45, Forms),
 
     ok.
 
