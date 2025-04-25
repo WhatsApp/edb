@@ -187,7 +187,7 @@ get_call_target(Line, Forms) ->
                 not_found ->
                     {error, not_found};
                 {ok, Module} ->
-                    case search_call_targets_in_exprs([Expr], Module, []) of
+                    case search_call_targets_in_exprs([Expr], Module, Line, []) of
                         {ok, [CallTarget]} ->
                             {ok, CallTarget};
                         {ok, []} ->
@@ -202,19 +202,20 @@ get_call_target(Line, Forms) ->
 
 -type deep_list(A) :: [A | deep_list(A)].
 
--spec search_call_targets_in_exprs(Exprs, Module, Acc) -> {ok, [CallTarget]} | {error, Reason} when
+-spec search_call_targets_in_exprs(Exprs, Module, Line, Acc) -> {ok, [CallTarget]} | {error, Reason} when
     Exprs :: deep_list(form()),
     Module :: module(),
+    Line :: line(),
     Acc :: [CallTarget],
     CallTarget :: {mfa(), Args :: [erl_syntax:syntaxTree()]},
     Reason :: unsupported_operator.
-search_call_targets_in_exprs([], _Module, Acc) ->
+search_call_targets_in_exprs([], _Module, _Line, Acc) ->
     {ok, Acc};
-search_call_targets_in_exprs([[] | Exprs], Module, Acc) ->
-    search_call_targets_in_exprs(Exprs, Module, Acc);
-search_call_targets_in_exprs([[Expr | Exprs0] | Exprs1], Module, Acc) ->
-    search_call_targets_in_exprs([Expr | [Exprs0 | Exprs1]], Module, Acc);
-search_call_targets_in_exprs([Expr | Exprs0], Module, Acc) ->
+search_call_targets_in_exprs([[] | Exprs], Module, Line, Acc) ->
+    search_call_targets_in_exprs(Exprs, Module, Line, Acc);
+search_call_targets_in_exprs([[Expr | Exprs0] | Exprs1], Module, Line, Acc) ->
+    search_call_targets_in_exprs([Expr | [Exprs0 | Exprs1]], Module, Line, Acc);
+search_call_targets_in_exprs([Expr | Exprs0], Module, Line, Acc) ->
     Result =
         case erl_syntax:type(Expr) of
             application ->
@@ -277,10 +278,11 @@ search_call_targets_in_exprs([Expr | Exprs0], Module, Acc) ->
         end,
     case Result of
         not_found ->
-            Exprs1 = [get_candidate_call_target_subexprs(Expr) | Exprs0],
-            search_call_targets_in_exprs(Exprs1, Module, Acc);
+            Candidates = [Cand || Cand <- get_candidate_call_target_subexprs(Expr), form_line(Cand) =:= Line],
+            Exprs1 = [Candidates | Exprs0],
+            search_call_targets_in_exprs(Exprs1, Module, Line, Acc);
         {ok, CallTarget} ->
-            search_call_targets_in_exprs(Exprs0, Module, [CallTarget | Acc]);
+            search_call_targets_in_exprs(Exprs0, Module, Line, [CallTarget | Acc]);
         Error = {error, _} ->
             Error
     end.

@@ -147,25 +147,36 @@ test_get_call_target(Config) ->
             case foo:blah() of                                     %L13
                 ok -> blah                                         %L14
             end,                                                   %L15
-            case X of                                              %L16
-                _ -> foo:blah()                                    %L17
-            end,                                                   %L18
-            try X = hey:ho(42), X + 1 of                           %L19
-                _ -> foo:bar()                                     %L20
-            catch                                                  %L21
-                _:_ -> foo:bar()                                   %L22
-            end,                                                   %L23
-            try X = 42, hey:ho(X) of                               %L24
-                _ -> ok                                            %L25
-            catch                                                  %L26
-                _:_ -> ok                                          %L27
-            end,                                                   %L28
-            begin X = foo:bar(42), X + 1 end,                      %L29
-            begin X = 42, foo:bar(X + 1) end,                      %L30
-            X + foo:bar(Y),                                        %L31
-            hey:ho(X) + Y,                                         %L32
-            hey:ho(X) + foo:bar(Y),                                %L33
-
+            case                                                   %L16
+                foo:bar() of                                       %L17
+                    ok -> blah                                     %L18
+            end,                                                   %L19
+            case X of                                              %L20
+                _ -> foo:blah()                                    %L21
+            end,                                                   %L22
+            try X = hey:ho(42), X + 1 of                           %L23
+                _ -> foo:bar()                                     %L24
+            catch                                                  %L25
+                _:_ -> foo:bar()                                   %L26
+            end,                                                   %L27
+            try X = 42, hey:ho(X) of                               %L28
+                _ -> ok                                            %L29
+            catch                                                  %L30
+                _:_ -> ok                                          %L31
+            end,                                                   %L32
+            try                                                    %L33
+                foo:bar(X)                                         %L34
+            catch _:_ -> ok                                        %L35
+            end,                                                   %L36
+            begin X = foo:bar(42), X + 1 end,                      %L37
+            begin X = 42, foo:bar(X + 1) end,                      %L38
+            X + foo:bar(Y),                                        %L39
+            hey:ho(X) + Y,                                         %L40
+            hey:ho(X) + foo:bar(Y),                                %L41
+            hey:ho(X) +                                            %L42
+                foo:bar(Y),                                        %L43
+            hey:ho(X)                                              %L44
+              + foo:bar(Y),                                        %L45
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -205,25 +216,35 @@ test_get_call_target(Config) ->
     % Handles calls in a case statement
     {ok, {{foo, blah, 0}, []}} = edb_server_code:get_call_target(13, Forms),
 
-    % Doesn't pick calls in branches of a case statement
+    % Doesn't pick calls in a case when the expression is on a different line
     {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(16, Forms),
 
+    % Doesn't pick calls in branches of a case statement
+    {error, {no_call_in_expr, case_expr}} = edb_server_code:get_call_target(20, Forms),
+
     % Handles calls in a try statement
-    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(19, Forms),
+    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(23, Forms),
 
     % Only considers the first statement in a try-statement
-    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(24, Forms),
+    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(28, Forms),
+
+    % Doesn't pick calls in a try when the call is on a different line
+    {error, {no_call_in_expr, try_expr}} = edb_server_code:get_call_target(33, Forms),
 
     % Handles calls in a block
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(29, Forms),
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(37, Forms),
 
     % Only considers the first statement in a block
-    {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_target(30, Forms),
+    {error, {no_call_in_expr, block_expr}} = edb_server_code:get_call_target(38, Forms),
 
-    % Can step-into either LHS and RHS of a binop, but not both
-    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(31, Forms),
-    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(32, Forms),
-    {error, ambiguous_target} = edb_server_code:get_call_target(33, Forms),
+    % Can step-into either LHS and RHS of a binop...
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(39, Forms),
+    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(40, Forms),
+    % ...but not both...
+    {error, ambiguous_target} = edb_server_code:get_call_target(41, Forms),
+    % ... unless only on of the is on the current line
+    {ok, {{hey, ho, 1}, [_]}} = edb_server_code:get_call_target(42, Forms),
+    {ok, {{foo, bar, 1}, [_]}} = edb_server_code:get_call_target(45, Forms),
 
     ok.
 
