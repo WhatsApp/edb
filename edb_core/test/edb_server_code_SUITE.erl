@@ -177,6 +177,8 @@ test_get_call_target(Config) ->
                 foo:bar(Y),                                        %L43
             hey:ho(X)                                              %L44
               + foo:bar(Y),                                        %L45
+            maybe ok ?= foo:bar(X) end,                            %L46
+            maybe X = 42, ok = foo:bar(Y) end,                     %L47
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -243,6 +245,10 @@ test_get_call_target(Config) ->
     {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(41, Forms),
     {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(42, Forms),
     {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(45, Forms),
+
+    % Can step-into calls inside maybes
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(46, Forms),
+    {error, {no_call_in_expr, maybe_expr}} = edb_server_code:get_call_targets(47, Forms),
 
     ok.
 

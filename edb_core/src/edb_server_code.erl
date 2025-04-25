@@ -286,26 +286,27 @@ search_call_targets_in_exprs([Expr | Exprs0], Module, Line, Acc) ->
 get_candidate_call_target_subexprs(Expr) ->
     case erl_syntax:type(Expr) of
         block_expr ->
-            case erl_syntax:block_expr_body(Expr) of
-                [FirstExpr | _] -> [FirstExpr];
-                [] -> []
-            end;
+            first_form_only(erl_syntax:block_expr_body(Expr));
         case_expr ->
             [erl_syntax:case_expr_argument(Expr)];
         catch_expr ->
             [erl_syntax:catch_expr_body(Expr)];
         infix_expr ->
             [erl_syntax:infix_expr_left(Expr), erl_syntax:infix_expr_right(Expr)];
+        maybe_expr ->
+            first_form_only(erl_syntax:maybe_expr_body(Expr));
+        maybe_match_expr ->
+            [erl_syntax:maybe_match_expr_body(Expr)];
         match_expr ->
             [erl_syntax:match_expr_body(Expr)];
         try_expr ->
-            case erl_syntax:try_expr_body(Expr) of
-                [FirstExpr | _] -> [FirstExpr];
-                [] -> []
-            end;
+            first_form_only(erl_syntax:try_expr_body(Expr));
         _ ->
             []
     end.
+
+-spec first_form_only(Forms) -> Forms when Forms :: [form()].
+first_form_only(Forms) -> lists:sublist(Forms, 1).
 
 -spec resolve_arity_qualifier(Module, ArityQualifier) -> {ok, mfa()} | error when
     Module :: module(),
