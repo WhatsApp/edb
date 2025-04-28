@@ -184,6 +184,9 @@ test_get_call_target(Config) ->
             [hey:ho(X), foo:bar(Y)],                               %L50
             #{hey:ho(X) => foo:bar(Y), blah => pim:pam()},         %L51
             #my_rec{fld1 = hey:ho(X), fld2 = foo:bar(Y)},          %L52
+            [V                                                     %L53
+              ||  L <- hey:ho(X)                                   %L54
+               ,  _ := V <- foo:bar(L)],                           %L55
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -271,6 +274,10 @@ test_get_call_target(Config) ->
 
     % Can step into calls in a record
     {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(52, Forms),
+
+    % Can step into calls in a generator
+    {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(54, Forms),
+    {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(55, Forms),
 
     ok.
 

@@ -291,6 +291,8 @@ get_candidate_call_target_subexprs(Expr) ->
             [erl_syntax:case_expr_argument(Expr)];
         catch_expr ->
             [erl_syntax:catch_expr_body(Expr)];
+        generator ->
+            [erl_syntax:generator_body(Expr)];
         infix_expr ->
             [erl_syntax:infix_expr_left(Expr), erl_syntax:infix_expr_right(Expr)];
         list ->
@@ -303,6 +305,8 @@ get_candidate_call_target_subexprs(Expr) ->
             erl_syntax:map_expr_fields(Expr);
         map_field_assoc ->
             [erl_syntax:map_field_assoc_name(Expr), erl_syntax:map_field_assoc_value(Expr)];
+        map_generator ->
+            [erl_syntax:map_generator_body(Expr)];
         match_expr ->
             [erl_syntax:match_expr_body(Expr)];
         maybe_expr ->
