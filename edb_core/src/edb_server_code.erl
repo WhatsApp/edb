@@ -309,6 +309,10 @@ get_candidate_call_target_subexprs(Expr) ->
             first_form_only(erl_syntax:maybe_expr_body(Expr));
         maybe_match_expr ->
             [erl_syntax:maybe_match_expr_body(Expr)];
+        record_expr ->
+            erl_syntax:record_expr_fields(Expr);
+        record_field ->
+            [erl_syntax:record_field_value(Expr)];
         tuple ->
             erl_syntax:tuple_elements(Expr);
         try_expr ->

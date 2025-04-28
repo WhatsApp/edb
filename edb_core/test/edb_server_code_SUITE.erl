@@ -133,8 +133,8 @@ test_get_line_span(Config) ->
 test_get_call_target(Config) ->
     ModuleSource = ~"""
         -module(call_targets).                                     %L01
-                                                                   %L02
-        -export([fixtures/0]).                                     %L03
+        -export([fixtures/0]).                                     %L02
+        -record(my_rec, {fld1 :: atom(), fld2 :: integer()}).      %L03
                                                                    %L04
         fixtures() ->                                              %L05
             Y = 42, 'not':toplevel(a, b),                          %L06
@@ -183,6 +183,7 @@ test_get_call_target(Config) ->
             [hey:ho(X), foo:bar(Y) | pim:pam()],                   %L49
             [hey:ho(X), foo:bar(Y)],                               %L50
             #{hey:ho(X) => foo:bar(Y), blah => pim:pam()},         %L51
+            #my_rec{fld1 = hey:ho(X), fld2 = foo:bar(Y)},          %L52
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -196,7 +197,7 @@ test_get_call_target(Config) ->
     {error, not_found} = edb_server_code:get_call_targets(100_000, Forms),
 
     % Returns not_found when line has no content
-    {error, not_found} = edb_server_code:get_call_targets(2, Forms),
+    {error, not_found} = edb_server_code:get_call_targets(4, Forms),
 
     % Returns no_call_in_expr when top-level expression of the line is not a call
     {error, {no_call_in_expr, match_expr}} = edb_server_code:get_call_targets(6, Forms),
@@ -267,6 +268,9 @@ test_get_call_target(Config) ->
     {ok, [{{pim, pam, 0}, []}, {{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(
         51, Forms
     ),
+
+    % Can step into calls in a record
+    {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(52, Forms),
 
     ok.
 
