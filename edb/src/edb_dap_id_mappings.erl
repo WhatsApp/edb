@@ -56,9 +56,10 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export_type([structured/0]).
 -export_type([frame_scope_or_structured/0]).
 
-%% @doc An integer that fits in a 64-bit float
-%%
-%% This is the requirement the DAP spec puts on ids.
+-doc """
+An integer that fits in a 64-bit float.
+This is the requirement the DAP spec puts on ids.
+""".
 -type id() :: non_neg_integer().
 
 -type pid_frame() :: #{pid := pid(), frame_no := non_neg_integer()}.
