@@ -293,12 +293,24 @@ get_candidate_call_target_subexprs(Expr) ->
             [erl_syntax:catch_expr_body(Expr)];
         infix_expr ->
             [erl_syntax:infix_expr_left(Expr), erl_syntax:infix_expr_right(Expr)];
+        list ->
+            Prefix = erl_syntax:list_prefix(Expr),
+            case erl_syntax:list_suffix(Expr) of
+                none -> Prefix;
+                Suffix -> [Suffix | Prefix]
+            end;
+        map_expr ->
+            erl_syntax:map_expr_fields(Expr);
+        map_field_assoc ->
+            [erl_syntax:map_field_assoc_name(Expr), erl_syntax:map_field_assoc_value(Expr)];
+        match_expr ->
+            [erl_syntax:match_expr_body(Expr)];
         maybe_expr ->
             first_form_only(erl_syntax:maybe_expr_body(Expr));
         maybe_match_expr ->
             [erl_syntax:maybe_match_expr_body(Expr)];
-        match_expr ->
-            [erl_syntax:match_expr_body(Expr)];
+        tuple ->
+            erl_syntax:tuple_elements(Expr);
         try_expr ->
             first_form_only(erl_syntax:try_expr_body(Expr));
         _ ->

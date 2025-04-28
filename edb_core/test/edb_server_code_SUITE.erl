@@ -179,6 +179,10 @@ test_get_call_target(Config) ->
               + foo:bar(Y),                                        %L45
             maybe ok ?= foo:bar(X) end,                            %L46
             maybe X = 42, ok = foo:bar(Y) end,                     %L47
+            {hey:ho(X), foo:bar(Y)},                               %L48
+            [hey:ho(X), foo:bar(Y) | pim:pam()],                   %L49
+            [hey:ho(X), foo:bar(Y)],                               %L50
+            #{hey:ho(X) => foo:bar(Y), blah => pim:pam()},         %L51
             ok.                                                    %
                                                                    %
         local() -> ok.                                             %
@@ -249,6 +253,20 @@ test_get_call_target(Config) ->
     % Can step-into calls inside maybes
     {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(46, Forms),
     {error, {no_call_in_expr, maybe_expr}} = edb_server_code:get_call_targets(47, Forms),
+
+    % Can step into calls in a tuple
+    {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(48, Forms),
+
+    % Can step into calls in a list
+    {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}, {{pim, pam, 0}, []}]} = edb_server_code:get_call_targets(
+        49, Forms
+    ),
+    {ok, [{{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(50, Forms),
+
+    % Can step into calls in a map
+    {ok, [{{pim, pam, 0}, []}, {{foo, bar, 1}, [_]}, {{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(
+        51, Forms
+    ),
 
     ok.
 
