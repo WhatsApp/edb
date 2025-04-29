@@ -100,3 +100,12 @@ That will return the path where you will find a `edb.log` file.
 ## License
 
 EDB is Apache 2.0 licensed, as found in the [LICENSE.md](./LICENSE.md) file.
+
+## References
+
+* [Terms of Use](https://opensource.fb.com/legal/terms)
+* [Privacy Policy](https://opensource.fb.com/legal/privacy)
+
+## Copyright
+
+Copyright © Meta Platforms, Inc
