@@ -44,7 +44,7 @@ You can also download an EDB version for a specific commit by visiting the [Comm
 
 ## Build from source
 
-A pre-built version of EDB for your OS/architecture may not be available. In that case you can build one from source. Remember to check the [Prerequisites](./prerequisites.md) sections for details.
+A pre-built version of EDB for your OS/architecture may not be available. In that case you can build one from source. Remember to check the [Prerequisites](#prerequisites) sections for details.
 
     $ git clone https://github.com/WhatsApp/edb.git
     $ cd edb
