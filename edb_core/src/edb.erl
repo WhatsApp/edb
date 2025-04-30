@@ -93,14 +93,14 @@ A breakpoint may not be added for various reasons:
 
 -export_type([step_error/0, step_in_error/0, call_target_error/0]).
 -type step_error() ::
-    no_abstract_code
-    | not_paused
-    | {cannot_breakpoint, module()}
-    | {beam_analysis, term()}.
+    not_paused
+    | {cannot_breakpoint, module()}.
 
 -type step_in_error() ::
     step_error()
-    | {call_target, call_target_error()}.
+    | {call_target, call_target_error()}
+    | no_abstract_code
+    | {beam_analysis, term()}.
 
 -type call_target_error() ::
     not_found

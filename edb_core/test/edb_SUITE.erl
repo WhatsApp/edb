@@ -2265,7 +2265,7 @@ test_step_in_fails_if_fun_not_found(Config) ->
     -module(foo).                            %L1
     -export([go/0]).                         %L2
     go() ->                                  %L3
-        catch ?MODULE:does_not_exsit().      %L4
+        catch ?MODULE:does_not_exist().      %L4
     """,
 
     {ok, Mod, _} = edb_test_support:compile_module(Config, {source, Source}, #{
@@ -2281,7 +2281,7 @@ test_step_in_fails_if_fun_not_found(Config) ->
     {ok, paused} = edb:wait(),
 
     ?assertEqual(
-        {error, {call_target, {function_not_found, {Mod, does_not_exsit, 0}}}},
+        {error, {call_target, {function_not_found, {Mod, does_not_exist, 0}}}},
         edb:step_in(Pid)
     ),
     ok.

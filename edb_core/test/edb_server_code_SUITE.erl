@@ -19,24 +19,15 @@
 % @fb-only
 -typing([eqwalizer]).
 
-% @fb-only
--include_lib("stdlib/include/assert.hrl").
-
 %% CT callbacks
 -export([all/0]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 %% Test cases
--export([test_find_fun/1]).
--export([test_find_fun_containing_line/1]).
--export([test_get_line_span/1]).
 -export([test_get_call_target/1]).
 
 all() ->
     [
-        test_find_fun,
-        test_find_fun_containing_line,
-        test_get_line_span,
         test_get_call_target
     ].
 
@@ -51,84 +42,6 @@ end_per_testcase(_TestCase, _Config) ->
 % -----------------------------------------------------------------------------
 % Test cases
 % -----------------------------------------------------------------------------
-
-test_find_fun(Config) ->
-    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_code_inspection.erl"}, #{
-        load_it => true
-    }),
-    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
-
-    CheckFinds = fun(FA = {Name, Arity}) ->
-        Res = edb_server_code:find_fun(Name, Arity, Forms),
-        ?assertMatch({ok, _}, Res, FA),
-        {ok, Actual} = Res,
-        check_function_form_is(FA, Actual, FA)
-    end,
-
-    CheckFinds({sync, 2}),
-    CheckFinds({cycle, 2}),
-    CheckFinds({just_sync, 1}),
-    CheckFinds({make_closure, 1}),
-    CheckFinds({id, 1}),
-    CheckFinds({swap, 1}),
-    ok.
-
-test_find_fun_containing_line(Config) ->
-    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_code_inspection.erl"}, #{
-        load_it => true
-    }),
-    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
-
-    check_finds_fun_containing_Line(Forms, {go, 1}, 14),
-    check_finds_fun_containing_Line(Forms, {cycle, 2}, 24),
-    check_finds_fun_containing_Line(Forms, {just_sync, 1}, 34),
-    check_finds_fun_containing_Line(Forms, {just_sync, 2}, 39),
-    check_finds_fun_containing_Line(Forms, {make_closure, 1}, 46),
-    check_finds_fun_containing_Line(Forms, {id, 1}, 54),
-    check_finds_fun_containing_Line(Forms, {swap, 1}, 58),
-    ok.
-
-test_get_line_span(Config) ->
-    {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_code_inspection.erl"}, #{
-        load_it => true
-    }),
-    {ok, Forms} = edb_server_code:fetch_abstract_forms(test_code_inspection),
-
-    CheckIsFunBlock = fun({Name, Arity}, FirstLine, LastLine) ->
-        Res = edb_server_code:find_fun_containing_line(FirstLine, Forms),
-        ?assertMatch({ok, _}, Res, {FirstLine, LastLine}),
-        {ok, Form} = Res,
-
-        Span = edb_server_code:get_line_span(Form),
-        ?assertEqual(
-            {FirstLine, LastLine},
-            Span
-        ),
-
-        Lines = lists:seq(FirstLine, LastLine),
-        [check_finds_fun_containing_Line(Forms, {Name, Arity}, Line) || Line <- Lines]
-    end,
-
-    %% go/1 (Simple case)
-    CheckIsFunBlock({go, 1}, 14, 19),
-
-    %% cycle/2 (multiple clauses)
-    CheckIsFunBlock({cycle, 2}, 24, 29),
-
-    %% just_sync/1 (arity overloading)
-    CheckIsFunBlock({just_sync, 1}, 34, 36),
-
-    %% just_sync/2 (arity overloading)
-    CheckIsFunBlock({just_sync, 2}, 39, 41),
-
-    %% make_closure/1 (ends with a non-executable line: `end.`)
-    CheckIsFunBlock({make_closure, 1}, 46, 49),
-
-    %% id/1 and swap/1: no specs inbetween (consecutive function forms)
-    CheckIsFunBlock({id, 1}, 54, 56),
-    CheckIsFunBlock({swap, 1}, 58, 59),
-
-    ok.
 
 test_get_call_target(Config) ->
     ModuleSource = ~"""
@@ -279,35 +192,4 @@ test_get_call_target(Config) ->
     {ok, [{{hey, ho, 1}, [_]}]} = edb_server_code:get_call_targets(54, Forms),
     {ok, [{{foo, bar, 1}, [_]}]} = edb_server_code:get_call_targets(55, Forms),
 
-    ok.
-
-% -----------------------------------------------------------------------------
-% Helpers
-% -----------------------------------------------------------------------------
--spec check_finds_fun_containing_Line(Forms, {Name, Arity}, Line) -> ok when
-    Forms :: edb_server_code:forms(),
-    Name :: atom(),
-    Arity :: arity(),
-    Line :: pos_integer().
-check_finds_fun_containing_Line(Forms, {Name, Arity}, Line) ->
-    Res = edb_server_code:find_fun_containing_line(Line, Forms),
-
-    ?assertMatch({ok, _}, Res, {line, Line}),
-    {ok, Form} = Res,
-
-    check_function_form_is({Name, Arity}, Form, {line, Line}),
-    ok.
-
--spec check_function_form_is({Name, Arity}, Form, Descr) -> ok when
-    Name :: atom(),
-    Arity :: arity(),
-    Form :: edb_server_code:form(),
-    Descr :: term().
-check_function_form_is({Name, Arity}, Form, Descr) ->
-    ?assertEqual(function, erl_syntax:type(Form), Descr),
-    ?assertEqual(
-        {Name, Arity},
-        {erl_syntax:atom_value(erl_syntax:function_name(Form)), erl_syntax:function_arity(Form)},
-        Descr
-    ),
     ok.

@@ -16,9 +16,6 @@
 -module(edb_server_code).
 
 -export([fetch_abstract_forms/1]).
--export([find_fun/3]).
--export([find_fun_containing_line/2]).
--export([get_line_span/1]).
 -export([get_call_targets/2]).
 -export([module_source/1]).
 
@@ -90,78 +87,6 @@ fetch_beam_filename(Module) ->
                 ".beam" -> {ok, BeamFile};
                 _ -> {error, dynamically_compiled}
             end
-    end.
-
-%% --------------------------------------------------------------------
-%% Dealing with function forms
-%% --------------------------------------------------------------------
-
--spec find_fun(Name, Arity, Forms) -> {ok, form()} | not_found when
-    Name :: atom(),
-    Arity :: non_neg_integer(),
-    Forms :: forms().
-find_fun(_Name, _Arity, []) ->
-    not_found;
-find_fun(Name, Arity, [Form | Forms]) ->
-    case erl_syntax:type(Form) of
-        function ->
-            FunName = erl_syntax:function_name(Form),
-            FunArity = erl_syntax:function_arity(Form),
-            case erl_syntax:is_atom(FunName, Name) andalso FunArity =:= Arity of
-                true -> {ok, Form};
-                false -> find_fun(Name, Arity, Forms)
-            end;
-        _ ->
-            find_fun(Name, Arity, Forms)
-    end.
-
--spec find_fun_containing_line(Line, Forms) -> {ok, form()} | not_found when
-    Line :: line(),
-    Forms :: forms().
-find_fun_containing_line(_Line, []) ->
-    not_found;
-find_fun_containing_line(Line, [Form, NextForm | Forms]) ->
-    case erl_syntax:type(Form) of
-        function ->
-            NextFormLine = form_line(NextForm),
-            case NextFormLine > Line of
-                true ->
-                    %% Next form starts after Line, so we found the function
-                    {ok, Form};
-                false ->
-                    find_fun_containing_line(Line, [NextForm | Forms])
-            end;
-        _ ->
-            %% Not a function form, so skip it
-            find_fun_containing_line(Line, [NextForm | Forms])
-    end.
-
-%% --------------------------------------------------------------------
-%% Spans
-%% --------------------------------------------------------------------
-
--spec get_line_span(Form) -> {line(), line()} when
-    Form :: form().
-get_line_span(Form) ->
-    case
-        erl_parse:fold_anno(
-            fun(Anno, {MinLine, MaxLine}) ->
-                case erl_anno:line(Anno) of
-                    0 ->
-                        % Line information is somehow missing on this ast node, ignore
-                        {MinLine, MaxLine};
-                    AnnoLine ->
-                        {min(AnnoLine, MinLine), max(AnnoLine, MaxLine)}
-                end
-            end,
-            {infinity, 0},
-            Form
-        )
-    of
-        %% fold_anno has a type that doesn't enforce accumulator type being preserved
-        %% so we have to do this
-        {MinLine, MaxLine} when is_integer(MinLine), is_integer(MaxLine) ->
-            {MinLine, MaxLine}
     end.
 
 % --------------------------------------------------------------------

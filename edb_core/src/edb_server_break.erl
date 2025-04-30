@@ -266,9 +266,7 @@ prepare_for_stepping_in(Pid, Breakpoints0) ->
                         {ok, Breakpoints1} ->
                             RelevantFrames = StackFrames,
                             Types = [on_exc_handler || _ <- RelevantFrames],
-                            add_steps_on_stack_frames(
-                                Pid, RelevantFrames, Addrs, Types, Breakpoints1
-                            )
+                            add_steps_on_stack_frames(Pid, RelevantFrames, Addrs, Types, Breakpoints1)
                     end
             end
     end.
@@ -286,27 +284,25 @@ add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
         {error, _} ->
             {error, {call_target, {module_not_found, Mod}}};
         {module, Mod} ->
-            case edb_server_code:fetch_abstract_forms(Mod) of
-                {error, _} = Error ->
-                    Error;
-                {ok, ModForms} ->
-                    case edb_server_code:find_fun(Fun, Arity, ModForms) of
-                        not_found ->
-                            {error, {call_target, {function_not_found, TargetMFA}}};
-                        {ok, FunForm} ->
-                            BasePatterns = [
-                                % Base pattern for non-tail-calls
-                                [CurrentMFA | tl(Addrs)],
+            case erl_debugger:breakpoints(Mod, Fun, Arity) of
+                {error, {badkey, Mod}} ->
+                    % Mod deleted concurrently?
+                    {error, {cannot_breakpoint, Mod}};
+                {error, {badkey, {Fun, Arity}}} ->
+                    {error, {call_target, {function_not_found, TargetMFA}}};
+                {ok, _} ->
+                    BasePatterns = [
+                        % Base pattern for non-tail-calls
+                        [CurrentMFA | tl(Addrs)],
 
-                                % Base pattern for tail-calls
-                                tl(Addrs)
-                            ],
-                            case add_steps_on_function(Pid, TargetMFA, FunForm, BasePatterns, Breakpoints0) of
-                                no_breakpoint_set ->
-                                    {error, {cannot_breakpoint, Mod}};
-                                Result ->
-                                    Result
-                            end
+                        % Base pattern for tail-calls
+                        tl(Addrs)
+                    ],
+                    case add_steps_on_function(Pid, TargetMFA, BasePatterns, Breakpoints0) of
+                        no_breakpoint_set ->
+                            {error, {cannot_breakpoint, Mod}};
+                        Result ->
+                            Result
                     end
             end
     end.
@@ -318,7 +314,7 @@ when
     FrameAddrs :: call_stack_addrs(),
     Frames :: [erl_debugger:stack_frame()],
     Types :: [on_any_required | on_any | on_exc_handler],
-    Error :: no_abstract_code | {cannot_breakpoint, module()} | {beam_analysis, term()}.
+    Error :: {cannot_breakpoint, module()}.
 add_steps_on_stack_frames(
     Pid, [TopFrame | MoreFrames], FrameAddrs = [_ | MoreFrameAddrs], [Type | MoreTypes], Breakpoints0
 ) ->
@@ -332,24 +328,18 @@ add_steps_on_stack_frames(
         skipped when Type =:= on_any_required ->
             edb_server:invariant_violation(stepping_from_unbreakable_frame);
         Failure when Failure =:= skipped; Failure =:= no_breakpoint_set ->
-            add_steps_on_stack_frames(Pid, MoreFrames, MoreFrameAddrs, MoreTypes, Breakpoints0);
-        {error, {beam_analysis, dynamically_compiled}} when Type /= on_any_required ->
-            % Dynamically compiled code on the stack (no beam file available), let's not fail
-            add_steps_on_stack_frames(Pid, MoreFrames, MoreFrameAddrs, MoreTypes, Breakpoints0);
-        {error, Error} ->
-            {error, Error}
+            add_steps_on_stack_frames(Pid, MoreFrames, MoreFrameAddrs, MoreTypes, Breakpoints0)
     end;
 add_steps_on_stack_frames(_Pid, [], [], [], Breakpoints) ->
     {ok, Breakpoints}.
 
 -spec add_steps_on_stack_frame(Pid, TopFrame, FrameAddrs, Type, breakpoints()) ->
-    {ok, breakpoints()} | no_breakpoint_set | skipped | {error, Error}
+    {ok, breakpoints()} | no_breakpoint_set | skipped
 when
     Pid :: pid(),
     TopFrame :: erl_debugger:stack_frame(),
     FrameAddrs :: call_stack_addrs(),
-    Type :: on_any_required | on_any | on_exc_handler,
-    Error :: no_abstract_code | {beam_analysis, term()}.
+    Type :: on_any_required | on_any | on_exc_handler.
 add_steps_on_stack_frame(Pid, Frame = {_, #{function := MFA, line := Line}, _}, FrameAddrs, Type, Breakpoints) when
     is_tuple(MFA), is_integer(Line)
 ->
@@ -358,54 +348,44 @@ add_steps_on_stack_frame(Pid, Frame = {_, #{function := MFA, line := Line}, _}, 
         true ->
             skipped;
         false ->
-            {Module, _, _} = MFA,
-            case edb_server_code:fetch_abstract_forms(Module) of
-                {error, _} = Error ->
-                    Error;
-                {ok, Forms} ->
-                    case edb_server_code:find_fun_containing_line(Line, Forms) of
-                        {ok, Form} ->
-                            BasePatterns = [tl(FrameAddrs)],
-                            add_steps_on_function(Pid, MFA, Form, BasePatterns, Breakpoints);
-                        not_found ->
-                            {error, {beam_analysis, {invalid_line, Line}}}
-                    end
-            end
+            BasePatterns = [tl(FrameAddrs)],
+            add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints)
     end;
 add_steps_on_stack_frame(_Pid, _Addrs, _TopFrame, _Type, _Breakpoints) ->
     % no line-number information or not a user function
     skipped.
 
--spec add_steps_on_function(Pid, MFA, FunForm, BasePatterns, breakpoints()) ->
+-spec add_steps_on_function(Pid, MFA, BasePatterns, breakpoints()) ->
     {ok, breakpoints()} | no_breakpoint_set
 when
     Pid :: pid(),
     MFA :: mfa(),
-    FunForm :: edb_server_code:form(),
     BasePatterns :: [call_stack_pattern()].
-add_steps_on_function(Pid, MFA, FunForm, BasePatterns, Breakpoints0) ->
-    {From, To} = edb_server_code:get_line_span(FunForm),
-    Lines = lists:seq(From, To),
+add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints0) ->
+    {Module, Fun, Arity} = MFA,
+    case erl_debugger:breakpoints(Module, Fun, Arity) of
+        {error, {badkey, _}} ->
+            no_breakpoint_set;
+        {ok, BreakableLines} ->
+            Patterns = [[MFA | BasePattern] || BasePattern <- BasePatterns],
 
-    {Module, _, _} = MFA,
-    Patterns = [[MFA | BasePattern] || BasePattern <- BasePatterns],
+            {Breakpoints1, SomeBreakpointSet} = maps:fold(
+                fun(Line1, _, Acc0 = {AccBreakpoints0, _}) ->
+                    case add_step(Pid, Patterns, Module, Line1, AccBreakpoints0) of
+                        no_breakpoint_set ->
+                            Acc0;
+                        {ok, AccBreakpoints1} ->
+                            {AccBreakpoints1, true}
+                    end
+                end,
+                {Breakpoints0, false},
+                BreakableLines
+            ),
 
-    {Breakpoints1, SomeBreakpointSet} = lists:foldl(
-        fun(Line1, Acc0 = {AccBreakpoints0, _}) ->
-            case add_step(Pid, Patterns, Module, Line1, AccBreakpoints0) of
-                no_breakpoint_set ->
-                    Acc0;
-                {ok, AccBreakpoints1} ->
-                    {AccBreakpoints1, true}
+            case SomeBreakpointSet of
+                true -> {ok, Breakpoints1};
+                false -> no_breakpoint_set
             end
-        end,
-        {Breakpoints0, false},
-        Lines
-    ),
-
-    case SomeBreakpointSet of
-        true -> {ok, Breakpoints1};
-        false -> no_breakpoint_set
     end.
 
 -spec add_step(Pid, Patterns, Module, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
