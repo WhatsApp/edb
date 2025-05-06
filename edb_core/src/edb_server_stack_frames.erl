@@ -51,7 +51,9 @@ raw_user_stack_frames(Pid) ->
         RawFrames -> user_frames_only(RawFrames)
     end.
 
-%% @doc Remove frames that are introduced due to handling of breakpoints, etc.
+-doc """
+Remove frames that are introduced due to handling of breakpoints, etc.
+""".
 -spec user_frames_only(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].
 user_frames_only(RawFrames) ->
     lists:nthtail(non_user_frames_count(RawFrames, 0), RawFrames).
@@ -67,7 +69,9 @@ non_user_frames_count([{_FrameNo, '<breakpoint>', _} | _RawFrames], Count) ->
 non_user_frames_count([_ | RawFrames], Count) ->
     non_user_frames_count(RawFrames, Count + 1).
 
-%% @doc The "bottom" frame a terminator like `<terminate process normally>', usually not useful to the user
+-doc """
+The "bottom" frame a terminator like `<terminate process normally>`, usually not useful to the user
+""".
 -spec without_bottom_terminator_frame(RawFrames) -> RawFrames when RawFrames :: [erl_debugger:stack_frame()].
 without_bottom_terminator_frame(RawFrames) ->
     without_bottom_terminator_frame(RawFrames, []).

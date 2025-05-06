@@ -148,19 +148,20 @@ subscribe() ->
 unsubscribe(Subscription) ->
     call({remove_event_subscription, Subscription}).
 
-%% @doc Returns a host that is safe to use as a node shortname.
-%%
-%% Normally, net_kernel uses `inet:gethostname/0' to get the hostname, when
-%% building an sname. This is problematic in cases where you have a fleet
-%% of hosts and the naming convention is `nnn.my.fleet.net' where `nnn' is
-%% an integer. In this case, `inet:gethostname/0' will return `nnn', so you
-%% get a node name like `foo@nnn', but if you then try to connect to this
-%% node, inet_tcp_dist will end up calling `inet:getaddr/2' on `nnn', which
-%% will incorrectly interpret `nnn' as an IP address and the connection will
-%% of course fail.
-%%
-%% So let's try a couple of options and validate that they can be resolved
-%% properly.
+-doc """
+Returns a host that is safe to use as a node shortname.
+Normally, net_kernel uses `inet:gethostname/0` to get the hostname, when
+building an sname. This is problematic in cases where you have a fleet
+of hosts and the naming convention is `nnn.my.fleet.net` where `nnn` is
+an integer. In this case, `inet:gethostname/0` will return `nnn`, so you
+get a node name like `foo@nnn`, but if you then try to connect to this
+node, inet_tcp_dist will end up calling `inet:getaddr/2` on `nnn`, which
+will incorrectly interpret `nnn` as an IP address and the connection will
+of course fail.
+
+So let's try a couple of options and validate that they can be resolved
+properly.
+""".
 -spec safe_sname_hostname() -> atom().
 safe_sname_hostname() ->
     Candidates = [

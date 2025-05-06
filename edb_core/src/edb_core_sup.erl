@@ -11,16 +11,15 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%%-------------------------------------------------------------------
-%% @doc edb_core top level supervisor.
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_core_sup).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+edb_core top level supervisor.
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(supervisor).

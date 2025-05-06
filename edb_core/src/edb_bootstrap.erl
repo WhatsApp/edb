@@ -13,12 +13,14 @@
 %% limitations under the License.
 %% % @format
 %%
-%% @doc Code needed to initialize a debuggee node on attach.
 
 -module(edb_bootstrap).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+Code needed to initialize a debuggee node on attach.
+""".
 -compile(warn_missing_spec_all).
 
 -export([bootstrap_debuggee/2]).

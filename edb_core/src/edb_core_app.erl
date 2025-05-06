@@ -11,15 +11,14 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%%-------------------------------------------------------------------
-%% @doc The edb_core application
-%% @end
-%%%-------------------------------------------------------------------
 %% % @format
 -module(edb_core_app).
 
 %% erlfmt:ignore
 % @fb-only
+-moduledoc """
+The edb_core application
+""".
 -compile(warn_missing_spec_all).
 
 -behaviour(application).

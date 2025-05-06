@@ -431,8 +431,10 @@ get_targets_for_step_in(_TopFrame) ->
 %% Execution control
 %% --------------------------------------------------------------------
 
-%% @doc Returns true if the given process is either on an explicit breakpoint or a step breakpoint.
-%% Equivalently, returns true if the given process is on a VM breakpoint.
+-doc """
+Returns true if the given process is either on an explicit breakpoint or a step breakpoint.
+Equivalently, returns true if the given process is on a VM breakpoint.
+""".
 -spec is_process_trapped(Pid, Breakpoints) -> boolean() when
     Pid :: pid(),
     Breakpoints :: breakpoints().
