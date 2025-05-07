@@ -228,6 +228,7 @@ stack_frame_slot_content({SlotNo, {too_large, _Size}}, MaxSize, {Pid, FrameId}) 
     %  1. it can't be a `catch` since we got too_large, and
     %  2. it won't be too_large since we know MaxSize >= Size
     {value, _Val} = erl_debugger:peek_stack_frame_slot(Pid, FrameId, SlotNo, MaxSize);
+% eqwalizer:fixme - uncovered clause T223627345
 stack_frame_slot_content({_SlotNo, {'catch', {MFA, Line}}}, _MaxSize, _SourceFrame) ->
     {'catch', {MFA, {line, Line}}}.
 
