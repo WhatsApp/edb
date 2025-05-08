@@ -268,12 +268,11 @@ send(IO, Data) ->
     IO ! {self(), {command, [Data]}},
     ok.
 
--spec handle_message_async(edb_dap:request() | edb_dap:response()) -> ok.
+-spec handle_message_async(edb_dap:request() | edb_dap:response() | edb_dap:event()) -> ok.
 handle_message_async(#{type := request} = Message) ->
     cast(self(), {request_received, Message});
 handle_message_async(#{type := response} = Message) ->
     cast(self(), {response_received, Message});
-% eqwalizer:fixme - uncovered clause T223627345
 handle_message_async(#{type := event} = Message) ->
     cast(self(), {event_received, Message}).
 
