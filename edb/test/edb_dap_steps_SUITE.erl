@@ -265,7 +265,7 @@ test_step_in_errors_on_wrong_target(Config) ->
             command := ~"stepIn",
             success := false,
             body := #{
-                error := #{format := ~"No call found in expression of type 'atom'"}
+                error := #{format := ~"Couldn't determine call target"}
             }
         },
         StepInResponse

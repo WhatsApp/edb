@@ -37,5 +37,11 @@ call_under_try() ->
 call_under_binop() ->
     foo(42) + bar(43).
 
+call_local_closure() ->
+    F = fun(X) ->
+        X + 1
+    end,
+    F(42).
+
 bar(Y) ->
     Y * 2.

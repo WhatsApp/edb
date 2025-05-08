@@ -80,6 +80,7 @@
 -export([test_step_in_case_statement/1]).
 -export([test_step_in_try_statement/1]).
 -export([test_step_in_binop/1]).
+-export([test_step_in_local_closure/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 -export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
@@ -167,6 +168,7 @@ groups() ->
             test_step_in_case_statement,
             test_step_in_try_statement,
             test_step_in_binop,
+            test_step_in_local_closure,
 
             test_step_in_fails_if_non_fun_target,
             test_step_in_fails_if_fun_not_found,
@@ -2242,6 +2244,11 @@ test_step_in_binop(_Config) ->
     LineCallingFoo = 38,
     gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo).
 
+test_step_in_local_closure(_Config) ->
+    Fun = call_local_closure,
+    LineCallingClosure = 44,
+    {ok, #{mfa := {test_step_in, _, 1}, line := 42}} = gen_test_step_in(Fun, LineCallingClosure).
+
 test_step_in_fails_if_non_fun_target(_Config) ->
     M = test_step_in,
     Fun = call_static_local,
@@ -2257,7 +2264,7 @@ test_step_in_fails_if_non_fun_target(_Config) ->
     {ok, [#{mfa := {M, Fun, 0}, line := 10}]} = edb:stack_frames(Pid),
 
     % We can't step-in on the atom `ok`
-    {error, {call_target, {no_call_in_expr, atom}}} = edb:step_in(Pid),
+    {error, {call_target, not_found}} = edb:step_in(Pid),
     ok.
 
 test_step_in_fails_if_fun_not_found(Config) ->
@@ -2336,28 +2343,34 @@ test_step_in_loads_module_if_necessary(Config) ->
 
     ok.
 
+-spec gen_test_step_in_success_calling_foo0(Fun :: atom(), LineCallingFoo :: edb:line()) -> ok.
 gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo) ->
+    {ok, #{mfa := {test_step_in, foo, 1}, line := 6}} = gen_test_step_in(Fun, LineCallingFoo),
+    ok.
+
+-spec gen_test_step_in(Fun :: atom(), LineOfCall :: edb:line()) -> {ok, edb:stack_frame()}.
+gen_test_step_in(Fun, LineOfCall) ->
     M = test_step_in,
 
     % Add a breakpoint before the call to foo/1
-    ok = edb:add_breakpoint(M, LineCallingFoo),
+    ok = edb:add_breakpoint(M, LineOfCall),
 
     % Spawn a process that will hit this breakpoint
     Pid = erlang:spawn(M, Fun, []),
     {ok, paused} = edb:wait(),
 
     % Sanity check, we are on the expected breakpoint
-    {ok, [#{mfa := {M, Fun, 0}, line := LineCallingFoo}]} = edb:stack_frames(Pid),
+    {ok, [#{mfa := {M, Fun, 0}, line := LineOfCall}]} = edb:stack_frames(Pid),
 
     % Remove the breakpoint, as we only want to stop due to stepping
-    ok = edb:clear_breakpoint(M, LineCallingFoo),
+    ok = edb:clear_breakpoint(M, LineOfCall),
 
     % Step over, we want to be at the start of foo/1
     ok = edb:step_in(Pid),
     {ok, paused} = edb:wait(),
-    {ok, [#{mfa := {M, foo, 1}, line := 6} | _]} = edb:stack_frames(Pid),
 
-    ok.
+    {ok, [StackFrame | _]} = edb:stack_frames(Pid),
+    {ok, StackFrame}.
 
 %% ------------------------------------------------------------------
 %% Test cases for test_step_out fixture

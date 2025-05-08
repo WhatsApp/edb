@@ -98,14 +98,10 @@ A breakpoint may not be added for various reasons:
 
 -type step_in_error() ::
     step_error()
-    | {call_target, call_target_error()}
-    | no_abstract_code
-    | {beam_analysis, term()}.
+    | {call_target, call_target_error()}.
 
 -type call_target_error() ::
     not_found
-    | {no_call_in_expr, Type :: atom()}
-    | unsupported_operator
     | {module_not_found, module()}
     | {function_not_found, mfa()}.
 
