@@ -249,12 +249,24 @@ prepare_for_stepping_in(Pid, Breakpoints0) ->
 
                     AddStepsOnStepInTargetsResult = lists:foldl(
                         fun
-                            (_TargetMFA, {{error, _}, _} = Error) ->
+                            (_TargetMFA, {{error, _}, _BreakpointsN} = Error) ->
                                 Error;
                             (TargetMFA, {ok, BreakpointsN}) ->
                                 case add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, BreakpointsN) of
-                                    Error = {error, _} -> {Error, BreakpointsN};
-                                    OkResult -> OkResult
+                                    {error, {cannot_breakpoint, erlang} = Error} ->
+                                        case lists:search(fun({M, _, _}) -> M /= erlang end, TargetMFAs) of
+                                            {value, _} ->
+                                                % Corner-case: the compiler may inject implicit calls to functions in the erlang
+                                                % module, like `erlang:'!'/2` or `erlang:error/1` and it may be that OTP is not
+                                                % built with +beam_debug_info. Let's just ignore those failures
+                                                {ok, BreakpointsN};
+                                            false ->
+                                                Error
+                                        end;
+                                    Error = {error, _} ->
+                                        {Error, BreakpointsN};
+                                    OkResult ->
+                                        OkResult
                                 end
                         end,
                         {ok, Breakpoints0},
