@@ -129,7 +129,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
                         case edb_server_code:get_debug_info(M, Line) of
                             {error, _} ->
                                 #{};
-                            {ok, VarsDebugInfo} ->
+                            {ok, #{vars := VarsDebugInfo}} ->
                                 #{
                                     vars => maps:map(
                                         fun
