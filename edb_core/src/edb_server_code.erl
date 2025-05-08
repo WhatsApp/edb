@@ -15,18 +15,27 @@
 
 -module(edb_server_code).
 
+%% erlfmt:ignore
+% @fb-only
+-compile(warn_missing_spec_all).
+
+-export([get_debug_info/2]).
 -export([fetch_abstract_forms/1]).
 -export([get_call_targets/2]).
 -export([module_source/1]).
 
--compile(warn_missing_spec_all).
-
-%% erlfmt:ignore
-% @fb-only
+% erlint-ignore dialyzer_override
+-dialyzer({nowarn_function, [get_debug_info/2]}).
+-ignore_xref([{code, get_debug_info, 1}]).
 
 %% --------------------------------------------------------------------
 %% Types
 %% --------------------------------------------------------------------
+
+-export_type([var_debug_info/0]).
+
+-type var_debug_info() ::
+    {x, non_neg_integer()} | {y, non_neg_integer()} | {value, term()}.
 
 -type line() :: edb:line().
 
@@ -34,6 +43,43 @@
 -export_type([form/0, forms/0]).
 -type form() :: erl_parse:abstract_form() | erl_parse:form_info().
 -type forms() :: [form()].
+
+%% --------------------------------------------------------------------
+%% Debug info
+%% --------------------------------------------------------------------
+
+-spec get_debug_info(Module, Line) -> {ok, Result} | {error, Reason} when
+    Module :: module(),
+    Line :: pos_integer(),
+    Reason :: not_found | no_debug_info | line_not_found,
+    Result :: #{binary() => var_debug_info()}.
+get_debug_info(Module, Line) when is_atom(Module) ->
+    try
+        % elp:ignore W0017 function available only on patched version of OTP
+        code:get_debug_info(Module)
+    of
+        none ->
+            {error, no_debug_info};
+        DebugInfo when is_list(DebugInfo) ->
+            case lists:keyfind(Line, 1, DebugInfo) of
+                false ->
+                    {error, line_not_found};
+                {Line, #{vars := VarValues}} ->
+                    {ok,
+                        #{
+                            Var => assert_is_var_debug_info(Val)
+                         || {Var, Val} <- VarValues, is_binary(Var)
+                        }}
+            end
+    catch
+        _:badarg ->
+            {error, not_found}
+    end.
+
+-spec assert_is_var_debug_info(term()) -> var_debug_info().
+assert_is_var_debug_info(X = {x, N}) when is_integer(N) -> X;
+assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
+assert_is_var_debug_info(V = {value, _}) -> V.
 
 %% --------------------------------------------------------------------
 %% fetch_abstract_forms: fetch abstract forms from beam file

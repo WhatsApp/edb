@@ -20,10 +20,6 @@
 
 -moduledoc false.
 
-% erlint-ignore dialyzer_override
--dialyzer({nowarn_function, [get_debug_info/2]}).
--ignore_xref([{code, get_debug_info, 1}]).
-
 -export([raw_stack_frames/1, raw_user_stack_frames/1]).
 -export([user_frames_only/1, without_bottom_terminator_frame/1]).
 -export([stack_frame_vars/5]).
@@ -130,7 +126,7 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
             LocalVars =
                 case FrameFun of
                     #{function := {M, _F, _A}, line := Line} when ResolveLocalVars, is_atom(M), is_integer(Line) ->
-                        case get_debug_info(M, Line) of
+                        case edb_server_code:get_debug_info(M, Line) of
                             {error, _} ->
                                 #{};
                             {ok, VarsDebugInfo} ->
@@ -239,6 +235,17 @@ is_catch_slot(_) -> false.
 assert_is_value(V = {value, _}) -> V;
 assert_is_value(V = {too_large, _, _}) -> V.
 
+-spec has_exception_handler(Frame) -> boolean() when
+    Frame :: erl_debugger:stack_frame().
+has_exception_handler({_, _, #{slots := Slots}}) ->
+    lists:any(
+        fun
+            ({'catch', _}) -> true;
+            (_) -> false
+        end,
+        Slots
+    ).
+
 %% X-register helpers
 
 -spec xreg_value(Pid, XRegNo, MaxTermSize) -> Result when
@@ -253,52 +260,3 @@ xreg_value(Pid, XRegNo, MaxTermSize) ->
         {too_large, Size} ->
             {too_large, Size, MaxTermSize}
     end.
-
-%% Debug-info helpers
-
--type var_debug_info() ::
-    {x, non_neg_integer()} | {y, non_neg_integer()} | {value, term()}.
-
--spec get_debug_info(Module, Line) -> {ok, Result} | {error, Reason} when
-    Module :: module(),
-    Line :: pos_integer(),
-    Reason :: not_found | no_debug_info | line_not_found,
-    Result :: #{binary() => var_debug_info()}.
-get_debug_info(Module, Line) when is_atom(Module) ->
-    try
-        % elp:ignore W0017 function available only on patched version of OTP
-        code:get_debug_info(Module)
-    of
-        none ->
-            {error, no_debug_info};
-        DebugInfo when is_list(DebugInfo) ->
-            case lists:keyfind(Line, 1, DebugInfo) of
-                false ->
-                    {error, line_not_found};
-                {Line, #{vars := VarValues}} ->
-                    {ok,
-                        #{
-                            Var => assert_is_var_debug_info(Val)
-                         || {Var, Val} <- VarValues, is_binary(Var)
-                        }}
-            end
-    catch
-        _:badarg ->
-            {error, not_found}
-    end.
-
--spec assert_is_var_debug_info(term()) -> var_debug_info().
-assert_is_var_debug_info(X = {x, N}) when is_integer(N) -> X;
-assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
-assert_is_var_debug_info(V = {value, _}) -> V.
-
--spec has_exception_handler(Frame) -> boolean() when
-    Frame :: erl_debugger:stack_frame().
-has_exception_handler({_, _, #{slots := Slots}}) ->
-    lists:any(
-        fun
-            ({'catch', _}) -> true;
-            (_) -> false
-        end,
-        Slots
-    ).
