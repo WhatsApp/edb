@@ -27,6 +27,11 @@ Code needed to initialize a debuggee node on attach.
 
 -define(BOOTSTRAP_FAILURE_MARKER, '__edb_bootstrap_failure__').
 
+%% erlfmt:ignore-begin
+-define(MODULES_USED_FOR_META_DEBUGGING, [waaat]).  % fb-only
+-define(MODULES_USED_FOR_META_DEBUGGING, []). % @oss-only
+%% erlfmt:ignore-end
+
 -spec bootstrap_debuggee(Debugger, PauseAction) -> ok | {error, Reason} when
     Debugger :: node(),
     PauseAction :: pause | keep_running,
@@ -144,11 +149,12 @@ bootstrap_failure_reason({?BOOTSTRAP_FAILURE_MARKER, Reason}) ->
 get_object_code__debugger_side() ->
     {ok, AllAppModules} = application:get_key(edb_core, modules),
     AppModulesToSkip = (debugger_only_modules())#{?MODULE => []},
+    MetaDebuggingModules = [M || M <- ?MODULES_USED_FOR_META_DEBUGGING, {module, _} <- [code:ensure_loaded(M)]],
     [
         case code:get_object_code(Module) of
             Res = {_, _, _} -> Res
         end
-     || Module <- AllAppModules,
+     || Module <- AllAppModules ++ MetaDebuggingModules,
         not maps:is_key(Module, AppModulesToSkip)
     ].
 
