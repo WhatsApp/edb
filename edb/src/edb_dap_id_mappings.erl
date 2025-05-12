@@ -19,7 +19,7 @@
 %% erlfmt:ignore
 % @fb-only
 -moduledoc """
-An mapper of IDs for the debug adapter
+A mapper of IDs for the debug adapter
 
 The DAP protocol expects numeric ids for threads, frames, scopes, etc. These ids
 are represented as number() in the JSON specification, and are expected to fit
@@ -29,7 +29,6 @@ pauses. The specification recommends adapters to reset them on `continue` reques
 For more details see https://microsoft.github.io/debug-adapter-protocol/overview
 
 This module implements the mapping fo PIDs to thread-ids, etc, generically.
-
 """.
 -compile(warn_missing_spec_all).
 
@@ -39,7 +38,7 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export([start_link_thread_ids_server/0, start_link_frame_ids_server/0, start_link_var_reference_ids_server/0]).
 -export([pid_to_thread_id/1, pids_to_thread_ids/1, thread_id_to_pid/1]).
 -export([pid_frame_to_frame_id/1, frame_id_to_pid_frame/1]).
--export([var_reference_to_frame_scope_or_structured/1, frame_scope_or_structured_to_var_reference/1]).
+-export([vars_reference_to_vars_info/1, vars_info_to_vars_ref/1]).
 -export([reset/0]).
 
 %% gen_server callbacks
@@ -53,8 +52,8 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export_type([id/0]).
 -export_type([pid_frame/0]).
 -export_type([frame_scope/0]).
--export_type([structured/0]).
--export_type([frame_scope_or_structured/0]).
+-export_type([vars_info/0]).
+-export_type([structure/0]).
 
 -doc """
 An integer that fits in a 64-bit float.
@@ -64,15 +63,24 @@ This is the requirement the DAP spec puts on ids.
 
 -type pid_frame() :: #{pid := pid(), frame_no := non_neg_integer()}.
 -type scope() :: locals | registers | messages.
--type frame_scope_or_structured() :: frame_scope() | structured().
+-type vars_info() ::
+    #{
+        type := scope,
+        frame := id(),
+        scope := scope()
+    }
+    | #{
+        type := structure,
+        structure := structure()
+    }.
 -type frame_scope() :: #{frame := id(), scope := scope()}.
--type structured() :: #{elements := [{binary(), edb:value()}]}.
+-type structure() :: #{elements := [{binary(), edb:value()}]}.
 
 -type state(A) :: id_mapping(A).
 
 -define(THREAD_IDS_SERVER, edb_dap_thread_id_mappings).
 -define(FRAME_IDS_SERVER, edb_dap_frame_id_mappings).
--define(VAR_REFERENCE_IDS_SERVER, edb_dap_var_reference_id_mappings).
+-define(VARS_REFS_SERVER, edb_dap_vars_ref_mappings).
 
 %%%---------------------------------------------------------------------------------
 %%% API
@@ -88,7 +96,7 @@ start_link_frame_ids_server() ->
 
 -spec start_link_var_reference_ids_server() -> gen_server:start_ret().
 start_link_var_reference_ids_server() ->
-    gen_server:start_link({local, ?VAR_REFERENCE_IDS_SERVER}, ?MODULE, ?VAR_REFERENCE_IDS_SERVER, []).
+    gen_server:start_link({local, ?VARS_REFS_SERVER}, ?MODULE, ?VARS_REFS_SERVER, []).
 
 -spec pid_to_thread_id(pid()) -> id().
 pid_to_thread_id(Pid) when is_pid(Pid) ->
@@ -110,17 +118,13 @@ pid_frame_to_frame_id(FrameId = #{pid := Pid, frame_no := No}) when is_pid(Pid),
 frame_id_to_pid_frame(Id) when is_integer(Id) ->
     gen_server:call(?FRAME_IDS_SERVER, {from_id, Id}).
 
--spec frame_scope_or_structured_to_var_reference(frame_scope_or_structured()) -> id().
-frame_scope_or_structured_to_var_reference(#{elements := Elements} = Structured) when is_list(Elements) ->
-    gen_server:call(?VAR_REFERENCE_IDS_SERVER, {get_id, Structured});
-frame_scope_or_structured_to_var_reference(#{frame := Id, scope := Scope} = FrameScope) when
-    is_integer(Id), is_atom(Scope)
-->
-    gen_server:call(?VAR_REFERENCE_IDS_SERVER, {get_id, FrameScope}).
+-spec vars_info_to_vars_ref(vars_info()) -> id().
+vars_info_to_vars_ref(VarsInfo) when is_map(VarsInfo) ->
+    gen_server:call(?VARS_REFS_SERVER, {get_id, VarsInfo}).
 
--spec var_reference_to_frame_scope_or_structured(id()) -> {ok, frame_scope_or_structured()} | {error, not_found}.
-var_reference_to_frame_scope_or_structured(VarReference) when is_integer(VarReference) ->
-    gen_server:call(?VAR_REFERENCE_IDS_SERVER, {from_id, VarReference}).
+-spec vars_reference_to_vars_info(id()) -> {ok, vars_info()} | {error, not_found}.
+vars_reference_to_vars_info(VarReference) when is_integer(VarReference) ->
+    gen_server:call(?VARS_REFS_SERVER, {from_id, VarReference}).
 
 -spec reset() -> ok.
 reset() ->
@@ -134,7 +138,7 @@ reset() ->
 -spec init
     (?THREAD_IDS_SERVER) -> {ok, state(pid())};
     (?FRAME_IDS_SERVER) -> {ok, state(pid_frame())};
-    (?VAR_REFERENCE_IDS_SERVER) -> {ok, state(id())}.
+    (?VARS_REFS_SERVER) -> {ok, state(id())}.
 init(ServerType) ->
     Validator =
         case ServerType of
@@ -150,12 +154,16 @@ init(ServerType) ->
                     (_) ->
                         invalid
                 end;
-            ?VAR_REFERENCE_IDS_SERVER ->
+            ?VARS_REFS_SERVER ->
                 fun
-                    (VarReference = #{frame := FrameId, scope := Scope}) when is_integer(FrameId), is_atom(Scope) ->
-                        {ok, VarReference};
-                    (VarReference = #{elements := Elements}) when is_list(Elements) ->
-                        {ok, VarReference};
+                    (VarsRef = #{type := scope, frame := FrameId, scope := Scope}) when
+                        is_integer(FrameId), is_atom(Scope)
+                    ->
+                        {ok, VarsRef};
+                    (VarsRef = #{type := structure, structure := #{elements := Elements}}) when
+                        is_list(Elements)
+                    ->
+                        {ok, VarsRef};
                     (_) ->
                         invalid
                 end

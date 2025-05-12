@@ -229,8 +229,8 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
-    case variable_ref_to_frame_scope_or_structured(VariablesReference) of
-        #{frame := FrameId, scope := Scope} ->
+    case variables_reference_to_vars_info(VariablesReference) of
+        #{type := scope, frame := FrameId, scope := Scope} ->
             #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
             case Scope of
                 messages ->
@@ -240,8 +240,8 @@ handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
                 registers ->
                     handle_registers_scope(Pid, FrameNo)
             end;
-        #{elements := _} = Structured ->
-            handle_structured(Structured)
+        #{type := structure, structure := Structure} ->
+            handle_structure(Structure)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
@@ -284,9 +284,9 @@ handle_registers_scope(Pid, FrameNo) ->
         XRegs ++ YRegs
     end).
 
--spec handle_structured(Structured) -> edb_dap_request:reaction(response_body()) when
-    Structured :: edb_dap_id_mappings:structured().
-handle_structured(#{elements := Elements}) ->
+-spec handle_structure(Structure) -> edb_dap_request:reaction(response_body()) when
+    Structure :: edb_dap_id_mappings:structure().
+handle_structure(#{elements := Elements}) ->
     Variables = [variable(Name, Value) || {Name, Value} <- Elements],
     #{response => edb_dap_request:success(#{variables => Variables})}.
 
@@ -308,10 +308,10 @@ stack_frames_scope(Pid, FrameNo, BuildVariables) ->
             #{response => edb_dap_request:success(#{variables => Variables})}
     end.
 
--spec variable_ref_to_frame_scope_or_structured(VarRef) -> edb_dap_id_mappings:frame_scope_or_structured() when
+-spec variables_reference_to_vars_info(VarRef) -> edb_dap_id_mappings:vars_info() when
     VarRef :: edb_dap_id_mappings:id().
-variable_ref_to_frame_scope_or_structured(VarRef) ->
-    case edb_dap_id_mappings:var_reference_to_frame_scope_or_structured(VarRef) of
+variables_reference_to_vars_info(VarRef) ->
+    case edb_dap_id_mappings:vars_reference_to_vars_info(VarRef) of
         {ok, FrameScope} -> FrameScope;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
     end.
@@ -344,25 +344,28 @@ variable(Name, Value) ->
 
 -spec variables_reference(edb:value()) -> variables_reference().
 variables_reference({value, Value}) ->
-    case try_to_structured(Value) of
-        {ok, Structured} ->
-            edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(Structured);
+    case try_to_structure(Value) of
+        {ok, Structure} ->
+            edb_dap_id_mappings:vars_info_to_vars_ref(#{
+                type => structure,
+                structure => Structure
+            });
         not_structured ->
             0
     end;
 variables_reference(_) ->
     0.
 
--spec try_to_structured(term()) -> {ok, edb_dap_id_mappings:structured()} | not_structured.
-try_to_structured(L) when is_list(L) ->
+-spec try_to_structure(term()) -> {ok, edb_dap_id_mappings:structure()} | not_structured.
+try_to_structure(L) when is_list(L) ->
     Elements = [{integer_to_binary(Idx), {value, Value}} || {Idx, Value} <- lists:enumerate(L)],
     {ok, #{elements => Elements}};
-try_to_structured(T) when is_tuple(T) ->
-    try_to_structured(tuple_to_list(T));
-try_to_structured(M) when is_map(M) ->
+try_to_structure(T) when is_tuple(T) ->
+    try_to_structure(tuple_to_list(T));
+try_to_structure(M) when is_map(M) ->
     Elements = [{variable_value({value, Name}), {value, Value}} || Name := Value <- M],
     {ok, #{elements => lists:sort(Elements)}};
-try_to_structured(_) ->
+try_to_structure(_) ->
     not_structured.
 
 -spec unnamed_variables(binary(), [edb:value()]) -> [variable()].

@@ -62,7 +62,7 @@ init([]) ->
                 start => {edb_dap_id_mappings, start_link_frame_ids_server, []}
             },
             #{
-                id => edb_dap_var_reference_id_mappings,
+                id => edb_dap_vars_ref_mappings,
                 start => {edb_dap_id_mappings, start_link_var_reference_ids_server, []}
             },
             #{
