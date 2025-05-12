@@ -135,10 +135,20 @@ find() ->
     | {exclude_processes, [procs_spec()]}
     | {unexclude_processes, [procs_spec()]}
     | {stack_frames, pid()}
-    | {stack_frame_vars, pid(), edb:frame_id(), Size :: pos_integer()}.
+    | {stack_frame_vars, pid(), edb:frame_id(), Size :: pos_integer()}
+    | {eval, eval_opts(Result :: term())}.
 
 -type cast_request() ::
     term().
+
+-type eval_opts(Result) ::
+    #{
+        pid := pid(),
+        frame_id := edb:frame_id(),
+        max_term_size := non_neg_integer(),
+        timeout := timeout(),
+        function := fun((Vars :: edb:stack_frame_vars()) -> Result)
+    }.
 
 %%--------------------------------------------------------------------
 %% gen_server callbacks
@@ -291,7 +301,9 @@ dispatch_call({step_over, Pid}, _From, State0) ->
 dispatch_call({step_out, Pid}, _From, State0) ->
     step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping(step_out, Pid, Breakpoints) end, State0);
 dispatch_call({step_in, Pid}, _From, State0) ->
-    step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping_in(Pid, Breakpoints) end, State0).
+    step_impl(fun(Breakpoints) -> edb_server_break:prepare_for_stepping_in(Pid, Breakpoints) end, State0);
+dispatch_call({eval, Opts = #{}}, {CallerPid, _}, State0) ->
+    eval_impl(Opts, CallerPid, State0).
 
 -spec handle_info(Info, State :: state()) -> {noreply, state()} when
     Info :: erl_debugger:event_message() | {'DOWN', reference(), process, pid(), term()}.
@@ -789,32 +801,61 @@ format_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
         line => Line
     }.
 
--spec stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
-    {reply, Response, State1}
-when
+-spec stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) -> {reply, Response, State1} when
     Pid :: pid(),
     FrameId :: edb:frame_id(),
     MaxTermSize :: pos_integer(),
-    Response :: not_paused | undefined | {ok, Result},
     Result :: edb:stack_frame_vars(),
+    Response :: not_paused | undefined | {ok, Result},
     State0 :: state(),
     State1 :: state().
 stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
+    Result = get_stack_frame_vars(Pid, FrameId, MaxTermSize, State0),
+    {reply, Result, State0}.
+
+-spec get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) -> not_paused | undefined | {ok, Result} when
+    Pid :: pid(),
+    FrameId :: edb:frame_id(),
+    MaxTermSize :: pos_integer(),
+    Result :: edb:stack_frame_vars(),
+    State :: state().
+get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) ->
+    case edb_server_stack_frames:raw_stack_frames(Pid) of
+        not_paused ->
+            not_paused;
+        RawFrames ->
+            ResolveLocalVars =
+                case edb_server_stack_frames:user_frames_only(RawFrames) of
+                    [{TopFrameId, _, _} | _] when FrameId =:= TopFrameId ->
+                        edb_server_break:is_process_trapped(Pid, State#state.breakpoints);
+                    _ ->
+                        false
+                end,
+            edb_server_stack_frames:stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, #{
+                resolve_local_vars => ResolveLocalVars
+            })
+    end.
+
+-spec eval_impl(Opts, CallerPid, State0) -> {reply, Response, State1} when
+    Opts :: eval_opts(Result),
+    CallerPid :: pid(),
+    Response :: not_paused | undefined | {ok, Result} | {eval_error, edb:eval_error()},
+    State0 :: state(),
+    State1 :: state().
+eval_impl(Opts, CallerPid, State0) ->
+    #{pid := Pid, frame_id := FrameId, max_term_size := MaxTermSize} = Opts,
     Result =
-        case edb_server_stack_frames:raw_stack_frames(Pid) of
-            not_paused ->
-                not_paused;
-            RawFrames ->
-                ResolveLocalVars =
-                    case edb_server_stack_frames:user_frames_only(RawFrames) of
-                        [{TopFrameId, _, _} | _] when FrameId =:= TopFrameId ->
-                            edb_server_break:is_process_trapped(Pid, State0#state.breakpoints);
-                        _ ->
-                            false
-                    end,
-                edb_server_stack_frames:stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, #{
-                    resolve_local_vars => ResolveLocalVars
-                })
+        case get_stack_frame_vars(Pid, FrameId, MaxTermSize, State0) of
+            {ok, StackFrameVars} ->
+                #{function := F, timeout := Timeout} = Opts,
+                case edb_server_eval:eval(F, StackFrameVars, node(CallerPid), Timeout) of
+                    {failed_to_load_module, _, _} = LoadFailure ->
+                        ?MODULE:raise(error, LoadFailure);
+                    EvalResult ->
+                        EvalResult
+                end;
+            NotOk ->
+                NotOk
         end,
     {reply, Result, State0}.
 

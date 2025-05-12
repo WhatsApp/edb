@@ -46,6 +46,8 @@ The (new!) Erlang debugger
 
 -export([stack_frames/1, stack_frame_vars/2, stack_frame_vars/3]).
 
+-export([eval/1]).
+
 -export([format/2]).
 
 %% -------------------------------------------------------------------
@@ -159,6 +161,12 @@ A breakpoint may not be added for various reasons:
 }.
 -type value() :: {value, term()} | {too_large, Size :: pos_integer(), Max :: pos_integer()}.
 -type catch_handler() :: {'catch', {mfa(), {line, line() | undefined}}}.
+
+-export_type([eval_error/0]).
+-type eval_error() ::
+    timeout
+    | {exception, #{class := error | exit | throw, reason := term(), stacktrace := erlang:stacktrace()}}
+    | {killed, Reason :: term()}.
 
 -export_type([event_envelope/1, event_subscription/0]).
 -export_type([event/0, resumed_event/0, paused_event/0]).
@@ -626,6 +634,48 @@ stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     call_server({stack_frame_vars, Pid, FrameId, MaxTermSize}).
 
 -doc """
+The provided function will be given the requested stack-frame variables of
+the process, and the result of the evaluation, if successful, will be
+returned.
+
+Notice that, if missing, the debuggee node will load the given function's module,
+taking the object code from the caller node. If the function has any other
+dependencies, it is the caller's responsibility to ensure they are available on
+the debuggee.
+""".
+-spec eval(Opts) ->
+    not_paused | undefined | {ok, Result} | {eval_error, eval_error()}
+when
+    Opts :: #{
+        context := {pid(), frame_id()},
+        max_term_size := non_neg_integer(),
+        timeout := timeout(),
+        function := fun((Vars :: stack_frame_vars()) -> Result)
+    }.
+eval(Opts0) ->
+    {{Pid, FrameId}, Opts1} = take_arg(context, Opts0, #{
+        parse => parse_pair(fun parse_pid/1, fun parse_non_neg_integer/1)
+    }),
+    {MaxTermSize, Opts2} = take_arg(max_term_size, Opts1, #{parse => fun parse_non_neg_integer/1}),
+    {Timeout, Opts3} = take_arg(timeout, Opts2, #{parse => fun parse_timeout/1}),
+    {Function, Opts4} = take_arg(function, Opts3, #{parse => fun(F) when is_function(F, 1) -> F end}),
+    ok = no_more_args(Opts4),
+
+    CallTimeout =
+        case Timeout of
+            infinity -> infinity;
+            _ -> max(5_000, 2 * Timeout)
+        end,
+    Opts = #{
+        pid => Pid,
+        frame_id => FrameId,
+        max_term_size => MaxTermSize,
+        timeout => Timeout,
+        function => Function
+    },
+    call_server({eval, Opts}, CallTimeout).
+
+-doc """
 Run `io_lib:format(Format, Args)` on the attached node.
 
 This is useful to get a human-readable representation of terms
@@ -651,9 +701,15 @@ format(Format, Args) when is_list(Args) ->
 
 -spec call_server(Request :: edb_server:call_request()) -> dynamic().
 call_server(Request) ->
+    call_server(Request, 10_000).
+
+-spec call_server(Request, Timeout) -> dynamic() when
+    Request :: edb_server:call_request(),
+    Timeout :: timeout().
+call_server(Request, Timeout) ->
     Node = attached_node(),
     try
-        edb_server:call(Node, Request)
+        edb_server:call(Node, Request, Timeout)
     catch
         exit:{{nodedown, Node}, {gen_server, call, Args}} when is_list(Args) ->
             edb_node_monitor:detach(),
@@ -806,13 +862,24 @@ validate_procs_spec([Spec | MoreSpecs]) ->
 -spec parse_atom(term()) -> atom().
 parse_atom(Atom) when is_atom(Atom) -> Atom.
 
+-spec parse_pid(term()) -> pid().
+parse_pid(Pid) when is_pid(Pid) -> Pid.
+
+-spec parse_non_neg_integer(term()) -> non_neg_integer().
+parse_non_neg_integer(X) when is_integer(X), X >= 0 -> X.
+
 -spec parse_timeout(term()) -> timeout().
 parse_timeout(infinity) -> infinity;
-parse_timeout(Timeout) when is_integer(Timeout), Timeout >= 0 -> Timeout.
+parse_timeout(Timeout) -> parse_non_neg_integer(Timeout).
 
 -spec parse_name_domain(term()) -> longnames | shortnames.
 parse_name_domain(longnames) -> longnames;
 parse_name_domain(shortnames) -> shortnames.
+
+-spec parse_pair(L, R) -> fun((term()) -> {A, B}) when
+    L :: fun((term()) -> A), R :: fun((term()) -> B).
+parse_pair(L, R) ->
+    fun({A, B}) -> {L(A), R(B)} end.
 
 -spec no_more_args(map()) -> ok.
 no_more_args(Opts) ->

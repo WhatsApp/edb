@@ -104,6 +104,12 @@
 -export([test_can_select_process_info_fields/1]).
 -export([test_pid_string_info/1]).
 
+%% Test cases for the eval group
+-export([test_eval_evaluates/1]).
+-export([test_eval_honors_timeout/1]).
+-export([test_eval_reports_exceptions/1]).
+-export([test_eval_reports_being_killed/1]).
+
 %% Test cases for the test_format group
 -export([test_format_works/1]).
 
@@ -195,6 +201,12 @@ groups() ->
             test_can_select_process_info_fields,
             test_pid_string_info
         ]},
+        {test_eval, [
+            test_eval_evaluates,
+            test_eval_honors_timeout,
+            test_eval_reports_exceptions,
+            test_eval_reports_being_killed
+        ]},
         {test_format, [
             test_format_works
         ]}
@@ -210,6 +222,7 @@ all() ->
         {group, test_step_out},
         {group, test_stackframes},
         {group, test_process_info},
+        {group, test_eval},
         {group, test_format}
     ].
 
@@ -3062,6 +3075,162 @@ test_pid_string_info(_Config) ->
     ?assertEqual(
         {ok, #{pid_string => Expected}},
         edb:process_info(Pid, [pid_string])
+    ),
+    ok.
+
+%% ------------------------------------------------------------------
+%% Test cases for eval fixture
+%% ------------------------------------------------------------------
+test_eval_evaluates(Config) ->
+    Module = ?FUNCTION_NAME,
+    ModuleSource = ~"""
+    -module(test_eval_evaluates).           %L01
+    -export([go/1]).                    %L02
+    go(X) ->                            %L03
+        R = aux(X, X * 2),              %L04
+        aux(R, X).                      %L05
+    aux(X, Y) ->                        %L06
+        X + Y.                          %L07
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info]
+    }),
+
+    % Add a breakpoint inside aux/21
+    ok = edb:add_breakpoint(Module, 7),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(Module, go, [42]),
+    {ok, paused} = edb:wait(),
+
+    {ok, Frames} = edb:stack_frames(Pid),
+    FrameIds = [Id || #{id := Id} <- Frames],
+
+    % Sanity-check: We do have frames
+    ?assert(length(FrameIds) > 0),
+
+    FrameVars = [Vars || Id <- FrameIds, {ok, Vars} <- [edb:stack_frame_vars(Pid, Id)]],
+
+    F1 = fun(X) -> X end,
+    F2 = fun maps:size/1,
+
+    Opts0 = #{timeout => infinity, max_term_size => 2048},
+
+    ?assertEqual(
+        [{ok, F1(Var)} || Var <- FrameVars],
+        [edb:eval(Opts0#{context => {Pid, Id}, function => F1}) || Id <- FrameIds]
+    ),
+
+    ?assertEqual(
+        [{ok, F2(Var)} || Var <- FrameVars],
+        [edb:eval(Opts0#{context => {Pid, Id}, function => F2}) || Id <- FrameIds]
+    ),
+
+    ok.
+
+test_eval_honors_timeout(Config) ->
+    Module = ?FUNCTION_NAME,
+    ModuleSource = ~"""
+    -module(test_eval_honors_timeout).      %L01
+    -export([go/0]).                        %L02
+    go() -> ok.                             %L03
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info]
+    }),
+
+    % Add a breakpoint inside go/1
+    ok = edb:add_breakpoint(Module, 3),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(Module, go, []),
+    {ok, paused} = edb:wait(),
+
+    F = fun(_) ->
+        receive
+            _ -> ok
+        end
+    end,
+    ?assertEqual(
+        {eval_error, timeout},
+        edb:eval(#{
+            context => {Pid, 1},
+            max_term_size => 2048,
+            timeout => 0,
+            function => F
+        })
+    ),
+
+    ok.
+
+test_eval_reports_exceptions(Config) ->
+    Module = ?FUNCTION_NAME,
+    ModuleSource = ~"""
+    -module(test_eval_reports_exceptions).       %L01
+    -export([go/0]).                             %L02
+    go() -> ok.                                  %L03
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info]
+    }),
+
+    % Add a breakpoint inside go/1
+    ok = edb:add_breakpoint(Module, 3),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(Module, go, []),
+    {ok, paused} = edb:wait(),
+
+    Opts = #{context => {Pid, 1}, max_term_size => 2048, timeout => 5_000},
+
+    F1 = fun(_) -> error(kaboom) end,
+    ?assertMatch(
+        {eval_error, {exception, #{class := error, reason := kaboom, stacktrace := [_ | _]}}},
+        edb:eval(Opts#{function => F1})
+    ),
+
+    F2 = fun(_) -> exit(bang) end,
+    ?assertMatch(
+        {eval_error, {exception, #{class := exit, reason := bang, stacktrace := [_ | _]}}},
+        edb:eval(Opts#{function => F2})
+    ),
+
+    F3 = fun(_) -> throw(garbage) end,
+    ?assertMatch(
+        {eval_error, {exception, #{class := throw, reason := garbage, stacktrace := [_ | _]}}},
+        edb:eval(Opts#{function => F3})
+    ),
+    ok.
+
+test_eval_reports_being_killed(Config) ->
+    Module = ?FUNCTION_NAME,
+    ModuleSource = ~"""
+    -module(test_eval_reports_being_killed).     %L01
+    -export([go/0]).                             %L02
+    go() -> ok.                                  %L03
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info]
+    }),
+
+    % Add a breakpoint inside go/1
+    ok = edb:add_breakpoint(Module, 3),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(Module, go, []),
+    {ok, paused} = edb:wait(),
+
+    Opts = #{context => {Pid, 1}, max_term_size => 2048, timeout => 5_000},
+
+    F = fun(_) ->
+        erlang:spawn(erlang, exit, [self(), go_home]),
+        receive
+            _ -> ok
+        end
+    end,
+    ?assertMatch(
+        {eval_error, {killed, go_home}},
+        edb:eval(Opts#{function => F})
     ),
     ok.
 
