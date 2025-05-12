@@ -30,15 +30,17 @@
 %% Types
 %% ------------------------------------------------------------------
 
+-type variables_reference() :: number().
+
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
 -type arguments() :: #{
     % The variable for which to retrieve its children. The `variablesReference`
     % must have been obtained in the current suspended state.
-    variablesReference := number(),
+    variablesReference := variables_reference(),
     % Filter to limit the child variables to either named or indexed. If omitted,
     % both types are fetched.
     % Possible values: 'indexed', 'named'
-    filter => binary(),
+    filter => indexed | named,
     % The index of the first variable to return; if omitted children start at 0.
     % The attribute is only honored by a debug adapter if the corresponding
     % capability `supportsVariablePaging` is true.
@@ -90,7 +92,7 @@
     % If `variablesReference` is > 0, the variable is structured and its children
     % can be retrieved by passing `variablesReference` to the `variables` request
     % as long as execution remains suspended.
-    variablesReference := number(),
+    variablesReference := variables_reference(),
     % The number of named child variables.
     % The client can use this information to present the children in a paged UI
     % and fetch them in chunks.
@@ -140,7 +142,18 @@
     % registered for the object. The `hasDataBreakpoint` attribute should
     % generally be used instead.
     % etc.
-    kind => binary(),
+    kind =>
+        'property'
+        | 'method'
+        | 'class'
+        | 'data'
+        | 'event'
+        | 'baseClass'
+        | 'innerClass'
+        | 'interface'
+        | 'mostDerivedClass'
+        | 'virtual'
+        | 'dataBreakpoint',
     % Set of attributes represented as an array of strings. Before introducing
     % additional values, try to use the listed values.
     % Values:
@@ -158,11 +171,21 @@
     % 'hasDataBreakpoint': Indicates that the object has its value tracked by a
     % data breakpoint.
     % etc.
-    attributes => [binary()],
+    attributes => [
+        'static'
+        | 'constant'
+        | 'readOnly'
+        | 'rawString'
+        | 'hasObjectId'
+        | 'canHaveObjectId'
+        | 'hasSideEffects'
+        | 'hasDataBreakpoint'
+    ],
     % Visibility of variable. Before introducing additional values, try to use
     % the listed values.
     % Values: 'public', 'private', 'protected', 'internal', 'final', etc.
-    visibility => binary(),
+    visibility =>
+        'public' | 'private' | 'protected' | 'internal' | 'final',
     % If true, clients can present the variable with a UI that supports a
     % specific gesture to trigger its evaluation.
     % This mechanism can be used for properties that require executing code when
@@ -175,7 +198,8 @@
     lazy => boolean()
 }.
 
--export_type([arguments/0, response_body/0, variable/0, value_format/0, variable_presentation_hint/0]).
+-export_type([arguments/0, response_body/0]).
+-export_type([variables_reference/0, variable/0, value_format/0, variable_presentation_hint/0]).
 
 -spec value_format_template() -> edb_dap_parse:template().
 value_format_template() ->
@@ -318,7 +342,7 @@ variable(Name, Value) ->
         variablesReference => variables_reference(Value)
     }.
 
--spec variables_reference(edb:value()) -> number().
+-spec variables_reference(edb:value()) -> variables_reference().
 variables_reference({value, Value}) ->
     case try_to_structured(Value) of
         {ok, Structured} ->
