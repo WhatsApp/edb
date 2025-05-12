@@ -204,56 +204,86 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, node := Node}, #{variablesReference := VariablesReference}) ->
+handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
     case variable_ref_to_frame_scope_or_structured(VariablesReference) of
         #{frame := FrameId, scope := Scope} ->
             #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
             case Scope of
                 messages ->
-                    % elp:ignore W0014 (cross_node_eval)
-                    case erpc:call(Node, erlang, process_info, [Pid, messages]) of
-                        {messages, Messages0} when is_list(Messages0) ->
-                            % Ideally we'd have a `erl_debugger:peek_message/1` function
-                            % which would allow us to peek at the message queue and return
-                            % a too_large entry if the message is too large.
-                            Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
-                            #{
-                                response => edb_dap_request:success(#{
-                                    variables => unnamed_variables(~"", Messages)
-                                })
-                            };
-                        _ ->
-                            throw({failed_to_get_messages, {Pid, FrameNo}})
-                    end;
-                _ ->
-                    case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
-                        not_paused ->
-                            edb_dap_request:not_paused(Pid);
-                        undefined ->
-                            throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
-                        {ok, Result} ->
-                            Variables =
-                                case Scope of
-                                    locals ->
-                                        [variable(Name, Value) || Name := Value <- maps:get(vars, Result, #{})];
-                                    registers ->
-                                        XRegs = unnamed_variables(~"X", maps:get(xregs, Result, [])),
-                                        YRegs = unnamed_variables(~"Y", maps:get(yregs, Result, [])),
-                                        XRegs ++ YRegs
-                                end,
-                            #{response => edb_dap_request:success(#{variables => Variables})}
-                    end
+                    handle_messages_scope(Pid);
+                locals ->
+                    handle_locals_scope(Pid, FrameNo);
+                registers ->
+                    handle_registers_scope(Pid, FrameNo)
             end;
-        #{elements := Elements} = _Structured ->
-            Variables = [variable(Name, Value) || {Name, Value} <- Elements],
-            #{response => edb_dap_request:success(#{variables => Variables})}
+        #{elements := _} = Structured ->
+            handle_structured(Structured)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
+-spec handle_messages_scope(Pid) -> edb_dap_request:reaction(response_body()) when
+    Pid :: pid().
+handle_messages_scope(Pid) ->
+    Node = node(Pid),
+    % elp:ignore W0014 (cross_node_eval)
+    case erpc:call(Node, erlang, process_info, [Pid, messages]) of
+        {messages, Messages0} when is_list(Messages0) ->
+            % Ideally we'd have a `erl_debugger:peek_message/1` function
+            % which would allow us to peek at the message queue and return
+            % a too_large entry if the message is too large.
+            Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
+            #{
+                response => edb_dap_request:success(#{
+                    variables => unnamed_variables(~"", Messages)
+                })
+            };
+        _ ->
+            throw({failed_to_get_messages, Pid})
+    end.
+
+-spec handle_locals_scope(Pid, FrameNo) -> edb_dap_request:reaction(response_body()) when
+    Pid :: pid(),
+    FrameNo :: non_neg_integer().
+handle_locals_scope(Pid, FrameNo) ->
+    stack_frames_scope(Pid, FrameNo, fun(StackFrameVars) ->
+        [variable(Name, Value) || Name := Value <- maps:get(vars, StackFrameVars, #{})]
+    end).
+
+-spec handle_registers_scope(Pid, FrameNo) -> edb_dap_request:reaction(response_body()) when
+    Pid :: pid(),
+    FrameNo :: non_neg_integer().
+handle_registers_scope(Pid, FrameNo) ->
+    stack_frames_scope(Pid, FrameNo, fun(StackFrameVars) ->
+        XRegs = unnamed_variables(~"X", maps:get(xregs, StackFrameVars, [])),
+        YRegs = unnamed_variables(~"Y", maps:get(yregs, StackFrameVars, [])),
+        XRegs ++ YRegs
+    end).
+
+-spec handle_structured(Structured) -> edb_dap_request:reaction(response_body()) when
+    Structured :: edb_dap_id_mappings:structured().
+handle_structured(#{elements := Elements}) ->
+    Variables = [variable(Name, Value) || {Name, Value} <- Elements],
+    #{response => edb_dap_request:success(#{variables => Variables})}.
+
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
+-spec stack_frames_scope(Pid, FrameNo, BuildVariables) -> edb_dap_request:reaction(response_body()) when
+    Pid :: pid(),
+    FrameNo :: non_neg_integer(),
+    BuildVariables :: fun((edb:stack_frame_vars()) -> [variable()]).
+stack_frames_scope(Pid, FrameNo, BuildVariables) ->
+    case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
+        not_paused ->
+            edb_dap_request:not_paused(Pid);
+        undefined ->
+            throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
+        {ok, StackFrameVars} ->
+            Variables = BuildVariables(StackFrameVars),
+            #{response => edb_dap_request:success(#{variables => Variables})}
+    end.
+
 -spec variable_ref_to_frame_scope_or_structured(VarRef) -> edb_dap_id_mappings:frame_scope_or_structured() when
     VarRef :: edb_dap_id_mappings:id().
 variable_ref_to_frame_scope_or_structured(VarRef) ->
