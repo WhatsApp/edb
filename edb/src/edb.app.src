@@ -20,6 +20,7 @@
     {applications, [
         kernel,
         stdlib,
+        % @fb-only
         edb_core
     ]},
     {licenses, ["Apache-2.0"]},
