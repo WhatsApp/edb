@@ -28,7 +28,7 @@ Code needed to initialize a debuggee node on attach.
 -define(BOOTSTRAP_FAILURE_MARKER, '__edb_bootstrap_failure__').
 
 %% erlfmt:ignore-begin
--define(MODULES_USED_FOR_META_DEBUGGING, [waaat]).  % fb-only
+% @fb-only
 -define(MODULES_USED_FOR_META_DEBUGGING, []). % @oss-only
 %% erlfmt:ignore-end
 
