@@ -62,12 +62,13 @@ This is the requirement the DAP spec puts on ids.
 -type id() :: non_neg_integer().
 
 -type pid_frame() :: #{pid := pid(), frame_no := non_neg_integer()}.
--type scope() :: locals | registers | messages.
+-type scope() :: process | locals | registers.
 -type vars_info() ::
     #{
         type := scope,
-        frame := id(),
-        scope := scope()
+        scope := scope(),
+        frame_id := id(),
+        vars := [edb_dap_request_variables:variable()]
     }
     | #{
         type := structure,
@@ -156,8 +157,8 @@ init(ServerType) ->
                 end;
             ?VARS_REFS_SERVER ->
                 fun
-                    (VarsRef = #{type := scope, frame := FrameId, scope := Scope}) when
-                        is_integer(FrameId), is_atom(Scope)
+                    (VarsRef = #{type := scope, scope := Scope, frame_id := FrameId, vars := Vars}) when
+                        is_integer(FrameId), is_atom(Scope), is_list(Vars)
                     ->
                         {ok, VarsRef};
                     (VarsRef = #{type := structure, structure := #{elements := Elements}}) when

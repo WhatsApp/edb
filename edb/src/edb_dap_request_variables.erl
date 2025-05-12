@@ -24,7 +24,7 @@
 
 -export([parse_arguments/1, handle/2]).
 
--define(MAX_TERM_SIZE, 1_000_000).
+-export([scope_variables_ref/2]).
 
 %% ------------------------------------------------------------------
 %% Types
@@ -230,59 +230,13 @@ parse_arguments(Args) ->
     Args :: arguments().
 handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
     case variables_reference_to_vars_info(VariablesReference) of
-        #{type := scope, frame := FrameId, scope := Scope} ->
-            #{pid := Pid, frame_no := FrameNo} = frame_id_to_pid_frame(FrameId),
-            case Scope of
-                messages ->
-                    handle_messages_scope(Pid);
-                locals ->
-                    handle_locals_scope(Pid, FrameNo);
-                registers ->
-                    handle_registers_scope(Pid, FrameNo)
-            end;
+        #{type := scope, vars := Variables} ->
+            #{response => edb_dap_request:success(#{variables => Variables})};
         #{type := structure, structure := Structure} ->
             handle_structure(Structure)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
-
--spec handle_messages_scope(Pid) -> edb_dap_request:reaction(response_body()) when
-    Pid :: pid().
-handle_messages_scope(Pid) ->
-    Node = node(Pid),
-    % elp:ignore W0014 (cross_node_eval)
-    case erpc:call(Node, erlang, process_info, [Pid, messages]) of
-        {messages, Messages0} when is_list(Messages0) ->
-            % Ideally we'd have a `erl_debugger:peek_message/1` function
-            % which would allow us to peek at the message queue and return
-            % a too_large entry if the message is too large.
-            Messages = [cap_by_size(M, ?MAX_TERM_SIZE) || M <- Messages0],
-            #{
-                response => edb_dap_request:success(#{
-                    variables => unnamed_variables(~"", Messages)
-                })
-            };
-        _ ->
-            throw({failed_to_get_messages, Pid})
-    end.
-
--spec handle_locals_scope(Pid, FrameNo) -> edb_dap_request:reaction(response_body()) when
-    Pid :: pid(),
-    FrameNo :: non_neg_integer().
-handle_locals_scope(Pid, FrameNo) ->
-    stack_frames_scope(Pid, FrameNo, fun(StackFrameVars) ->
-        [variable(Name, Value) || Name := Value <- maps:get(vars, StackFrameVars, #{})]
-    end).
-
--spec handle_registers_scope(Pid, FrameNo) -> edb_dap_request:reaction(response_body()) when
-    Pid :: pid(),
-    FrameNo :: non_neg_integer().
-handle_registers_scope(Pid, FrameNo) ->
-    stack_frames_scope(Pid, FrameNo, fun(StackFrameVars) ->
-        XRegs = unnamed_variables(~"X", maps:get(xregs, StackFrameVars, [])),
-        YRegs = unnamed_variables(~"Y", maps:get(yregs, StackFrameVars, [])),
-        XRegs ++ YRegs
-    end).
 
 -spec handle_structure(Structure) -> edb_dap_request:reaction(response_body()) when
     Structure :: edb_dap_id_mappings:structure().
@@ -291,22 +245,30 @@ handle_structure(#{elements := Elements}) ->
     #{response => edb_dap_request:success(#{variables => Variables})}.
 
 %% ------------------------------------------------------------------
+%% Variables references
+%% ------------------------------------------------------------------
+-spec scope_variables_ref(FrameId, Scope) -> edb_dap_request_variables:variables_reference() when
+    FrameId :: edb_dap_id_mappings:id(),
+    Scope :: edb_dap_eval_delegate:scope().
+scope_variables_ref(FrameId, #{type := Type, variables := RawVars}) ->
+    Vars = [
+        #{
+            name => Name,
+            value => Rep,
+            variablesReference => variables_reference(Val)
+        }
+     || #{name := Name, value := Val, value_rep := Rep} <- RawVars
+    ],
+    edb_dap_id_mappings:vars_info_to_vars_ref(#{
+        type => scope,
+        scope => Type,
+        frame_id => FrameId,
+        vars => Vars
+    }).
+
+%% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec stack_frames_scope(Pid, FrameNo, BuildVariables) -> edb_dap_request:reaction(response_body()) when
-    Pid :: pid(),
-    FrameNo :: non_neg_integer(),
-    BuildVariables :: fun((edb:stack_frame_vars()) -> [variable()]).
-stack_frames_scope(Pid, FrameNo, BuildVariables) ->
-    case edb:stack_frame_vars(Pid, FrameNo, ?MAX_TERM_SIZE) of
-        not_paused ->
-            edb_dap_request:not_paused(Pid);
-        undefined ->
-            throw({cant_resolve_variables, #{pid => Pid, frame_no => FrameNo}});
-        {ok, StackFrameVars} ->
-            Variables = BuildVariables(StackFrameVars),
-            #{response => edb_dap_request:success(#{variables => Variables})}
-    end.
 
 -spec variables_reference_to_vars_info(VarRef) -> edb_dap_id_mappings:vars_info() when
     VarRef :: edb_dap_id_mappings:id().
@@ -314,24 +276,6 @@ variables_reference_to_vars_info(VarRef) ->
     case edb_dap_id_mappings:vars_reference_to_vars_info(VarRef) of
         {ok, FrameScope} -> FrameScope;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
-    end.
-
--spec frame_id_to_pid_frame(FrameId) -> edb_dap_id_mappings:pid_frame() when
-    FrameId :: edb_dap_id_mappings:id().
-frame_id_to_pid_frame(FrameId) ->
-    case edb_dap_id_mappings:frame_id_to_pid_frame(FrameId) of
-        {ok, PidFrame} -> PidFrame;
-        {error, not_found} -> throw({cant_resolve_pid_frame, FrameId})
-    end.
-
--spec cap_by_size(term(), non_neg_integer()) -> edb:value().
-cap_by_size(Term, MaxSize) ->
-    Size = erts_debug:flat_size(Term),
-    case Size > MaxSize of
-        true ->
-            {too_large, Size, MaxSize};
-        false ->
-            {value, Term}
     end.
 
 -spec variable(binary(), edb:value()) -> variable().
@@ -367,15 +311,6 @@ try_to_structure(M) when is_map(M) ->
     {ok, #{elements => lists:sort(Elements)}};
 try_to_structure(_) ->
     not_structured.
-
--spec unnamed_variables(binary(), [edb:value()]) -> [variable()].
-unnamed_variables(Prefix, Values) ->
-    Fun = fun(Value, {Acc, Count}) ->
-        Name = edb:format("~s~p", [Prefix, Count]),
-        {[variable(Name, Value) | Acc], Count + 1}
-    end,
-    {Registers, _Count} = lists:foldl(Fun, {[], 0}, Values),
-    lists:reverse(Registers).
 
 -spec variable_value(edb:value()) -> binary().
 variable_value({too_large, Size, Max}) ->

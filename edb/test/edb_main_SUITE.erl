@@ -133,6 +133,11 @@ escript_dap(Config) ->
                         expensive := false,
                         presentationHint := ~"locals",
                         variablesReference := 1
+                    },
+                    #{
+                        name := ~"Process",
+                        expensive := false,
+                        variablesReference := 3
                     }
                 ]
             },

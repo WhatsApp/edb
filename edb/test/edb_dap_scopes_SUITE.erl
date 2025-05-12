@@ -36,7 +36,7 @@
     test_reports_locals_scope/1,
     test_reports_locals_scope_nested_variables/1,
     test_reports_registers_scope_when_locals_not_available/1,
-    test_reports_messages_scope/1
+    test_reports_messages_in_process_scope/1
 ]).
 
 all() ->
@@ -44,7 +44,7 @@ all() ->
         test_reports_locals_scope,
         test_reports_locals_scope_nested_variables,
         test_reports_registers_scope_when_locals_not_available,
-        test_reports_messages_scope
+        test_reports_messages_in_process_scope
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -82,6 +82,12 @@ test_reports_locals_scope(Config) ->
                             expensive => false,
                             presentationHint => ~"locals",
                             variablesReference => 1
+                        },
+                    ~"Process" =>
+                        #{
+                            name => ~"Process",
+                            expensive => false,
+                            variablesReference => 3
                         }
                 },
                 Scopes
@@ -126,7 +132,13 @@ test_reports_locals_scope_nested_variables(Config) ->
                             name => ~"Locals",
                             expensive => false,
                             presentationHint => ~"locals",
-                            variablesReference => 1
+                            variablesReference => 4
+                        },
+                    ~"Process" =>
+                        #{
+                            name => ~"Process",
+                            expensive => false,
+                            variablesReference => 6
                         }
                 },
                 Scopes
@@ -136,9 +148,9 @@ test_reports_locals_scope_nested_variables(Config) ->
             LocalVars = edb_dap_test_support:get_variables(Client, VarRef),
             ?assertEqual(
                 #{
-                    ~"L" => #{name => ~"L", value => ~"[1,2,3]", variablesReference => 2},
-                    ~"M" => #{name => ~"M", value => ~"[4,[],{6,7}]", variablesReference => 3},
-                    ~"X" => #{name => ~"X", value => ~"#{life => 42}", variablesReference => 4}
+                    ~"L" => #{name => ~"L", value => ~"[1,2,3]", variablesReference => 1},
+                    ~"M" => #{name => ~"M", value => ~"[4,[],{6,7}]", variablesReference => 2},
+                    ~"X" => #{name => ~"X", value => ~"#{life => 42}", variablesReference => 3}
                 },
                 LocalVars
             ),
@@ -149,7 +161,7 @@ test_reports_locals_scope_nested_variables(Config) ->
                 #{
                     ~"1" => #{name => ~"1", value => ~"4", variablesReference => 0},
                     ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 5},
-                    ~"3" => #{name => ~"3", value => ~"{6,7}", variablesReference => 6}
+                    ~"3" => #{name => ~"3", value => ~"{6,7}", variablesReference => 7}
                 },
                 ChildrenListVars
             ),
@@ -194,12 +206,18 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
             ?assertEqual(
                 #{
+                    ~"Process" =>
+                        #{
+                            name => ~"Process",
+                            expensive => false,
+                            variablesReference => 3
+                        },
                     ~"Registers" =>
                         #{
                             name => ~"Registers",
                             expensive => false,
                             presentationHint => ~"registers",
-                            variablesReference => 1
+                            variablesReference => 2
                         }
                 },
                 Scopes
@@ -209,7 +227,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
             RegVars = edb_dap_test_support:get_variables(Client, VarRef),
             ?assertMatch(
                 #{
-                    ~"Y0" := #{name := ~"Y0", value := _, variablesReference := 2},
+                    ~"Y0" := #{name := ~"Y0", value := _, variablesReference := 1},
                     ~"Y1" := #{name := ~"Y1", value := _, variablesReference := 0},
                     ~"Y2" := #{name := ~"Y2", value := _, variablesReference := 0}
                 },
@@ -218,7 +236,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
     end,
     ok.
 
-test_reports_messages_scope(Config) ->
+test_reports_messages_in_process_scope(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
@@ -227,41 +245,56 @@ test_reports_messages_scope(Config) ->
                     ~"-export([go/2]).   %L02\n",
                     ~"go(X, Y) ->        %L03\n",
                     ~"    self() ! hola, %L04\n",
-                    ~"    X + 2 * Y.     %L05\n"
+                    ~"    self() ! chau, %L05\n",
+                    ~"    X + 2 * Y.     %L06\n"
                 ]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 6}]}]),
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
             ?assertEqual(
                 #{
-                    ~"Messages" =>
+                    ~"Process" =>
                         #{
-                            name => ~"Messages",
+                            name => ~"Process",
                             expensive => false,
-                            variablesReference => 2
+                            variablesReference => 4
                         },
                     ~"Registers" =>
                         #{
                             name => ~"Registers",
                             expensive => false,
                             presentationHint => ~"registers",
-                            variablesReference => 1
+                            variablesReference => 2
                         }
                 },
                 Scopes
             ),
 
-            VarRef = maps:get(variablesReference, maps:get(~"Messages", Scopes)),
-            RegVars = edb_dap_test_support:get_variables(Client, VarRef),
+            ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
+            ProcessVars = edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef),
+            ?assertEqual(
+                #{
+                    ~"Messages in queue" => #{
+                        name => ~"Messages in queue",
+                        value => ~"2",
+                        variablesReference => 3
+                    }
+                },
+                ProcessVars
+            ),
+
+            MessagesVarsRefs = maps:get(variablesReference, maps:get(~"Messages in queue", ProcessVars)),
+            MessagesVars = edb_dap_test_support:get_variables(Client, MessagesVarsRefs),
             ?assertMatch(
                 #{
-                    ~"0" := #{name := ~"0", value := _, variablesReference := 0}
+                    ~"1" := #{name := ~"1", value := ~"hola", variablesReference := 0},
+                    ~"2" := #{name := ~"2", value := ~"chau", variablesReference := 0}
                 },
-                RegVars
+                MessagesVars
             )
     end,
     ok.

@@ -108,61 +108,57 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
+handle(#{state := attached}, #{frameId := FrameId}) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
-    VariablesScopes =
-        case edb:stack_frame_vars(Pid, FrameNo, _MaxTermSize = 1) of
-            {ok, #{vars := _}} ->
-                [
-                    #{
-                        name => ~"Locals",
-                        presentationHint => locals,
-                        variablesReference => edb_dap_id_mappings:vars_info_to_vars_ref(#{
-                            type => scope,
-                            frame => FrameId,
-                            scope => locals
-                        }),
-                        expensive => false
-                    }
-                ];
-            {ok, Frames} when is_map(Frames) ->
-                [
-                    #{
-                        name => ~"Registers",
-                        presentationHint => registers,
-                        variablesReference => edb_dap_id_mappings:vars_info_to_vars_ref(#{
-                            type => scope,
-                            frame => FrameId,
-                            scope => registers
-                        }),
-                        expensive => false
-                    }
-                ];
-            _ ->
-                []
-        end,
-    MessagesScopes =
-        % elp:ignore W0014 (cross_node_eval)
-        case erpc:call(Node, erlang, process_info, [Pid, message_queue_len]) of
-            {message_queue_len, N} when N > 0 ->
-                [
-                    #{
-                        name => ~"Messages",
-                        variablesReference => edb_dap_id_mappings:vars_info_to_vars_ref(#{
-                            type => scope,
-                            frame => FrameId,
-                            scope => messages
-                        }),
-                        expensive => false
-                    }
-                ];
-            _ ->
-                []
+    EvalResult = edb_dap_eval_delegate:eval(#{
+        context => {Pid, FrameNo},
+        function => edb_dap_eval_delegate:scopes_callback(Pid)
+    }),
+    Scopes =
+        case EvalResult of
+            not_paused ->
+                edb_dap_request:not_paused(Pid);
+            undefined ->
+                throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
+            {ok, RawScopes} ->
+                [make_scope(FrameId, RawScope) || RawScope <- RawScopes];
+            {eval_error, Error} ->
+                throw({failed_to_eval_scopes, Error})
         end,
     #{
         response => edb_dap_request:success(#{
-            scopes => MessagesScopes ++ VariablesScopes
+            scopes => Scopes
         })
     };
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
+
+% --------------------------------------------------------------------
+% Helpers
+% --------------------------------------------------------------------
+-spec make_scope(FrameId, RawScope) -> scope() when
+    FrameId :: edb_dap_id_mappings:id(),
+    RawScope :: edb_dap_eval_delegate:scope().
+make_scope(FrameId, RawScope = #{type := Type}) ->
+    Scope0 =
+        case Type of
+            process ->
+                #{
+                    name => ~"Process"
+                };
+            locals ->
+                #{
+                    name => ~"Locals",
+                    presentationHint => locals
+                };
+            registers ->
+                #{
+                    name => ~"Registers",
+                    presentationHint => registers
+                }
+        end,
+    VariablesRef = edb_dap_request_variables:scope_variables_ref(FrameId, RawScope),
+    Scope0#{
+        variablesReference => VariablesRef,
+        expensive => false
+    }.
