@@ -30,8 +30,8 @@
 %% gen_server callbacks
 -export([init/1, terminate/2, handle_call/3, handle_cast/2, handle_info/2]).
 
-%% Invariant management
--export([invariant_violation/1]).
+%% Exceptions
+-export([raise/2, raise/3, invariant_violation/1]).
 
 -export_type([call_request/0]).
 
@@ -189,35 +189,57 @@ handle_cast(_, _State) ->
 
 -spec call(Node :: node(), Request :: call_request()) -> term().
 call(Node, Request) ->
-    case gen_server:call({?MODULE, Node}, Request) of
-        {invariant_violation, Term} -> throw({invariant_violation, Term});
-        Reply -> Reply
-    end.
+    call(Node, Request, 5_000).
 
 -spec call(Node :: node(), Request :: call_request(), Timeout :: pos_integer() | infinity) -> term().
 call(Node, Request, Timeout) ->
     case gen_server:call({?MODULE, Node}, Request, Timeout) of
-        {invariant_violation, Term} -> throw({invariant_violation, Term});
-        Reply -> Reply
+        {finished, Reply} ->
+            Reply;
+        {raised, Class, Term} when Class =:= error; Class =:= throw; Class =:= exit ->
+            erlang:Class(Class, Term)
     end.
 
 -doc """
-Signal an invariant violation. The server will catch the error and return it as a term.
+Abort the execution and raise an exception on the calling client side.
+
+The gen_server state at the start of the request will be preserved, so
+it is the caller's responsibility to ensure that things are left in a
+consistent state.
 """.
--spec invariant_violation(term()) -> no_return().
-invariant_violation(Term) ->
-    throw({invariant_violation, Term}).
+-spec raise(Class, Reason) -> no_return() when
+    Class :: error | exit | throw,
+    Reason :: term().
+raise(Class, Reason) ->
+    throw({raised, Class, Reason}).
+
+-doc """
+Like `raise/2`, but specifying the stacktrace to be reported.
+""".
+-spec raise(Class, Reason, ST) -> no_return() when
+    Class :: error | exit | throw,
+    Reason :: term(),
+    ST :: erlang:stacktrace().
+raise(Class, Reason, ST) ->
+    erlang:raise(throw, {raised, Class, Reason}, ST).
+
+-doc """
+Abort due to invariant violation. Will be raised as an error on the caller side.
+""".
+-spec invariant_violation(Reason :: term()) -> no_return().
+invariant_violation(Reason) ->
+    raise(error, {invariant_violation, Reason}).
 
 -spec handle_call(Request, From, state()) -> Result when
     Request :: call_request(),
     From :: gen_server:from(),
     Result :: {reply, Reply :: term(), NewState :: state()} | {noreply, NewState :: state()}.
 handle_call(Request, From, State) ->
-    try
-        dispatch_call(Request, From, State)
+    try dispatch_call(Request, From, State) of
+        {reply, Reply, NewState} -> {reply, {finished, Reply}, NewState}
     catch
-        throw:{invariant_violation, Term}:ST ->
-            {reply, {invariant_violation, #{error => Term, stacktrace => ST}}, State}
+        throw:{raised, Class, Reason}:ST ->
+            {reply, {raised, Class, {Reason, ST}}, State}
     end.
 
 -spec dispatch_call(Request, From, state()) -> Result when
