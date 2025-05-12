@@ -54,7 +54,8 @@
     %   'registers': Scope contains registers. Only a single `registers` scope
     %                should be returned from a `scopes` request.
     %   'returnValue': Scope contains one or more return values.
-    presentationHint => binary(),
+    presentationHint =>
+        'arguments' | 'locals' | 'registers' | 'returnValue',
     % The variables of this scope can be retrieved by passing the value of
     % `variablesReference` to the `variables` request as long as execution
     % remains suspended.
@@ -90,12 +91,19 @@
 
 -export_type([arguments/0, response_body/0, scope/0]).
 
+-spec arguments_template() -> edb_dap_parse:template().
+arguments_template() ->
+    #{
+        frameId => edb_dap_parse:number()
+    }.
+
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
-    {ok, Args}.
+    Template = arguments_template(),
+    edb_dap_parse:parse(Template, Args, reject_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
@@ -107,8 +115,8 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
             {ok, #{vars := _}} ->
                 [
                     #{
-                        name => <<"Locals">>,
-                        presentationHint => <<"locals">>,
+                        name => ~"Locals",
+                        presentationHint => locals,
                         variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => locals
                         }),
@@ -118,8 +126,8 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
             {ok, Frames} when is_map(Frames) ->
                 [
                     #{
-                        name => <<"Registers">>,
-                        presentationHint => <<"registers">>,
+                        name => ~"Registers",
+                        presentationHint => registers,
                         variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => registers
                         }),
@@ -135,7 +143,7 @@ handle(#{state := attached, node := Node}, #{frameId := FrameId}) ->
             {message_queue_len, N} when N > 0 ->
                 [
                     #{
-                        name => <<"Messages">>,
+                        name => ~"Messages",
                         variablesReference => edb_dap_id_mappings:frame_scope_or_structured_to_var_reference(#{
                             frame => FrameId, scope => messages
                         }),
