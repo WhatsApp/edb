@@ -73,7 +73,7 @@ Open the `rebar.config` file for the project and ensure the `beam_debug_info` op
 ```
 {profiles, [
     {test, [
-        {erl_opts, [debug_info, beam_debug_info]}
+        {erl_opts, [beam_debug_info]}
     ]}
 ]}.
 ```

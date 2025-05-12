@@ -93,7 +93,7 @@ compile_module(CtConfig, ModuleSpec, Opts0) ->
             #{flags := _} ->
                 Opts2;
             _ ->
-                DefaultFlags = [debug_info, beam_debug_info],
+                DefaultFlags = [beam_debug_info],
                 Opts2#{flags => DefaultFlags}
         end,
     compile_module_1(CtConfig, ModuleSpec, Opts3).
