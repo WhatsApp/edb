@@ -35,6 +35,7 @@ be assumed to be running on the debuggee.
 
 % Callbacks
 -export([scopes_callback/1]).
+-export([structure_callback/2]).
 
 % -----------------------------------------------------------------------------
 % Types
@@ -46,12 +47,25 @@ be assumed to be running on the debuggee.
     type := process | locals | registers,
     variables := [variable()]
 }.
+
 -type variable() :: #{
     name := binary(),
-    value := edb:value(),
-    value_rep := binary()
+    value_rep := binary(),
+    structure :=
+        none | structure()
 }.
--export_type([scope/0, variable/0]).
+
+-type structure() :: #{
+    type := named | indexed,
+    count := pos_integer(),
+    accessor := accessor()
+}.
+
+-opaque accessor() :: callback(term()).
+
+-type window() :: #{start := pos_integer(), count := non_neg_integer()}.
+
+-export_type([scope/0, variable/0, structure/0, accessor/0, window/0]).
 
 % -----------------------------------------------------------------------------
 % Running
@@ -76,9 +90,8 @@ eval(Opts0) ->
     edb:eval(Opts1).
 
 % -----------------------------------------------------------------------------
-% Callbacks for the "scopes" request
+% Callback for the "scopes" request
 % -----------------------------------------------------------------------------
-
 -spec scopes_callback(Pid) -> callback([scope()]) when
     Pid :: pid().
 scopes_callback(Pid) ->
@@ -102,32 +115,45 @@ locals_scope(Vars) ->
         variables => [
             #{
                 name => Name,
-                value => Value,
-                value_rep => value_rep(Value)
+                value_rep => value_rep(Value),
+                structure => structure(Value, access_local(Name))
             }
          || Name := Value <- Vars
         ]
     }.
 
+-spec access_local(Name) -> accessor() when Name :: binary().
+access_local(Name) ->
+    fun(#{vars := Vars}) ->
+        case Vars of
+            #{Name := {value, Value}} -> Value
+        end
+    end.
+
 -spec registers_scope(StackFrameVars) -> scope() when
     StackFrameVars :: edb:stack_frame_vars().
 registers_scope(StackFrameVars) ->
-    RegSources = [
-        {~"X", maps:get(xregs, StackFrameVars, [])},
-        {~"Y", maps:get(yregs, StackFrameVars, [])}
-    ],
     #{
         type => registers,
         variables => [
             #{
                 name => format("~s~p", [Prefix, RegIdx]),
-                value => RegValue,
-                value_rep => value_rep(RegValue)
+                value_rep => value_rep(RegValue),
+                structure => structure(RegValue, access_reg(RegType, RegIdx))
             }
-         || {Prefix, Regs} <- RegSources,
-            {RegIdx, RegValue} <- lists:enumerate(0, Regs)
+         || {RegType, Prefix} <- [{xregs, ~"X"}, {yregs, ~"Y"}],
+            {RegIdx, RegValue} <- lists:enumerate(0, maps:get(RegType, StackFrameVars, []))
         ]
     }.
+
+-spec access_reg(Type, Index) -> accessor() when
+    Type :: xregs | yregs,
+    Index :: non_neg_integer().
+access_reg(Type, Index) ->
+    fun(StackFrameVars) ->
+        {value, Value} = lists:nth(Index + 1, maps:get(Type, StackFrameVars)),
+        Value
+    end.
 
 -spec process_scope(Pid) -> scope() when Pid :: pid().
 process_scope(Pid) ->
@@ -137,14 +163,111 @@ process_scope(Pid) ->
                 [
                     #{
                         name => ~"Messages in queue",
-                        value => {value, Messages},
-                        value_rep => format("~p", [length(Messages)])
+                        value_rep => format("~p", [length(Messages)]),
+                        structure => structure({value, Messages}, access_process_info(Pid, messages))
                     }
                 ];
             _ ->
                 []
         end,
     #{type => process, variables => MessagesVar}.
+
+-spec access_process_info(Pid, Type) -> accessor() when
+    Pid :: pid(),
+    Type :: messages.
+access_process_info(Pid, Type) ->
+    fun(_) ->
+        {Type, Value} = erlang:process_info(Pid, Type),
+        Value
+    end.
+
+% -----------------------------------------------------------------------------
+% Callback for the "variables" request
+% -----------------------------------------------------------------------------
+-spec structure_callback(Accessor, Window) -> callback([variable()]) when
+    Accessor :: accessor(),
+    Window :: window().
+structure_callback(Accessor, Window) ->
+    fun(StackFrameVars) ->
+        case Accessor(StackFrameVars) of
+            List when is_list(List) -> list_structure(List, Accessor, Window);
+            Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, Window);
+            Map when is_map(Map) -> map_structure(Map, Accessor, Window);
+            _ -> []
+        end
+    end.
+
+-spec list_structure(List, Accessor, Window) -> [variable()] when
+    List :: list(),
+    Accessor :: accessor(),
+    Window :: window().
+list_structure(List, Accessor, #{start := Start, count := Count}) ->
+    ListWindow = lists:sublist(List, Start, Count),
+    [
+        #{
+            name => integer_to_binary(Index),
+            value_rep => value_rep({value, Value}),
+            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+        }
+     || {Index, Value} <- lists:enumerate(ListWindow),
+        Step <- [fun(L) -> lists:nth(Index, L) end]
+    ].
+
+-spec tuple_structure(Tuple, Accessor, Window) -> [variable()] when
+    Tuple :: tuple(),
+    Accessor :: accessor(),
+    Window :: window().
+tuple_structure(Tuple, Accessor, #{start := Start, count := Count}) ->
+    [
+        #{
+            name => integer_to_binary(Index),
+            value_rep => value_rep({value, Value}),
+            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+        }
+     || Index <- lists:seq(Start, Count),
+        Value <- [erlang:element(Index, Tuple)],
+        Step <- [fun(T) -> erlang:element(Index, T) end]
+    ].
+
+-spec map_structure(Map, Accessor, Window) -> [variable()] when
+    Map :: map(),
+    Accessor :: accessor(),
+    Window :: window().
+map_structure(Map, Accessor, #{start := Start, count := Count}) ->
+    Slice = slice_map_iterator(maps:iterator(Map, ordered), Start, Count),
+    [
+        #{
+            name => value_rep({value, Key}),
+            value_rep => value_rep({value, Value}),
+            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+        }
+     || {Key, Value} <- Slice,
+        Step <- [fun(M) -> maps:get(Key, M) end]
+    ].
+
+-spec slice_map_iterator(Iterator, Start, Len) -> Slice when
+    Iterator :: maps:iterator(K, V),
+    Start :: pos_integer(),
+    Len :: non_neg_integer(),
+    Slice :: [{K, V}].
+slice_map_iterator(_Iterator, _, 0) ->
+    [];
+slice_map_iterator(Iterator0, Start, Count) when Start > 1 ->
+    case maps:next(Iterator0) of
+        none -> [];
+        {_K, _V, Iterator1} -> slice_map_iterator(Iterator1, Start - 1, Count)
+    end;
+slice_map_iterator(Iterator0, 1, Count) ->
+    case maps:next(Iterator0) of
+        none -> [];
+        {K, V, Iterator1} -> [{K, V} | slice_map_iterator(Iterator1, 1, Count - 1)]
+    end.
+
+-spec extend_accessor(Accessor, Step) -> accessor() when
+    Accessor :: accessor(),
+    Step :: fun((term()) -> term()).
+extend_accessor(Accessor, Step) ->
+    fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end.
 
 % -----------------------------------------------------------------------------
 % Helpers
@@ -168,3 +291,27 @@ format(Format, Args) ->
                 Binary when is_binary(Binary) -> Binary
             end
     end.
+
+-spec structure(Val, ValAccessor) -> none | structure() when
+    Val :: edb:value(),
+    ValAccessor :: callback(term()).
+structure({value, Val = [_ | _]}, ValAccessor) ->
+    #{
+        type => indexed,
+        count => length(Val),
+        accessor => ValAccessor
+    };
+structure({value, Val}, ValAccessor) when is_tuple(Val), tuple_size(Val) > 0 ->
+    #{
+        type => indexed,
+        count => tuple_size(Val),
+        accessor => ValAccessor
+    };
+structure({value, Val}, ValAccessor) when is_map(Val), map_size(Val) > 0 ->
+    #{
+        type => named,
+        count => map_size(Val),
+        accessor => ValAccessor
+    };
+structure(_, _ValAccessor) ->
+    none.

@@ -53,7 +53,6 @@ This module implements the mapping fo PIDs to thread-ids, etc, generically.
 -export_type([pid_frame/0]).
 -export_type([frame_scope/0]).
 -export_type([vars_info/0]).
--export_type([structure/0]).
 
 -doc """
 An integer that fits in a 64-bit float.
@@ -72,10 +71,12 @@ This is the requirement the DAP spec puts on ids.
     }
     | #{
         type := structure,
-        structure := structure()
+        frame_id := id(),
+        key_type := indexed | named,
+        count := pos_integer(),
+        accessor := edb_dap_eval_delegate:accessor()
     }.
 -type frame_scope() :: #{frame := id(), scope := scope()}.
--type structure() :: #{elements := [{binary(), edb:value()}]}.
 
 -type state(A) :: id_mapping(A).
 
@@ -161,9 +162,7 @@ init(ServerType) ->
                         is_integer(FrameId), is_atom(Scope), is_list(Vars)
                     ->
                         {ok, VarsRef};
-                    (VarsRef = #{type := structure, structure := #{elements := Elements}}) when
-                        is_list(Elements)
-                    ->
+                    (VarsRef = #{type := structure, key_type := _, count := _, accessor := _}) ->
                         {ok, VarsRef};
                     (_) ->
                         invalid

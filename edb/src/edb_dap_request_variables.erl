@@ -232,17 +232,34 @@ handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
     case variables_reference_to_vars_info(VariablesReference) of
         #{type := scope, vars := Variables} ->
             #{response => edb_dap_request:success(#{variables => Variables})};
-        #{type := structure, structure := Structure} ->
-            handle_structure(Structure)
+        #{type := structure, frame_id := FrameId, count := Count, accessor := Accessor} ->
+            Window = #{start => 1, count => Count},
+            handle_structure(FrameId, Accessor, Window)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
--spec handle_structure(Structure) -> edb_dap_request:reaction(response_body()) when
-    Structure :: edb_dap_id_mappings:structure().
-handle_structure(#{elements := Elements}) ->
-    Variables = [variable(Name, Value) || {Name, Value} <- Elements],
-    #{response => edb_dap_request:success(#{variables => Variables})}.
+-spec handle_structure(FrameId, Accessor, Window) -> edb_dap_request:reaction(response_body()) when
+    FrameId :: edb_dap_id_mappings:id(),
+    Accessor :: edb_dap_eval_delegate:accessor(),
+    Window :: edb_dap_eval_delegate:window().
+handle_structure(FrameId, Accessor, Window) ->
+    {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
+    EvalResult = edb_dap_eval_delegate:eval(#{
+        context => {Pid, FrameNo},
+        function => edb_dap_eval_delegate:structure_callback(Accessor, Window)
+    }),
+    case EvalResult of
+        not_paused ->
+            edb_dap_request:not_paused(Pid);
+        undefined ->
+            throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
+        {ok, RawVars} ->
+            Vars = make_variables(FrameId, RawVars),
+            #{response => edb_dap_request:success(#{variables => Vars})};
+        {eval_error, Error} ->
+            throw({failed_to_eval_structure, Error})
+    end.
 
 %% ------------------------------------------------------------------
 %% Variables references
@@ -251,14 +268,7 @@ handle_structure(#{elements := Elements}) ->
     FrameId :: edb_dap_id_mappings:id(),
     Scope :: edb_dap_eval_delegate:scope().
 scope_variables_ref(FrameId, #{type := Type, variables := RawVars}) ->
-    Vars = [
-        #{
-            name => Name,
-            value => Rep,
-            variablesReference => variables_reference(Val)
-        }
-     || #{name := Name, value := Val, value_rep := Rep} <- RawVars
-    ],
+    Vars = make_variables(FrameId, RawVars),
     edb_dap_id_mappings:vars_info_to_vars_ref(#{
         type => scope,
         scope => Type,
@@ -266,9 +276,34 @@ scope_variables_ref(FrameId, #{type := Type, variables := RawVars}) ->
         vars => Vars
     }).
 
+-spec structure_variables_ref(FrameId, Structure) -> variables_reference() when
+    FrameId :: edb_dap_id_mappings:id(),
+    Structure :: none | edb_dap_eval_delegate:structure().
+structure_variables_ref(_FrameId, none) ->
+    0;
+structure_variables_ref(FrameId, Structure = #{type := KeyType}) ->
+    VarsInfo = Structure#{
+        type => structure,
+        frame_id => FrameId,
+        key_type => KeyType
+    },
+    edb_dap_id_mappings:vars_info_to_vars_ref(VarsInfo).
+
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
+-spec make_variables(FrameId, RawVars) -> [variable()] when
+    FrameId :: edb_dap_id_mappings:id(),
+    RawVars :: [edb_dap_eval_delegate:variable()].
+make_variables(FrameId, RawVars) ->
+    [
+        #{
+            name => Name,
+            value => Rep,
+            variablesReference => structure_variables_ref(FrameId, Structure)
+        }
+     || #{name := Name, value_rep := Rep, structure := Structure} <- RawVars
+    ].
 
 -spec variables_reference_to_vars_info(VarRef) -> edb_dap_id_mappings:vars_info() when
     VarRef :: edb_dap_id_mappings:id().
@@ -277,59 +312,3 @@ variables_reference_to_vars_info(VarRef) ->
         {ok, FrameScope} -> FrameScope;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
     end.
-
--spec variable(binary(), edb:value()) -> variable().
-variable(Name, Value) ->
-    #{
-        name => Name,
-        value => variable_value(Value),
-        variablesReference => variables_reference(Value)
-    }.
-
--spec variables_reference(edb:value()) -> variables_reference().
-variables_reference({value, Value}) ->
-    case try_to_structure(Value) of
-        {ok, Structure} ->
-            edb_dap_id_mappings:vars_info_to_vars_ref(#{
-                type => structure,
-                structure => Structure
-            });
-        not_structured ->
-            0
-    end;
-variables_reference(_) ->
-    0.
-
--spec try_to_structure(term()) -> {ok, edb_dap_id_mappings:structure()} | not_structured.
-try_to_structure(L) when is_list(L) ->
-    Elements = [{integer_to_binary(Idx), {value, Value}} || {Idx, Value} <- lists:enumerate(L)],
-    {ok, #{elements => Elements}};
-try_to_structure(T) when is_tuple(T) ->
-    try_to_structure(tuple_to_list(T));
-try_to_structure(M) when is_map(M) ->
-    Elements = [{variable_value({value, Name}), {value, Value}} || Name := Value <- M],
-    {ok, #{elements => lists:sort(Elements)}};
-try_to_structure(_) ->
-    not_structured.
-
--spec variable_value(edb:value()) -> binary().
-variable_value({too_large, Size, Max}) ->
-    edb_dap:to_binary(io_lib:format("Too Large (~p vs ~p)", [Size, Max]));
-variable_value({value, Value}) ->
-    format_value("~p", Value).
-
-% The `edb:format/2` function is expensive, since it performs a RPC call to the
-% debugged node. For basic values such as numbers and atoms that don't have a remote
-% representation, we can use local formatting.
--spec format_value(Format, Value) -> binary() when
-    Format :: io:format(), Value :: term().
-format_value(Format, Value) when is_number(Value); is_atom(Value) ->
-    case io_lib:format(Format, [Value]) of
-        Chars when is_list(Chars) ->
-            String = lists:flatten(Chars),
-            case unicode:characters_to_binary(String) of
-                Binary when is_binary(Binary) -> Binary
-            end
-    end;
-format_value(Format, Value) ->
-    edb:format(Format, [Value]).

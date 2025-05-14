@@ -87,7 +87,7 @@ test_reports_locals_scope(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 3
+                            variablesReference => 2
                         }
                 },
                 Scopes
@@ -138,7 +138,7 @@ test_reports_locals_scope_nested_variables(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 6
+                            variablesReference => 5
                         }
                 },
                 Scopes
@@ -160,8 +160,8 @@ test_reports_locals_scope_nested_variables(Config) ->
             ?assertEqual(
                 #{
                     ~"1" => #{name => ~"1", value => ~"4", variablesReference => 0},
-                    ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 5},
-                    ~"3" => #{name => ~"3", value => ~"{6,7}", variablesReference => 7}
+                    ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 0},
+                    ~"3" => #{name => ~"3", value => ~"{6,7}", variablesReference => 6}
                 },
                 ChildrenListVars
             ),
@@ -210,14 +210,14 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 3
+                            variablesReference => 2
                         },
                     ~"Registers" =>
                         #{
                             name => ~"Registers",
                             expensive => false,
                             presentationHint => ~"registers",
-                            variablesReference => 2
+                            variablesReference => 1
                         }
                 },
                 Scopes
@@ -227,7 +227,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
             RegVars = edb_dap_test_support:get_variables(Client, VarRef),
             ?assertMatch(
                 #{
-                    ~"Y0" := #{name := ~"Y0", value := _, variablesReference := 1},
+                    ~"Y0" := #{name := ~"Y0", value := _, variablesReference := 0},
                     ~"Y1" := #{name := ~"Y1", value := _, variablesReference := 0},
                     ~"Y2" := #{name := ~"Y2", value := _, variablesReference := 0}
                 },
@@ -261,14 +261,14 @@ test_reports_messages_in_process_scope(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 4
+                            variablesReference => 3
                         },
                     ~"Registers" =>
                         #{
                             name => ~"Registers",
                             expensive => false,
                             presentationHint => ~"registers",
-                            variablesReference => 2
+                            variablesReference => 1
                         }
                 },
                 Scopes
@@ -281,7 +281,7 @@ test_reports_messages_in_process_scope(Config) ->
                     ~"Messages in queue" => #{
                         name => ~"Messages in queue",
                         value => ~"2",
-                        variablesReference => 3
+                        variablesReference => 2
                     }
                 },
                 ProcessVars
