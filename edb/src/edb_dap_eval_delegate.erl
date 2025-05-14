@@ -63,7 +63,7 @@ be assumed to be running on the debuggee.
 
 -opaque accessor() :: callback(term()).
 
--type window() :: #{start := pos_integer(), count := non_neg_integer()}.
+-type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
 -export_type([scope/0, variable/0, structure/0, accessor/0, window/0]).
 
@@ -201,8 +201,13 @@ structure_callback(Accessor, Window) ->
     List :: list(),
     Accessor :: accessor(),
     Window :: window().
-list_structure(List, Accessor, #{start := Start, count := Count}) ->
-    ListWindow = lists:sublist(List, Start, Count),
+list_structure(List, Accessor, Window) ->
+    ListWindow =
+        case Window of
+            #{start := 1, count := infinity} -> List;
+            #{start := Start, count := infinity} -> lists:nthtail(Start, List);
+            #{start := Start, count := Count} -> lists:sublist(List, Start, Count)
+        end,
     [
         #{
             name => integer_to_binary(Index),
@@ -217,14 +222,19 @@ list_structure(List, Accessor, #{start := Start, count := Count}) ->
     Tuple :: tuple(),
     Accessor :: accessor(),
     Window :: window().
-tuple_structure(Tuple, Accessor, #{start := Start, count := Count}) ->
+tuple_structure(Tuple, Accessor, Window) ->
+    Indices =
+        case Window of
+            #{start := Start, count := infinity} -> lists:seq(Start, tuple_size(Tuple));
+            #{start := Start, count := Count} -> lists:seq(Start, Count)
+        end,
     [
         #{
             name => integer_to_binary(Index),
             value_rep => value_rep({value, Value}),
             structure => structure({value, Value}, extend_accessor(Accessor, Step))
         }
-     || Index <- lists:seq(Start, Count),
+     || Index <- Indices,
         Value <- [erlang:element(Index, Tuple)],
         Step <- [fun(T) -> erlang:element(Index, T) end]
     ].
@@ -248,7 +258,7 @@ map_structure(Map, Accessor, #{start := Start, count := Count}) ->
 -spec slice_map_iterator(Iterator, Start, Len) -> Slice when
     Iterator :: maps:iterator(K, V),
     Start :: pos_integer(),
-    Len :: non_neg_integer(),
+    Len :: non_neg_integer() | infinity,
     Slice :: [{K, V}].
 slice_map_iterator(_Iterator, _, 0) ->
     [];
@@ -257,7 +267,10 @@ slice_map_iterator(Iterator0, Start, Count) when Start > 1 ->
         none -> [];
         {_K, _V, Iterator1} -> slice_map_iterator(Iterator1, Start - 1, Count)
     end;
-slice_map_iterator(Iterator0, 1, Count) ->
+slice_map_iterator(Iterator0, 1, infinity) ->
+    % eqwalizer:fixme eqwalizer is wrong
+    maps:to_list(Iterator0);
+slice_map_iterator(Iterator0, 1, Count) when is_integer(Count) ->
     case maps:next(Iterator0) of
         none -> [];
         {K, V, Iterator1} -> [{K, V} | slice_map_iterator(Iterator1, 1, Count - 1)]
