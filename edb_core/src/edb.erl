@@ -48,8 +48,6 @@ The (new!) Erlang debugger
 
 -export([eval/1]).
 
--export([format/2]).
-
 %% -------------------------------------------------------------------
 %% Types
 %% -------------------------------------------------------------------
@@ -674,26 +672,6 @@ eval(Opts0) ->
         function => Function
     },
     call_server({eval, Opts}, CallTimeout).
-
--doc """
-Run `io_lib:format(Format, Args)` on the attached node.
-
-This is useful to get a human-readable representation of terms
-where Pids, Refs, etc. are displayed relative to the node being
-debugged.
-""".
--spec format(Format, Args) -> binary() when
-    Format :: io:format(),
-    Args :: [term()].
-format(Format, Args) when is_list(Args) ->
-    % elp:ignore W0014 (cross_node_eval) - Debugging tool, expected.
-    case rpc_attached_node(io_lib, format, [Format, Args]) of
-        Chars when is_list(Chars) ->
-            String = lists:flatten(Chars),
-            case unicode:characters_to_binary(String) of
-                Binary when is_binary(Binary) -> Binary
-            end
-    end.
 
 %% -------------------------------------------------------------------
 %% Helpers

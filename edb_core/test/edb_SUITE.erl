@@ -110,9 +110,6 @@
 -export([test_eval_reports_exceptions/1]).
 -export([test_eval_reports_being_killed/1]).
 
-%% Test cases for the test_format group
--export([test_format_works/1]).
-
 %% erlfmt:ignore
 suite() ->
     [
@@ -206,9 +203,6 @@ groups() ->
             test_eval_honors_timeout,
             test_eval_reports_exceptions,
             test_eval_reports_being_killed
-        ]},
-        {test_format, [
-            test_format_works
         ]}
     ].
 
@@ -222,8 +216,7 @@ all() ->
         {group, test_step_out},
         {group, test_stackframes},
         {group, test_process_info},
-        {group, test_eval},
-        {group, test_format}
+        {group, test_eval}
     ].
 
 init_per_suite(Config) ->
@@ -3233,15 +3226,6 @@ test_eval_reports_being_killed(Config) ->
         edb:eval(Opts#{function => F})
     ),
     ok.
-
-%% ------------------------------------------------------------------
-%% Test cases for test_format fixture
-%% ------------------------------------------------------------------
-test_format_works(_Config) ->
-    ?assertEqual(
-        <<"42">>,
-        edb:format("~p", [42])
-    ).
 
 %% ------------------------------------------------------------------
 %% Helpers
