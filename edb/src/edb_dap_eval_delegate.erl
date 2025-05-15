@@ -289,7 +289,7 @@ extend_accessor(Accessor, Step) ->
 -spec value_rep(Val) -> binary() when
     Val :: edb:value().
 value_rep({value, Value}) ->
-    format("~p", [Value]);
+    format("~0kp", [Value]);
 value_rep({too_large, Size, Max}) ->
     format("Too Large (~p vs ~p)", [Size, Max]).
 
