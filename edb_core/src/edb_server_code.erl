@@ -22,7 +22,7 @@
 -export([get_debug_info/2]).
 -export([module_source/1]).
 
-% erlint-ignore dialyzer_override
+% elp:ignore W0048 (no_dialyzer_attribute)
 -dialyzer({nowarn_function, [get_debug_info/2]}).
 -ignore_xref([{code, get_debug_info, 1}]).
 
