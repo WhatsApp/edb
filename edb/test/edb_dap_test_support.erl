@@ -23,7 +23,7 @@
 
 %% Public API
 -export([start_test_client/1]).
--export([start_session_via_attach/4, start_session_via_launch/2]).
+-export([start_session_via_attach/4, start_session_via_launch/2, start_session_via_launch/3]).
 -export([set_breakpoints/3]).
 -export([spawn_and_wait_for_bp/3, wait_for_bp/1]).
 -export([configure/2]).
@@ -83,13 +83,29 @@ start_session_via_attach(Config, Node, Cookie, Cwd) ->
     Client :: client(),
     PeerInfo :: edb_test_support:start_peer_result().
 start_session_via_launch(Config, StartPeerOpts) ->
+    InitArguments = #{},
+    start_session_via_launch(Config, InitArguments, StartPeerOpts).
+
+-spec start_session_via_launch(Config, InitArguments, StartPeerOpts) -> {ok, Client, PeerInfo} when
+    Config :: ct_suite:ct_config(),
+    InitArguments :: #{
+        supportsRunInTerminalRequest => boolean(),
+        supportsVariablePaging => boolean()
+    },
+    StartPeerOpts :: edb_test_support:start_peer_node_opts(),
+    Client :: client(),
+    PeerInfo :: edb_test_support:start_peer_result().
+start_session_via_launch(Config, InitArguments, StartPeerOpts) ->
     {ok, Client} = start_test_client(Config),
 
     AdapterID = atom_to_binary(?MODULE),
-    #{success := true} = edb_dap_test_client:initialize(Client, #{
+    DefaulInitArguments = #{
         adapterID => AdapterID,
         supportsRunInTerminalRequest => true
-    }),
+    },
+    InitArguments1 = maps:merge(InitArguments, DefaulInitArguments),
+
+    #{success := true} = edb_dap_test_client:initialize(Client, InitArguments1),
 
     RunInTerminal0 = #{
         cwd => edb_test_support:random_srcdir(Config),

@@ -72,7 +72,6 @@ This is the requirement the DAP spec puts on ids.
     | #{
         type := structure,
         frame_id := id(),
-        key_type := indexed | named,
         count := pos_integer(),
         accessor := edb_dap_eval_delegate:accessor()
     }.
@@ -162,7 +161,7 @@ init(ServerType) ->
                         is_integer(FrameId), is_atom(Scope), is_list(Vars)
                     ->
                         {ok, VarsRef};
-                    (VarsRef = #{type := structure, key_type := _, count := _, accessor := _}) ->
+                    (VarsRef = #{type := structure, count := _, accessor := _}) ->
                         {ok, VarsRef};
                     (_) ->
                         invalid

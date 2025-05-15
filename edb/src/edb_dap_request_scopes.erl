@@ -108,7 +108,7 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached}, #{frameId := FrameId}) ->
+handle(#{state := attached, client_info := ClientInfo}, #{frameId := FrameId}) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
     EvalResult = edb_dap_eval_delegate:eval(#{
         context => {Pid, FrameNo},
@@ -121,7 +121,7 @@ handle(#{state := attached}, #{frameId := FrameId}) ->
             undefined ->
                 throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
             {ok, RawScopes} ->
-                [make_scope(FrameId, RawScope) || RawScope <- RawScopes];
+                [make_scope(ClientInfo, FrameId, RawScope) || RawScope <- RawScopes];
             {eval_error, Error} ->
                 throw({failed_to_eval_scopes, Error})
         end,
@@ -136,10 +136,11 @@ handle(_UnexpectedState, _) ->
 % --------------------------------------------------------------------
 % Helpers
 % --------------------------------------------------------------------
--spec make_scope(FrameId, RawScope) -> scope() when
+-spec make_scope(ClientInfo, FrameId, RawScope) -> scope() when
+    ClientInfo :: edb_dap_server:client_info(),
     FrameId :: edb_dap_id_mappings:id(),
     RawScope :: edb_dap_eval_delegate:scope().
-make_scope(FrameId, RawScope = #{type := Type}) ->
+make_scope(ClientInfo, FrameId, RawScope = #{type := Type, variables := RawVars}) ->
     Scope0 =
         case Type of
             process ->
@@ -157,8 +158,18 @@ make_scope(FrameId, RawScope = #{type := Type}) ->
                     presentationHint => registers
                 }
         end,
-    VariablesRef = edb_dap_request_variables:scope_variables_ref(FrameId, RawScope),
-    Scope0#{
+    VariablesRef = edb_dap_request_variables:scope_variables_ref(ClientInfo, FrameId, RawScope),
+    Scope1 = Scope0#{
         variablesReference => VariablesRef,
         expensive => false
-    }.
+    },
+    Scope2 =
+        case ClientInfo of
+            #{supportsVariablePaging := true} when VariablesRef > 0 ->
+                Scope1#{
+                    indexedVariables => length(RawVars)
+                };
+            _ ->
+                Scope1
+        end,
+    Scope2.

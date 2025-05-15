@@ -37,6 +37,9 @@ be assumed to be running on the debuggee.
 -export([scopes_callback/1]).
 -export([structure_callback/2]).
 
+% Helpers
+-export([slice_list/2]).
+
 % -----------------------------------------------------------------------------
 % Types
 % -----------------------------------------------------------------------------
@@ -56,7 +59,6 @@ be assumed to be running on the debuggee.
 }.
 
 -type structure() :: #{
-    type := named | indexed,
     count := pos_integer(),
     accessor := accessor()
 }.
@@ -82,7 +84,7 @@ when
     }.
 eval(Opts0) ->
     Defaults = #{
-        max_term_size => 1_000_000,
+        max_term_size => 1_000_000_000,
         timeout => 5_000
     },
     Opts1 = maps:merge(Defaults, Opts0),
@@ -201,22 +203,25 @@ structure_callback(Accessor, Window) ->
     List :: list(),
     Accessor :: accessor(),
     Window :: window().
-list_structure(List, Accessor, Window) ->
-    ListWindow =
-        case Window of
-            #{start := 1, count := infinity} -> List;
-            #{start := Start, count := infinity} -> lists:nthtail(Start, List);
-            #{start := Start, count := Count} -> lists:sublist(List, Start, Count)
-        end,
+list_structure(List, Accessor, Window = #{start := Start}) ->
+    ListWindow = slice_list(List, Window),
     [
         #{
             name => integer_to_binary(Index),
             value_rep => value_rep({value, Value}),
             structure => structure({value, Value}, extend_accessor(Accessor, Step))
         }
-     || {Index, Value} <- lists:enumerate(ListWindow),
+     || {Index, Value} <- lists:enumerate(Start, ListWindow),
         Step <- [fun(L) -> lists:nth(Index, L) end]
     ].
+
+-spec slice_list(List, Window) -> Slice when
+    List :: [A],
+    Window :: window(),
+    Slice :: [A].
+slice_list(List, #{start := 1, count := infinity}) -> List;
+slice_list(List, #{start := Start, count := infinity}) -> lists:nthtail(Start, List);
+slice_list(List, #{start := Start, count := Count}) -> lists:sublist(List, Start, Count).
 
 -spec tuple_structure(Tuple, Accessor, Window) -> [variable()] when
     Tuple :: tuple(),
@@ -225,8 +230,11 @@ list_structure(List, Accessor, Window) ->
 tuple_structure(Tuple, Accessor, Window) ->
     Indices =
         case Window of
-            #{start := Start, count := infinity} -> lists:seq(Start, tuple_size(Tuple));
-            #{start := Start, count := Count} -> lists:seq(Start, Count)
+            #{start := Start, count := infinity} ->
+                lists:seq(Start, tuple_size(Tuple));
+            #{start := Start, count := Count} ->
+                End = min(tuple_size(Tuple), Start + Count - 1),
+                lists:seq(Start, End)
         end,
     [
         #{
@@ -310,19 +318,16 @@ format(Format, Args) ->
     ValAccessor :: callback(term()).
 structure({value, Val = [_ | _]}, ValAccessor) ->
     #{
-        type => indexed,
         count => length(Val),
         accessor => ValAccessor
     };
 structure({value, Val}, ValAccessor) when is_tuple(Val), tuple_size(Val) > 0 ->
     #{
-        type => indexed,
         count => tuple_size(Val),
         accessor => ValAccessor
     };
 structure({value, Val}, ValAccessor) when is_map(Val), map_size(Val) > 0 ->
     #{
-        type => named,
         count => map_size(Val),
         accessor => ValAccessor
     };

@@ -24,7 +24,7 @@
 
 -export([parse_arguments/1, handle/2]).
 
--export([scope_variables_ref/2]).
+-export([scope_variables_ref/3]).
 
 %% ------------------------------------------------------------------
 %% Types
@@ -228,22 +228,24 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached}, #{variablesReference := VariablesReference}) ->
+handle(#{state := attached, client_info := ClientInfo}, Args = #{variablesReference := VariablesReference}) ->
+    Window = get_requested_window(Args),
     case variables_reference_to_vars_info(VariablesReference) of
         #{type := scope, vars := Variables} ->
-            #{response => edb_dap_request:success(#{variables => Variables})};
-        #{type := structure, frame_id := FrameId, count := Count, accessor := Accessor} ->
-            Window = #{start => 1, count => Count},
-            handle_structure(FrameId, Accessor, Window)
+            Slice = edb_dap_eval_delegate:slice_list(Variables, Window),
+            #{response => edb_dap_request:success(#{variables => Slice})};
+        #{type := structure, frame_id := FrameId, accessor := Accessor} ->
+            handle_structure(ClientInfo, FrameId, Accessor, Window)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
--spec handle_structure(FrameId, Accessor, Window) -> edb_dap_request:reaction(response_body()) when
+-spec handle_structure(ClientInfo, FrameId, Accessor, Window) -> edb_dap_request:reaction(response_body()) when
+    ClientInfo :: edb_dap_server:client_info(),
     FrameId :: edb_dap_id_mappings:id(),
     Accessor :: edb_dap_eval_delegate:accessor(),
     Window :: edb_dap_eval_delegate:window().
-handle_structure(FrameId, Accessor, Window) ->
+handle_structure(ClientInfo, FrameId, Accessor, Window) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
     EvalResult = edb_dap_eval_delegate:eval(#{
         context => {Pid, FrameNo},
@@ -255,7 +257,7 @@ handle_structure(FrameId, Accessor, Window) ->
         undefined ->
             throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
         {ok, RawVars} ->
-            Vars = make_variables(FrameId, RawVars),
+            Vars = make_variables(ClientInfo, FrameId, RawVars),
             #{response => edb_dap_request:success(#{variables => Vars})};
         {eval_error, Error} ->
             throw({failed_to_eval_structure, Error})
@@ -264,11 +266,12 @@ handle_structure(FrameId, Accessor, Window) ->
 %% ------------------------------------------------------------------
 %% Variables references
 %% ------------------------------------------------------------------
--spec scope_variables_ref(FrameId, Scope) -> edb_dap_request_variables:variables_reference() when
+-spec scope_variables_ref(ClientInfo, FrameId, Scope) -> edb_dap_request_variables:variables_reference() when
+    ClientInfo :: edb_dap_server:client_info(),
     FrameId :: edb_dap_id_mappings:id(),
     Scope :: edb_dap_eval_delegate:scope().
-scope_variables_ref(FrameId, #{type := Type, variables := RawVars}) ->
-    Vars = make_variables(FrameId, RawVars),
+scope_variables_ref(ClientInfo, FrameId, #{type := Type, variables := RawVars}) ->
+    Vars = make_variables(ClientInfo, FrameId, RawVars),
     edb_dap_id_mappings:vars_info_to_vars_ref(#{
         type => scope,
         scope => Type,
@@ -281,29 +284,38 @@ scope_variables_ref(FrameId, #{type := Type, variables := RawVars}) ->
     Structure :: none | edb_dap_eval_delegate:structure().
 structure_variables_ref(_FrameId, none) ->
     0;
-structure_variables_ref(FrameId, Structure = #{type := KeyType}) ->
+structure_variables_ref(FrameId, Structure) ->
     VarsInfo = Structure#{
         type => structure,
-        frame_id => FrameId,
-        key_type => KeyType
+        frame_id => FrameId
     },
     edb_dap_id_mappings:vars_info_to_vars_ref(VarsInfo).
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec make_variables(FrameId, RawVars) -> [variable()] when
+-spec make_variables(ClientInfo, FrameId, RawVars) -> [variable()] when
+    ClientInfo :: edb_dap_server:client_info(),
     FrameId :: edb_dap_id_mappings:id(),
     RawVars :: [edb_dap_eval_delegate:variable()].
-make_variables(FrameId, RawVars) ->
+make_variables(ClientInfo, FrameId, RawVars) ->
     [
-        #{
+        maybe_add_pagination_info(ClientInfo, Structure, #{
             name => Name,
             value => Rep,
             variablesReference => structure_variables_ref(FrameId, Structure)
-        }
+        })
      || #{name := Name, value_rep := Rep, structure := Structure} <- RawVars
     ].
+
+-spec maybe_add_pagination_info(ClientInfo, Structure, Variable) -> Variable when
+    ClientInfo :: edb_dap_server:client_info(),
+    Structure :: none | edb_dap_eval_delegate:structure(),
+    Variable :: variable().
+maybe_add_pagination_info(#{supportsVariablePaging := true}, #{count := N}, Variable) when N > 0 ->
+    Variable#{indexedVariables => N};
+maybe_add_pagination_info(_ClientInfo, _Structure, Variable) ->
+    Variable.
 
 -spec variables_reference_to_vars_info(VarRef) -> edb_dap_id_mappings:vars_info() when
     VarRef :: edb_dap_id_mappings:id().
@@ -312,3 +324,11 @@ variables_reference_to_vars_info(VarRef) ->
         {ok, FrameScope} -> FrameScope;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
     end.
+
+-spec get_requested_window(Args) -> edb_dap_eval_delegate:window() when
+    Args :: arguments().
+get_requested_window(Args) ->
+    #{
+        start => maps:get(start, Args, 0) + 1,
+        count => maps:get(count, Args, infinity)
+    }.

@@ -34,17 +34,21 @@
 %% Test cases
 -export([
     test_reports_locals_scope/1,
-    test_reports_locals_scope_nested_variables/1,
     test_reports_registers_scope_when_locals_not_available/1,
-    test_reports_messages_in_process_scope/1
+    test_reports_messages_in_process_scope/1,
+
+    test_structured_variables/1,
+    test_structured_variables_with_pagination/1
 ]).
 
 all() ->
     [
         test_reports_locals_scope,
-        test_reports_locals_scope_nested_variables,
         test_reports_registers_scope_when_locals_not_available,
-        test_reports_messages_in_process_scope
+        test_reports_messages_in_process_scope,
+
+        test_structured_variables,
+        test_structured_variables_with_pagination
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -105,7 +109,7 @@ test_reports_locals_scope(Config) ->
     end,
     ok.
 
-test_reports_locals_scope_nested_variables(Config) ->
+test_structured_variables(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
@@ -185,6 +189,94 @@ test_reports_locals_scope_nested_variables(Config) ->
                 GranChildrenVars
             )
     end,
+    ok.
+
+test_structured_variables_with_pagination(Config) ->
+    InitArguments = #{supportsVariablePaging => true},
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, InitArguments, #{
+            modules => [
+                {source, [~"""
+                    -module(foo).            %L01\n
+                    -export([go/3]).         %L02\n
+                    go(L, T, M) ->           %L03\n
+                        {L, T, M}.           %L04\n
+                """]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+
+    L = [10, 20, 30, 40, 50, 60, 70, 80, 90],
+    T = {4, [], {6, 7}, 8, {}, 9},
+    M = #{life => 42, death => 43, etc => 44, more => 45},
+    {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
+        Client, Peer, {foo, go, [L, T, M]}
+    ),
+
+    % When client supports variable paging, scopes include variable count
+    #{~"Locals" := LocalsScope} = edb_dap_test_support:get_scopes(Client, TopFrameId),
+    ?assertEqual(
+        #{
+            name => ~"Locals",
+            expensive => false,
+            presentationHint => ~"locals",
+            variablesReference => 4,
+            indexedVariables => 3
+        },
+        LocalsScope
+    ),
+
+    % With variable paging support, we also get counts in variable references
+    VarRef = maps:get(variablesReference, LocalsScope),
+    LocalVars = edb_dap_test_support:get_variables(Client, VarRef),
+    ?assertEqual(
+        #{
+            ~"L" => #{
+                name => ~"L", value => ~"[10,20,30,40,50,60,70,80,90]", variablesReference => 1, indexedVariables => 9
+            },
+            ~"T" => #{name => ~"T", value => ~"{4,[],{6,7},8,{},9}", variablesReference => 3, indexedVariables => 6},
+            ~"M" => #{
+                name => ~"M",
+                value => ~"#{death => 43,etc => 44,life => 42,more => 45}",
+                variablesReference => 2,
+                indexedVariables => 4
+            }
+        },
+        LocalVars
+    ),
+
+    % Test pagination for list
+    ListVarsRef = maps:get(variablesReference, maps:get(~"L", LocalVars)),
+    ?assertEqual(
+        [
+            #{name => ~"3", value => ~"30", variablesReference => 0},
+            #{name => ~"4", value => ~"40", variablesReference => 0},
+            #{name => ~"5", value => ~"50", variablesReference => 0}
+        ],
+        get_variables_page(Client, ListVarsRef, #{start => 2, count => 3})
+    ),
+
+    % Test pagination for tuples
+    TupleVarsRef = maps:get(variablesReference, maps:get(~"T", LocalVars)),
+    ?assertEqual(
+        [
+            #{name => ~"2", value => ~"[]", variablesReference => 0},
+            #{name => ~"3", value => ~"{6,7}", variablesReference => 6, indexedVariables => 2},
+            #{name => ~"4", value => ~"8", variablesReference => 0},
+            #{name => ~"5", value => ~"{}", variablesReference => 0}
+        ],
+        get_variables_page(Client, TupleVarsRef, #{start => 1, count => 4})
+    ),
+
+    % Test pagination for maps
+    MapVarsRef = maps:get(variablesReference, maps:get(~"M", LocalVars)),
+    ?assertEqual(
+        [
+            #{name => ~"etc", value => ~"44", variablesReference => 0},
+            #{name => ~"life", value => ~"42", variablesReference => 0}
+        ],
+        get_variables_page(Client, MapVarsRef, #{start => 1, count => 2})
+    ),
     ok.
 
 test_reports_registers_scope_when_locals_not_available(Config) ->
@@ -298,3 +390,33 @@ test_reports_messages_in_process_scope(Config) ->
             )
     end,
     ok.
+
+% -----------------------------------------------------------------------------
+% Helpers
+% -----------------------------------------------------------------------------
+-spec get_variables_page(Client, VarRef, Window) -> [edb_dap_request_variables:variable()] when
+    Client :: edb_dap_test_support:client(),
+    VarRef :: number(),
+    Window :: #{start => non_neg_integer(), count => non_neg_integer()}.
+get_variables_page(Client, VarRef, Window) ->
+    Args0 = #{variablesReference => VarRef},
+    Args1 =
+        case Window of
+            #{start := Start, count := Count} ->
+                Args0#{start => Start, count => Count};
+            #{start := Start} ->
+                Args0#{start => Start};
+            #{count := Count} ->
+                Args0#{count => Count};
+            _ ->
+                Args0
+        end,
+    case edb_dap_test_client:variables(Client, Args1) of
+        #{
+            command := ~"variables",
+            type := response,
+            success := true,
+            body := #{variables := Vars}
+        } ->
+            Vars
+    end.
