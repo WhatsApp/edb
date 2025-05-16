@@ -276,7 +276,6 @@ slice_map_iterator(Iterator0, Start, Count) when Start > 1 ->
         {_K, _V, Iterator1} -> slice_map_iterator(Iterator1, Start - 1, Count)
     end;
 slice_map_iterator(Iterator0, 1, infinity) ->
-    % eqwalizer:fixme eqwalizer is wrong
     maps:to_list(Iterator0);
 slice_map_iterator(Iterator0, 1, Count) when is_integer(Count) ->
     case maps:next(Iterator0) of
