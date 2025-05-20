@@ -43,8 +43,14 @@ be assumed to be running on the debuggee.
 % -----------------------------------------------------------------------------
 % Types
 % -----------------------------------------------------------------------------
--opaque callback(Result) :: fun((Vars :: edb:stack_frame_vars()) -> Result).
+-opaque callback(Result) ::
+    #{
+        function := stack_frame_vars_fun(Result),
+        deps := [module()]
+    }.
 -export_type([callback/1]).
+
+-type stack_frame_vars_fun(Result) :: fun((Vars :: edb:stack_frame_vars()) -> Result).
 
 -type scope() :: #{
     type := process | locals | registers,
@@ -63,7 +69,7 @@ be assumed to be running on the debuggee.
     accessor := accessor()
 }.
 
--opaque accessor() :: callback(term()).
+-opaque accessor() :: stack_frame_vars_fun(term()).
 
 -type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
@@ -83,13 +89,15 @@ when
         function := callback(Result)
     }.
 eval(Opts0) ->
+    #{function := #{function := Fun, deps := Deps}} = Opts0,
+    Opts1 = Opts0#{function => Fun, dependencies => Deps},
     Defaults = #{
         max_term_size => 1_000_000_000,
         timeout => 5_000
     },
-    Opts1 = maps:merge(Defaults, Opts0),
+    Opts2 = maps:merge(Defaults, Opts1),
     % eqwalizer:fixme spec of maps:merge() loses info
-    edb:eval(Opts1).
+    edb:eval(Opts2).
 
 % -----------------------------------------------------------------------------
 % Callback for the "scopes" request
@@ -97,17 +105,21 @@ eval(Opts0) ->
 -spec scopes_callback(Pid) -> callback([scope()]) when
     Pid :: pid().
 scopes_callback(Pid) ->
-    fun(StackFrameVars) ->
-        Scopes0 = [process_scope(Pid)],
-        Scopes1 =
-            case StackFrameVars of
-                #{vars := Vars} ->
-                    [locals_scope(Vars) | Scopes0];
-                _ ->
-                    [registers_scope(StackFrameVars) | Scopes0]
-            end,
-        Scopes1
-    end.
+    #{
+        deps => [],
+        function =>
+            fun(StackFrameVars) ->
+                Scopes0 = [process_scope(Pid)],
+                Scopes1 =
+                    case StackFrameVars of
+                        #{vars := Vars} ->
+                            [locals_scope(Vars) | Scopes0];
+                        _ ->
+                            [registers_scope(StackFrameVars) | Scopes0]
+                    end,
+                Scopes1
+            end
+    }.
 
 -spec locals_scope(Vars) -> scope() when
     Vars :: #{Name :: binary() => edb:value()}.
@@ -190,14 +202,18 @@ access_process_info(Pid, Type) ->
     Accessor :: accessor(),
     Window :: window().
 structure_callback(Accessor, Window) ->
-    fun(StackFrameVars) ->
-        case Accessor(StackFrameVars) of
-            List when is_list(List) -> list_structure(List, Accessor, Window);
-            Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, Window);
-            Map when is_map(Map) -> map_structure(Map, Accessor, Window);
-            _ -> []
-        end
-    end.
+    #{
+        deps => [],
+        function =>
+            fun(StackFrameVars) ->
+                case Accessor(StackFrameVars) of
+                    List when is_list(List) -> list_structure(List, Accessor, Window);
+                    Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, Window);
+                    Map when is_map(Map) -> map_structure(Map, Accessor, Window);
+                    _ -> []
+                end
+            end
+    }.
 
 -spec list_structure(List, Accessor, Window) -> [variable()] when
     List :: list(),
@@ -314,7 +330,7 @@ format(Format, Args) ->
 
 -spec structure(Val, ValAccessor) -> none | structure() when
     Val :: edb:value(),
-    ValAccessor :: callback(term()).
+    ValAccessor :: accessor().
 structure({value, Val = [_ | _]}, ValAccessor) ->
     #{
         count => length(Val),
