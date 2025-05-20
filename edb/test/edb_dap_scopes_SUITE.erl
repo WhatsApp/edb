@@ -22,7 +22,7 @@
 -typing([eqwalizer]).
 
 % @fb-only
--include_lib("assert/include/assert.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 %% CT callbacks
 -export([
