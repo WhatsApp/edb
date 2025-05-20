@@ -46,6 +46,7 @@
     step_out/2,
     scopes/2,
     variables/2,
+    evaluate/2,
     disconnect/2
 ]).
 -export([wait_for_event/2]).
@@ -153,6 +154,11 @@ scopes(Client, Args) ->
 -spec variables(client(), edb_dap_request_variables:arguments()) -> edb_dap:response().
 variables(Client, Args) ->
     Request = #{type => request, command => ~"variables", arguments => Args},
+    call(Client, Request).
+
+-spec evaluate(client(), edb_dap_request_evaluate:arguments()) -> edb_dap:response().
+evaluate(Client, Args) ->
+    Request = #{type => request, command => ~"evaluate", arguments => Args},
     call(Client, Request).
 
 -spec disconnect(client(), edb_dap_request_disconnect:arguments()) -> edb_dap:response().

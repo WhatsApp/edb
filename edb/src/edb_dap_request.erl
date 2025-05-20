@@ -117,6 +117,7 @@ known_handlers() ->
         ~"configurationDone" => edb_dap_request_configuration_done,
         ~"continue" => edb_dap_request_continue,
         ~"disconnect" => edb_dap_request_disconnect,
+        ~"evaluate" => edb_dap_request_evaluate,
         ~"initialize" => edb_dap_request_initialize,
         ~"launch" => edb_dap_request_launch,
         ~"pause" => edb_dap_request_pause,

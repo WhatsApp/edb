@@ -24,7 +24,8 @@
 
 -export([parse_arguments/1, handle/2]).
 
--export([scope_variables_ref/3]).
+-export([value_format_template/0]).
+-export([scope_variables_ref/3, structure_variables_ref/2]).
 
 %% ------------------------------------------------------------------
 %% Types
@@ -223,7 +224,7 @@ arguments_template() ->
 -spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
     Template = arguments_template(),
-    edb_dap_parse:parse(Template, Args, allow_unknown).
+    edb_dap_parse:parse(Template, Args, reject_unknown).
 
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
@@ -321,7 +322,7 @@ maybe_add_pagination_info(_ClientInfo, _Structure, Variable) ->
     VarRef :: edb_dap_id_mappings:id().
 variables_reference_to_vars_info(VarRef) ->
     case edb_dap_id_mappings:vars_reference_to_vars_info(VarRef) of
-        {ok, FrameScope} -> FrameScope;
+        {ok, VarsInfo} -> VarsInfo;
         {error, not_found} -> edb_dap_request:abort(edb_dap_request:unknown_resource(variables_ref, VarRef))
     end.
 

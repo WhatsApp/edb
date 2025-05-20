@@ -36,6 +36,7 @@ be assumed to be running on the debuggee.
 % Callbacks
 -export([scopes_callback/1]).
 -export([structure_callback/2]).
+-export([evaluate_callback/1]).
 
 % Helpers
 -export([slice_list/2]).
@@ -64,6 +65,20 @@ be assumed to be running on the debuggee.
         none | structure()
 }.
 
+-type evaluation_result() ::
+    #{
+        type := success,
+        value_rep := binary(),
+        structure :=
+            none | structure()
+    }
+    | #{
+        type := exception,
+        class := error | exit | throw,
+        reason := term(),
+        stacktrace := erlang:stacktrace()
+    }.
+
 -type structure() :: #{
     count := pos_integer(),
     accessor := accessor()
@@ -73,7 +88,7 @@ be assumed to be running on the debuggee.
 
 -type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
--export_type([scope/0, variable/0, structure/0, accessor/0, window/0]).
+-export_type([scope/0, variable/0, evaluation_result/0, structure/0, accessor/0, window/0]).
 
 % -----------------------------------------------------------------------------
 % Running
@@ -304,6 +319,36 @@ slice_map_iterator(Iterator0, 1, Count) when is_integer(Count) ->
     Step :: fun((term()) -> term()).
 extend_accessor(Accessor, Step) ->
     fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end.
+
+% -----------------------------------------------------------------------------
+% Callback for the "evaluate" request
+% -----------------------------------------------------------------------------
+-spec evaluate_callback(CompiledExpr) -> callback(evaluation_result()) when
+    CompiledExpr :: edb_expr:compiled_expr().
+evaluate_callback(CompiledExpr) ->
+    Eval = edb_expr:entrypoint(CompiledExpr),
+    #{
+        deps => [maps:get(module, CompiledExpr)],
+        function =>
+            fun(StackFrameVars) ->
+                try Eval(StackFrameVars) of
+                    Result ->
+                        #{
+                            type => success,
+                            value_rep => value_rep({value, Result}),
+                            structure => structure({value, Result}, Eval)
+                        }
+                catch
+                    EClass:EReason:ST ->
+                        #{
+                            type => exception,
+                            class => EClass,
+                            reason => EReason,
+                            stacktrace => ST
+                        }
+                end
+            end
+    }.
 
 % -----------------------------------------------------------------------------
 % Helpers
