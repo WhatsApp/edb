@@ -281,7 +281,7 @@ start_peer_no_dist(CtConfig, Opts) ->
     FilePath :: binary(),
     Modules :: #{module() => FilePath}.
 gen_start_peer(CtConfig, NodeInfo, Opts) ->
-    CommonArgs = ["-connect_all", "false"],
+    CommonArgs = ["-connect_all", "false", "+S2", "+Q65535"],
     CookieArgs =
         case NodeInfo of
             no_dist -> [];
