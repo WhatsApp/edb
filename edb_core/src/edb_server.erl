@@ -207,8 +207,8 @@ call(Node, Request, Timeout) ->
     case gen_server:call({?MODULE, Node}, Request, Timeout) of
         {finished, Reply} ->
             Reply;
-        {raised, Class, Term} when Class =:= error; Class =:= throw; Class =:= exit ->
-            erlang:Class(Class, Term)
+        {raised, Class, {Reason, ST}} when Class =:= error; Class =:= throw; Class =:= exit ->
+            erlang:raise(Class, Reason, ST)
     end.
 
 -doc """
