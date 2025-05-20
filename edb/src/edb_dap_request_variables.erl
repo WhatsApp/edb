@@ -235,22 +235,25 @@ handle(#{state := attached, client_info := ClientInfo}, Args = #{variablesRefere
         #{type := scope, vars := Variables} ->
             Slice = edb_dap_eval_delegate:slice_list(Variables, Window),
             #{response => edb_dap_request:success(#{variables => Slice})};
-        #{type := structure, frame_id := FrameId, accessor := Accessor} ->
-            handle_structure(ClientInfo, FrameId, Accessor, Window)
+        #{type := structure, frame_id := FrameId, accessor := Accessor, evaluate_name := EvalName} ->
+            handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window)
     end;
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
--spec handle_structure(ClientInfo, FrameId, Accessor, Window) -> edb_dap_request:reaction(response_body()) when
+-spec handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window) ->
+    edb_dap_request:reaction(response_body())
+when
     ClientInfo :: edb_dap_server:client_info(),
     FrameId :: edb_dap_id_mappings:id(),
     Accessor :: edb_dap_eval_delegate:accessor(),
+    EvalName :: edb_dap_eval_delegate:eval_name(),
     Window :: edb_dap_eval_delegate:window().
-handle_structure(ClientInfo, FrameId, Accessor, Window) ->
+handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
     EvalResult = edb_dap_eval_delegate:eval(#{
         context => {Pid, FrameNo},
-        function => edb_dap_eval_delegate:structure_callback(Accessor, Window)
+        function => edb_dap_eval_delegate:structure_callback(Accessor, EvalName, Window)
     }),
     case EvalResult of
         not_paused ->
@@ -301,11 +304,15 @@ structure_variables_ref(FrameId, Structure) ->
     RawVars :: [edb_dap_eval_delegate:variable()].
 make_variables(ClientInfo, FrameId, RawVars) ->
     [
-        maybe_add_pagination_info(ClientInfo, Structure, #{
-            name => Name,
-            value => Rep,
-            variablesReference => structure_variables_ref(FrameId, Structure)
-        })
+        maybe_add_pagination_info(
+            ClientInfo,
+            Structure,
+            maybe_add_evaluate_name(Structure, #{
+                name => Name,
+                value => Rep,
+                variablesReference => structure_variables_ref(FrameId, Structure)
+            })
+        )
      || #{name := Name, value_rep := Rep, structure := Structure} <- RawVars
     ].
 
@@ -316,6 +323,14 @@ make_variables(ClientInfo, FrameId, RawVars) ->
 maybe_add_pagination_info(#{supportsVariablePaging := true}, #{count := N}, Variable) when N > 0 ->
     Variable#{indexedVariables => N};
 maybe_add_pagination_info(_ClientInfo, _Structure, Variable) ->
+    Variable.
+
+-spec maybe_add_evaluate_name(Structure, Variable) -> Variable when
+    Structure :: none | edb_dap_eval_delegate:structure(),
+    Variable :: variable().
+maybe_add_evaluate_name(#{evaluate_name := EvalName}, Variable) when is_binary(EvalName) ->
+    Variable#{evaluateName => EvalName};
+maybe_add_evaluate_name(_, Variable) ->
     Variable.
 
 -spec variables_reference_to_vars_info(VarRef) -> edb_dap_id_mappings:vars_info() when

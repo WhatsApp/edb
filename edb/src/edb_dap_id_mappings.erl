@@ -73,7 +73,8 @@ This is the requirement the DAP spec puts on ids.
         type := structure,
         frame_id := id(),
         count := pos_integer(),
-        accessor := edb_dap_eval_delegate:accessor()
+        accessor := edb_dap_eval_delegate:accessor(),
+        evaluate_name := edb_dap_eval_delegate:eval_name()
     }.
 -type frame_scope() :: #{frame := id(), scope := scope()}.
 

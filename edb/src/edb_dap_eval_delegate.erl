@@ -35,8 +35,8 @@ be assumed to be running on the debuggee.
 
 % Callbacks
 -export([scopes_callback/1]).
--export([structure_callback/2]).
--export([evaluate_callback/1]).
+-export([structure_callback/3]).
+-export([evaluate_callback/2]).
 
 % Helpers
 -export([slice_list/2]).
@@ -81,14 +81,17 @@ be assumed to be running on the debuggee.
 
 -type structure() :: #{
     count := pos_integer(),
-    accessor := accessor()
+    accessor := accessor(),
+    evaluate_name := eval_name()
 }.
 
 -opaque accessor() :: stack_frame_vars_fun(term()).
+-type eval_name() :: binary() | none.
 
 -type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
--export_type([scope/0, variable/0, evaluation_result/0, structure/0, accessor/0, window/0]).
+-export_type([scope/0, variable/0, evaluation_result/0, structure/0, accessor/0, eval_name/0]).
+-export_type([window/0]).
 
 % -----------------------------------------------------------------------------
 % Running
@@ -151,13 +154,16 @@ locals_scope(Vars) ->
         ]
     }.
 
--spec access_local(Name) -> accessor() when Name :: binary().
+-spec access_local(Name) -> {accessor(), eval_name()} when
+    Name :: binary().
 access_local(Name) ->
-    fun(#{vars := Vars}) ->
+    Accessor = fun(#{vars := Vars}) ->
         case Vars of
             #{Name := {value, Value}} -> Value
         end
-    end.
+    end,
+    EvalName = Name,
+    {Accessor, EvalName}.
 
 -spec registers_scope(StackFrameVars) -> scope() when
     StackFrameVars :: edb:stack_frame_vars().
@@ -175,14 +181,15 @@ registers_scope(StackFrameVars) ->
         ]
     }.
 
--spec access_reg(Type, Index) -> accessor() when
+-spec access_reg(Type, Index) -> {accessor(), eval_name()} when
     Type :: xregs | yregs,
     Index :: non_neg_integer().
 access_reg(Type, Index) ->
-    fun(StackFrameVars) ->
+    Accessor = fun(StackFrameVars) ->
         {value, Value} = lists:nth(Index + 1, maps:get(Type, StackFrameVars)),
         Value
-    end.
+    end,
+    {Accessor, none}.
 
 -spec process_scope(Pid) -> scope() when Pid :: pid().
 process_scope(Pid) ->
@@ -201,49 +208,54 @@ process_scope(Pid) ->
         end,
     #{type => process, variables => MessagesVar}.
 
--spec access_process_info(Pid, Type) -> accessor() when
+-spec access_process_info(Pid, Type) -> {accessor(), eval_name()} when
     Pid :: pid(),
     Type :: messages.
 access_process_info(Pid, Type) ->
-    fun(_) ->
+    Accessor = fun(_) ->
         {Type, Value} = erlang:process_info(Pid, Type),
         Value
-    end.
+    end,
+    EvalName = format("erlang:element(2, erlang:process_info(erlang:list_to_pid(\"~p\"), ~p))", [Pid, Type]),
+    {Accessor, EvalName}.
 
 % -----------------------------------------------------------------------------
 % Callback for the "variables" request
 % -----------------------------------------------------------------------------
--spec structure_callback(Accessor, Window) -> callback([variable()]) when
+-spec structure_callback(Accessor, EvalName, Window) -> callback([variable()]) when
     Accessor :: accessor(),
+    EvalName :: eval_name(),
     Window :: window().
-structure_callback(Accessor, Window) ->
+structure_callback(Accessor, EvalName, Window) ->
     #{
         deps => [],
         function =>
             fun(StackFrameVars) ->
                 case Accessor(StackFrameVars) of
-                    List when is_list(List) -> list_structure(List, Accessor, Window);
-                    Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, Window);
-                    Map when is_map(Map) -> map_structure(Map, Accessor, Window);
+                    List when is_list(List) -> list_structure(List, Accessor, EvalName, Window);
+                    Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, EvalName, Window);
+                    Map when is_map(Map) -> map_structure(Map, Accessor, EvalName, Window);
                     _ -> []
                 end
             end
     }.
 
--spec list_structure(List, Accessor, Window) -> [variable()] when
+-spec list_structure(List, Accessor, EvalName, Window) -> [variable()] when
     List :: list(),
     Accessor :: accessor(),
+    EvalName :: eval_name(),
     Window :: window().
-list_structure(List, Accessor, Window = #{start := Start}) ->
+list_structure(List, Accessor, EvalName, Window = #{start := Start}) ->
     ListWindow = slice_list(List, Window),
     [
         #{
             name => integer_to_binary(Index),
             value_rep => value_rep({value, Value}),
-            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+            structure => structure({value, Value}, extend_accessor(Accessor, EvalName, Step, StepStr))
         }
      || {Index, Value} <- lists:enumerate(Start, ListWindow),
-        Step <- [fun(L) -> lists:nth(Index, L) end]
+        Step <- [fun(L) -> lists:nth(Index, L) end],
+        StepStr <- [fun(E) -> format("lists:nth(~b, ~s)", [Index, E]) end]
     ].
 
 -spec slice_list(List, Window) -> Slice when
@@ -254,11 +266,12 @@ slice_list(List, #{start := 1, count := infinity}) -> List;
 slice_list(List, #{start := Start, count := infinity}) -> lists:nthtail(Start, List);
 slice_list(List, #{start := Start, count := Count}) -> lists:sublist(List, Start, Count).
 
--spec tuple_structure(Tuple, Accessor, Window) -> [variable()] when
+-spec tuple_structure(Tuple, Accessor, EvalName, Window) -> [variable()] when
     Tuple :: tuple(),
     Accessor :: accessor(),
+    EvalName :: eval_name(),
     Window :: window().
-tuple_structure(Tuple, Accessor, Window) ->
+tuple_structure(Tuple, Accessor, EvalName, Window) ->
     Indices =
         case Window of
             #{start := Start, count := infinity} ->
@@ -271,27 +284,30 @@ tuple_structure(Tuple, Accessor, Window) ->
         #{
             name => integer_to_binary(Index),
             value_rep => value_rep({value, Value}),
-            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+            structure => structure({value, Value}, extend_accessor(Accessor, EvalName, Step, StepStr))
         }
      || Index <- Indices,
         Value <- [erlang:element(Index, Tuple)],
-        Step <- [fun(T) -> erlang:element(Index, T) end]
+        Step <- [fun(T) -> erlang:element(Index, T) end],
+        StepStr <- [fun(E) -> format("erlang:element(~b, ~s)", [Index, E]) end]
     ].
 
--spec map_structure(Map, Accessor, Window) -> [variable()] when
+-spec map_structure(Map, Accessor, EvalName, Window) -> [variable()] when
     Map :: map(),
     Accessor :: accessor(),
+    EvalName :: eval_name(),
     Window :: window().
-map_structure(Map, Accessor, #{start := Start, count := Count}) ->
+map_structure(Map, Accessor, EvalName, #{start := Start, count := Count}) ->
     Slice = slice_map_iterator(maps:iterator(Map, ordered), Start, Count),
     [
         #{
             name => value_rep({value, Key}),
             value_rep => value_rep({value, Value}),
-            structure => structure({value, Value}, extend_accessor(Accessor, Step))
+            structure => structure({value, Value}, extend_accessor(Accessor, EvalName, Step, StepStr))
         }
      || {Key, Value} <- Slice,
-        Step <- [fun(M) -> maps:get(Key, M) end]
+        Step <- [fun(M) -> maps:get(Key, M) end],
+        StepStr <- [fun(E) -> format("maps:get(~p, ~s)", [Key, E]) end]
     ].
 
 -spec slice_map_iterator(Iterator, Start, Len) -> Slice when
@@ -314,18 +330,27 @@ slice_map_iterator(Iterator0, 1, Count) when is_integer(Count) ->
         {K, V, Iterator1} -> [{K, V} | slice_map_iterator(Iterator1, 1, Count - 1)]
     end.
 
--spec extend_accessor(Accessor, Step) -> accessor() when
+-spec extend_accessor(Accessor, EvalName, Step, StepStr) -> {accessor(), eval_name()} when
     Accessor :: accessor(),
-    Step :: fun((term()) -> term()).
-extend_accessor(Accessor, Step) ->
-    fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end.
+    EvalName :: eval_name(),
+    Step :: fun((term()) -> term()),
+    StepStr :: fun((binary()) -> binary()).
+extend_accessor(Accessor, EvalName, Step, StepStr) ->
+    Accessor1 = fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end,
+    EvalName1 =
+        case EvalName of
+            none -> none;
+            _ -> StepStr(EvalName)
+        end,
+    {Accessor1, EvalName1}.
 
 % -----------------------------------------------------------------------------
 % Callback for the "evaluate" request
 % -----------------------------------------------------------------------------
--spec evaluate_callback(CompiledExpr) -> callback(evaluation_result()) when
+-spec evaluate_callback(Expr, CompiledExpr) -> callback(evaluation_result()) when
+    Expr :: binary(),
     CompiledExpr :: edb_expr:compiled_expr().
-evaluate_callback(CompiledExpr) ->
+evaluate_callback(Expr, CompiledExpr) ->
     Eval = edb_expr:entrypoint(CompiledExpr),
     #{
         deps => [maps:get(module, CompiledExpr)],
@@ -336,7 +361,7 @@ evaluate_callback(CompiledExpr) ->
                         #{
                             type => success,
                             value_rep => value_rep({value, Result}),
-                            structure => structure({value, Result}, Eval)
+                            structure => structure({value, Result}, {Eval, Expr})
                         }
                 catch
                     EClass:EReason:ST ->
@@ -373,23 +398,27 @@ format(Format, Args) ->
             end
     end.
 
--spec structure(Val, ValAccessor) -> none | structure() when
+-spec structure(Val, {ValAccessor, EvalName}) -> none | structure() when
     Val :: edb:value(),
-    ValAccessor :: accessor().
-structure({value, Val = [_ | _]}, ValAccessor) ->
+    ValAccessor :: accessor(),
+    EvalName :: binary() | none.
+structure({value, Val = [_ | _]}, {ValAccessor, EvalName}) ->
     #{
         count => length(Val),
-        accessor => ValAccessor
+        accessor => ValAccessor,
+        evaluate_name => EvalName
     };
-structure({value, Val}, ValAccessor) when is_tuple(Val), tuple_size(Val) > 0 ->
+structure({value, Val}, {ValAccessor, EvalName}) when is_tuple(Val), tuple_size(Val) > 0 ->
     #{
         count => tuple_size(Val),
-        accessor => ValAccessor
+        accessor => ValAccessor,
+        evaluate_name => EvalName
     };
-structure({value, Val}, ValAccessor) when is_map(Val), map_size(Val) > 0 ->
+structure({value, Val}, {ValAccessor, EvalName}) when is_map(Val), map_size(Val) > 0 ->
     #{
         count => map_size(Val),
-        accessor => ValAccessor
+        accessor => ValAccessor,
+        evaluate_name => EvalName
     };
-structure(_, _ValAccessor) ->
+structure(_, {_ValAccessor, _EvalName}) ->
     none.

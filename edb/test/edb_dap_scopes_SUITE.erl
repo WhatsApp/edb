@@ -152,9 +152,24 @@ test_structured_variables(Config) ->
             LocalVars = edb_dap_test_support:get_variables(Client, VarRef),
             ?assertEqual(
                 #{
-                    ~"L" => #{name => ~"L", value => ~"[1,2,3]", variablesReference => 1},
-                    ~"M" => #{name => ~"M", value => ~"[4,[],{6,7}]", variablesReference => 2},
-                    ~"X" => #{name => ~"X", value => ~"#{life => 42}", variablesReference => 3}
+                    ~"L" => #{
+                        name => ~"L",
+                        value => ~"[1,2,3]",
+                        evaluateName => ~"L",
+                        variablesReference => 1
+                    },
+                    ~"M" => #{
+                        name => ~"M",
+                        value => ~"[4,[],{6,7}]",
+                        evaluateName => ~"M",
+                        variablesReference => 2
+                    },
+                    ~"X" => #{
+                        name => ~"X",
+                        value => ~"#{life => 42}",
+                        evaluateName => ~"X",
+                        variablesReference => 3
+                    }
                 },
                 LocalVars
             ),
@@ -165,7 +180,12 @@ test_structured_variables(Config) ->
                 #{
                     ~"1" => #{name => ~"1", value => ~"4", variablesReference => 0},
                     ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 0},
-                    ~"3" => #{name => ~"3", value => ~"{6,7}", variablesReference => 6}
+                    ~"3" => #{
+                        name => ~"3",
+                        value => ~"{6,7}",
+                        evaluateName => ~"lists:nth(3, M)",
+                        variablesReference => 6
+                    }
                 },
                 ChildrenListVars
             ),
@@ -208,7 +228,7 @@ test_structured_variables_with_pagination(Config) ->
 
     L = [10, 20, 30, 40, 50, 60, 70, 80, 90],
     T = {4, [], {6, 7}, 8, {}, 9},
-    M = #{life => 42, death => 43, etc => 44, more => 45},
+    M = #{life => 42, death => 43, etc => 44, more => {45, 46, 47}, universe => 99},
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
         Client, Peer, {foo, go, [L, T, M]}
     ),
@@ -232,14 +252,25 @@ test_structured_variables_with_pagination(Config) ->
     ?assertEqual(
         #{
             ~"L" => #{
-                name => ~"L", value => ~"[10,20,30,40,50,60,70,80,90]", variablesReference => 1, indexedVariables => 9
+                name => ~"L",
+                evaluateName => ~"L",
+                value => ~"[10,20,30,40,50,60,70,80,90]",
+                variablesReference => 1,
+                indexedVariables => 9
             },
-            ~"T" => #{name => ~"T", value => ~"{4,[],{6,7},8,{},9}", variablesReference => 3, indexedVariables => 6},
+            ~"T" => #{
+                name => ~"T",
+                evaluateName => ~"T",
+                value => ~"{4,[],{6,7},8,{},9}",
+                variablesReference => 3,
+                indexedVariables => 6
+            },
             ~"M" => #{
                 name => ~"M",
-                value => ~"#{death => 43,etc => 44,life => 42,more => 45}",
+                evaluateName => ~"M",
+                value => ~"#{death => 43,etc => 44,life => 42,more => {45,46,47},universe => 99}",
                 variablesReference => 2,
-                indexedVariables => 4
+                indexedVariables => 5
             }
         },
         LocalVars
@@ -261,7 +292,13 @@ test_structured_variables_with_pagination(Config) ->
     ?assertEqual(
         [
             #{name => ~"2", value => ~"[]", variablesReference => 0},
-            #{name => ~"3", value => ~"{6,7}", variablesReference => 6, indexedVariables => 2},
+            #{
+                name => ~"3",
+                value => ~"{6,7}",
+                evaluateName => ~"erlang:element(3, T)",
+                variablesReference => 6,
+                indexedVariables => 2
+            },
             #{name => ~"4", value => ~"8", variablesReference => 0},
             #{name => ~"5", value => ~"{}", variablesReference => 0}
         ],
@@ -273,9 +310,16 @@ test_structured_variables_with_pagination(Config) ->
     ?assertEqual(
         [
             #{name => ~"etc", value => ~"44", variablesReference => 0},
-            #{name => ~"life", value => ~"42", variablesReference => 0}
+            #{name => ~"life", value => ~"42", variablesReference => 0},
+            #{
+                name => ~"more",
+                value => ~"{45,46,47}",
+                variablesReference => 7,
+                evaluateName => ~"maps:get(more, M)",
+                indexedVariables => 3
+            }
         ],
-        get_variables_page(Client, MapVarsRef, #{start => 1, count => 2})
+        get_variables_page(Client, MapVarsRef, #{start => 1, count => 3})
     ),
     ok.
 
@@ -373,6 +417,8 @@ test_reports_messages_in_process_scope(Config) ->
                     ~"Messages in queue" => #{
                         name => ~"Messages in queue",
                         value => ~"2",
+                        evaluateName =>
+                            ~"erlang:element(2, erlang:process_info(erlang:list_to_pid(\"<0.95.0>\"), messages))",
                         variablesReference => 2
                     }
                 },

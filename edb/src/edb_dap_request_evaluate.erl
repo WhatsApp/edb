@@ -161,7 +161,7 @@ handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := E
         {ok, EvalResult} ?=
             edb_dap_eval_delegate:eval(#{
                 context => {Pid, FrameNo},
-                function => edb_dap_eval_delegate:evaluate_callback(CompiledExpr)
+                function => edb_dap_eval_delegate:evaluate_callback(Expr, CompiledExpr)
             }),
         case EvalResult of
             #{type := exception, class := Class, reason := Reason, stacktrace := _ST} ->

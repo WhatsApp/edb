@@ -232,7 +232,12 @@ test_evaluate_structured_result(Config) ->
                     ~"3" => #{name => ~"3", value => ~"3", variablesReference => 0},
                     ~"4" => #{name => ~"4", value => ~"4", variablesReference => 0},
                     ~"5" => #{name => ~"5", value => ~"[]", variablesReference => 0},
-                    ~"6" => #{name => ~"6", value => ~"{6,7}", variablesReference => 2}
+                    ~"6" => #{
+                        name => ~"6",
+                        value => ~"{6,7}",
+                        evaluateName => ~"lists:nth(6, L ++ M)",
+                        variablesReference => 2
+                    }
                 },
                 Variables
             )
