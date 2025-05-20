@@ -85,7 +85,7 @@ without_bottom_terminator_frame([RawFrame | RawFrames], Acc) ->
 when
     Pid :: pid(),
     FrameId :: edb:frame_id(),
-    MaxTermSize :: pos_integer(),
+    MaxTermSize :: non_neg_integer(),
     RawFrames :: [erl_debugger:stack_frame()],
     Opts :: #{resolve_local_vars := boolean()},
     Result :: edb:stack_frame_vars().
@@ -212,7 +212,7 @@ stack_frame_y_regs(Pid, {FrameId, FrameSlots}, MaxTermSize) ->
 
 -spec stack_frame_slot_content(Slot, MaxSize, SourceFrame) -> Result when
     Slot :: {SlotNo :: pos_integer(), erl_debugger:stack_frame_slot()},
-    MaxSize :: pos_integer(),
+    MaxSize :: non_neg_integer(),
     SourceFrame :: {pid(), edb:frame_id()},
     Result :: edb:catch_handler() | edb:value().
 stack_frame_slot_content({_SlotNo, {value, Val}}, _MaxSize, _SourceFrame) ->

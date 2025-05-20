@@ -135,7 +135,7 @@ find() ->
     | {exclude_processes, [procs_spec()]}
     | {unexclude_processes, [procs_spec()]}
     | {stack_frames, pid()}
-    | {stack_frame_vars, pid(), edb:frame_id(), Size :: pos_integer()}
+    | {stack_frame_vars, pid(), edb:frame_id(), Size :: non_neg_integer()}
     | {eval, eval_opts(Result :: term())}.
 
 -type cast_request() ::
@@ -805,7 +805,7 @@ format_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
 -spec stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) -> {reply, Response, State1} when
     Pid :: pid(),
     FrameId :: edb:frame_id(),
-    MaxTermSize :: pos_integer(),
+    MaxTermSize :: non_neg_integer(),
     Result :: edb:stack_frame_vars(),
     Response :: not_paused | undefined | {ok, Result},
     State0 :: state(),
@@ -817,7 +817,7 @@ stack_frame_vars_impl(Pid, FrameId, MaxTermSize, State0) ->
 -spec get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) -> not_paused | undefined | {ok, Result} when
     Pid :: pid(),
     FrameId :: edb:frame_id(),
-    MaxTermSize :: pos_integer(),
+    MaxTermSize :: non_neg_integer(),
     Result :: edb:stack_frame_vars(),
     State :: state().
 get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) ->

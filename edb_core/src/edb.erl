@@ -157,7 +157,7 @@ A breakpoint may not be added for various reasons:
     xregs => [value()],
     yregs => [value()]
 }.
--type value() :: {value, term()} | {too_large, Size :: pos_integer(), Max :: pos_integer()}.
+-type value() :: {value, term()} | {too_large, Size :: pos_integer(), Max :: non_neg_integer()}.
 -type catch_handler() :: {'catch', {mfa(), {line, line() | undefined}}}.
 
 -export_type([eval_error/0]).
@@ -626,7 +626,7 @@ objects that are larger than they are willing to handle.
 when
     Pid :: pid(),
     FrameId :: frame_id(),
-    MaxTermSize :: pos_integer(),
+    MaxTermSize :: non_neg_integer(),
     Result :: stack_frame_vars().
 stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     call_server({stack_frame_vars, Pid, FrameId, MaxTermSize}).
