@@ -21,6 +21,11 @@
 -moduledoc false.
 
 -export([eval/4]).
+-export([stash_object_code/3, get_object_code/1]).
+
+% ---------------------------------------------------------------------------
+% Public functions
+% ---------------------------------------------------------------------------
 
 -spec eval(F, X, SourceNode, Timeout) ->
     {ok, Result} | {eval_error, edb:eval_error()} | {failed_to_load_module, module(), term()}
@@ -80,6 +85,28 @@ eval(F, X, SourceNode, Timeout) ->
             Final
     end.
 
+-spec stash_object_code(Module, BeamFilename, Code) -> ok when
+    Module :: module(),
+    BeamFilename :: file:filename(),
+    Code :: binary().
+stash_object_code(Module, BeamFilename, Code) ->
+    persistent_term:put(stash_key(Module), {ok, BeamFilename, Code}).
+
+-spec get_object_code(Module) -> {ok, BeamFilename, Code} | not_found when
+    Module :: module(),
+    BeamFilename :: file:filename(),
+    Code :: binary().
+get_object_code(Module) ->
+    case persistent_term:get(stash_key(Module), not_found) of
+        Stashed = {ok, _, _} ->
+            Stashed;
+        not_found ->
+            case code:get_object_code(Module) of
+                error -> not_found;
+                {Module, Code, BeamFilename} -> {ok, BeamFilename, Code}
+            end
+    end.
+
 % ---------------------------------------------------------------------------
 % Helpers
 % ---------------------------------------------------------------------------
@@ -94,11 +121,11 @@ load_module_if_necessary(Module, SourceNode) ->
             ok;
         false ->
             % elp:ignore W0014 (cross_node_eval) -- allowed on debugger
-            try erpc:call(SourceNode, code, get_object_code, [Module]) of
-                error ->
+            try erpc:call(SourceNode, ?MODULE, get_object_code, [Module]) of
+                not_found ->
                     {error, not_found};
-                {Module, BeamBinary, BeamFileName} ->
-                    case code:load_binary(Module, BeamFileName, BeamBinary) of
+                {ok, BeamFilename, BeamBinary} ->
+                    case code:load_binary(Module, BeamFilename, BeamBinary) of
                         {module, Module} -> ok;
                         Error = {error, _} -> Error
                     end
@@ -106,3 +133,8 @@ load_module_if_necessary(Module, SourceNode) ->
                 Class:Reason -> {error, {rpc_error, {Class, Reason}}}
             end
     end.
+
+-spec stash_key(Module) -> term() when
+    Module :: module().
+stash_key(Module) ->
+    {?MODULE, Module}.
