@@ -22,7 +22,7 @@
 -typing([eqwalizer]).
 
 % @fb-only
--include_lib("stdlib/include/assert.hrl").
+-include_lib("assert/include/assert.hrl").
 
 %% CT callbacks
 -export([
@@ -160,7 +160,7 @@ test_structured_variables(Config) ->
                     },
                     ~"M" => #{
                         name => ~"M",
-                        value => ~"[4,[],{6,7}]",
+                        value => ~"[4,[],{6,...}]",
                         evaluateName => ~"M",
                         variablesReference => 2
                     },
@@ -254,21 +254,21 @@ test_structured_variables_with_pagination(Config) ->
             ~"L" => #{
                 name => ~"L",
                 evaluateName => ~"L",
-                value => ~"[10,20,30,40,50,60,70,80,90]",
+                value => ~"[10,20,30,40|...]",
                 variablesReference => 1,
                 indexedVariables => 9
             },
             ~"T" => #{
                 name => ~"T",
                 evaluateName => ~"T",
-                value => ~"{4,[],{6,7},8,{},9}",
+                value => ~"{4,[],{6,...},8,...}",
                 variablesReference => 3,
                 indexedVariables => 6
             },
             ~"M" => #{
                 name => ~"M",
                 evaluateName => ~"M",
-                value => ~"#{death => 43,etc => 44,life => 42,more => {45,46,47},universe => 99}",
+                value => ~"#{death => 43,etc => 44,life => 42,more => {45,46,47},...}",
                 variablesReference => 2,
                 indexedVariables => 5
             }

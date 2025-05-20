@@ -37,6 +37,7 @@
 -export([test_evaluate_exception/1]).
 -export([test_evaluate_compile_error/1]).
 -export([test_evaluate_structured_result/1]).
+-export([test_evaluate_clipboard_context_returns_value_in_full/1]).
 
 all() ->
     [
@@ -44,7 +45,8 @@ all() ->
         test_evaluate_complex_expression,
         test_evaluate_exception,
         test_evaluate_compile_error,
-        test_evaluate_structured_result
+        test_evaluate_structured_result,
+        test_evaluate_clipboard_context_returns_value_in_full
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -75,7 +77,7 @@ test_evaluate_simple_variable(Config) ->
     case ST of
         [#{id := TopFrameId} | _] ->
             % Evaluate the variable X
-            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X"),
+            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X", watch),
             ?assertEqual(
                 #{
                     success => true,
@@ -106,7 +108,7 @@ test_evaluate_complex_expression(Config) ->
     case ST of
         [#{id := TopFrameId} | _] ->
             % Evaluate a complex expression using variables in scope
-            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X + Y * 3 - 5"),
+            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X + Y * 3 - 5", watch),
             ?assertEqual(
                 #{
                     success => true,
@@ -137,7 +139,7 @@ test_evaluate_exception(Config) ->
     case ST of
         [#{id := TopFrameId} | _] ->
             % Evaluate an expression that raises an exception
-            EvalResponse = evaluate_expression(Client, TopFrameId, ~"1 div 0"),
+            EvalResponse = evaluate_expression(Client, TopFrameId, ~"1 div 0", watch),
             ?assertEqual(
                 #{
                     success => false,
@@ -165,7 +167,7 @@ test_evaluate_compile_error(Config) ->
     case ST of
         [#{id := TopFrameId} | _] ->
             % Evaluate an expression with a syntax error
-            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X + "),
+            EvalResponse = evaluate_expression(Client, TopFrameId, ~"X + ", watch),
             ?assertEqual(
                 #{
                     success => false,
@@ -175,7 +177,7 @@ test_evaluate_compile_error(Config) ->
             ),
 
             % Evaluate an expression with a reference to a non-existent variable
-            EvalResponse2 = evaluate_expression(Client, TopFrameId, ~"Z + 1"),
+            EvalResponse2 = evaluate_expression(Client, TopFrameId, ~"Z + 1", watch),
             ?assertEqual(
                 #{
                     success => false,
@@ -208,12 +210,12 @@ test_evaluate_structured_result(Config) ->
     case ST of
         [#{id := TopFrameId} | _] ->
             % Evaluate an expression that returns a list
-            EvalResponse = evaluate_expression(Client, TopFrameId, ~"L ++ M"),
+            EvalResponse = evaluate_expression(Client, TopFrameId, ~"L ++ M", watch),
             ?assertEqual(
                 #{
                     success => true,
                     body => #{
-                        result => ~"[1,2,3,4,[],{6,7}]",
+                        result => ~"[1,2,3,4|...]",
                         variablesReference => 1
                     }
                 },
@@ -244,20 +246,66 @@ test_evaluate_structured_result(Config) ->
     end,
     ok.
 
+test_evaluate_clipboard_context_returns_value_in_full(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                     %L01\n",
+                    ~"-export([go/0]).                  %L02\n",
+                    ~"go() ->                           %L03\n",
+                    ~"    LongList = [1,2,3,4,5,6,7],   %L04\n",
+                    ~"    LongList.                     %L05\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
+    case ST of
+        [#{id := TopFrameId} | _] ->
+            % Sanity-check: wth 'watch' context truncates the result
+            WatchResponse = evaluate_expression(Client, TopFrameId, ~"LongList", watch),
+            ?assertEqual(
+                #{
+                    success => true,
+                    body => #{
+                        result => ~"[1,2,3,4|...]",
+                        variablesReference => 1
+                    }
+                },
+                WatchResponse
+            ),
+
+            % Evaluate with clipboard context shows full result
+            ClipboardResponse = evaluate_expression(Client, TopFrameId, ~"LongList", clipboard),
+            ?assertEqual(
+                #{
+                    success => true,
+                    body => #{
+                        result => ~"[1,2,3,4,5,6,7]",
+                        variablesReference => 1
+                    }
+                },
+                ClipboardResponse
+            )
+    end,
+    ok.
+
 %%--------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
 
--spec evaluate_expression(Client, FrameId, Expression) -> Result when
+-spec evaluate_expression(Client, FrameId, Expression, Context) -> Result when
     Client :: edb_dap_test_support:client(),
     FrameId :: number(),
     Expression :: binary(),
+    Context :: atom(),
     Result :: #{success := boolean(), body := edb_dap_request_evaluate:response_body()}.
-evaluate_expression(Client, FrameId, Expression) ->
+evaluate_expression(Client, FrameId, Expression, Context) ->
     Response = edb_dap_test_client:evaluate(Client, #{
         expression => Expression,
         frameId => FrameId,
-        context => watch
+        context => Context
     }),
     case Response of
         #{command := ~"evaluate", type := response, success := Success, body := Body} ->

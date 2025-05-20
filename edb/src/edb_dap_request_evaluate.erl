@@ -158,10 +158,15 @@ handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := E
                 {error, CompileErr} -> {compile_error, CompileErr};
                 CompileRes = {ok, _} -> CompileRes
             end,
+        Fmt =
+            case maps:get(context, Args, unknown) of
+                clipboard -> format_full;
+                _ -> format_short
+            end,
         {ok, EvalResult} ?=
             edb_dap_eval_delegate:eval(#{
                 context => {Pid, FrameNo},
-                function => edb_dap_eval_delegate:evaluate_callback(Expr, CompiledExpr)
+                function => edb_dap_eval_delegate:evaluate_callback(Expr, CompiledExpr, Fmt)
             }),
         case EvalResult of
             #{type := exception, class := Class, reason := Reason, stacktrace := _ST} ->

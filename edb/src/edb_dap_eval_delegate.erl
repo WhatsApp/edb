@@ -36,7 +36,7 @@ be assumed to be running on the debuggee.
 % Callbacks
 -export([scopes_callback/1]).
 -export([structure_callback/3]).
--export([evaluate_callback/2]).
+-export([evaluate_callback/3]).
 
 % Helpers
 -export([slice_list/2]).
@@ -347,11 +347,17 @@ extend_accessor(Accessor, EvalName, Step, StepStr) ->
 % -----------------------------------------------------------------------------
 % Callback for the "evaluate" request
 % -----------------------------------------------------------------------------
--spec evaluate_callback(Expr, CompiledExpr) -> callback(evaluation_result()) when
+-spec evaluate_callback(Expr, CompiledExpr, Fmt) -> callback(evaluation_result()) when
     Expr :: binary(),
-    CompiledExpr :: edb_expr:compiled_expr().
-evaluate_callback(Expr, CompiledExpr) ->
+    CompiledExpr :: edb_expr:compiled_expr(),
+    Fmt :: format_full | format_short.
+evaluate_callback(Expr, CompiledExpr, Fmt) ->
     Eval = edb_expr:entrypoint(CompiledExpr),
+    Format =
+        case Fmt of
+            format_full -> fun value_full/1;
+            format_short -> fun value_rep/1
+        end,
     #{
         deps => [maps:get(module, CompiledExpr)],
         function =>
@@ -360,7 +366,7 @@ evaluate_callback(Expr, CompiledExpr) ->
                     Result ->
                         #{
                             type => success,
-                            value_rep => value_rep({value, Result}),
+                            value_rep => Format({value, Result}),
                             structure => structure({value, Result}, {Eval, Expr})
                         }
                 catch
@@ -382,9 +388,14 @@ evaluate_callback(Expr, CompiledExpr) ->
 -spec value_rep(Val) -> binary() when
     Val :: edb:value().
 value_rep({value, Value}) ->
-    format("~0kp", [Value]);
+    format("~0kP", [Value, 5]);
 value_rep({too_large, Size, Max}) ->
     format("Too Large (~p vs ~p)", [Size, Max]).
+
+-spec value_full(Val) -> binary() when
+    Val :: {value, term()}.
+value_full({value, Value}) ->
+    format("~0kp", [Value]).
 
 -spec format(Format, Args) -> binary() when
     Format :: io:format(),

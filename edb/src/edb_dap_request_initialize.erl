@@ -225,7 +225,7 @@ capabilities() ->
         supportsDisassembleRequest => false,
         supportsCancelRequest => false,
         supportsBreakpointLocationsRequest => false,
-        supportsClipboardContext => false,
+        supportsClipboardContext => true,
         supportsSteppingGranularity => false,
         supportsInstructionBreakpoints => false,
         supportsExceptionFilterOptions => false,
