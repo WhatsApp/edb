@@ -147,7 +147,8 @@ find() ->
         frame_id := edb:frame_id(),
         max_term_size := non_neg_integer(),
         timeout := timeout(),
-        function := fun((Vars :: edb:stack_frame_vars()) -> Result)
+        function := fun((Vars :: edb:stack_frame_vars()) -> Result),
+        dependencies := [module()]
     }.
 
 %%--------------------------------------------------------------------
@@ -843,12 +844,12 @@ get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) ->
     State0 :: state(),
     State1 :: state().
 eval_impl(Opts, CallerPid, State0) ->
-    #{pid := Pid, frame_id := FrameId, max_term_size := MaxTermSize} = Opts,
+    #{pid := Pid, frame_id := FrameId, max_term_size := MaxTermSize, dependencies := Deps} = Opts,
     Result =
         case get_stack_frame_vars(Pid, FrameId, MaxTermSize, State0) of
             {ok, StackFrameVars} ->
                 #{function := F, timeout := Timeout} = Opts,
-                case edb_server_eval:eval(F, StackFrameVars, node(CallerPid), Timeout) of
+                case edb_server_eval:eval(F, StackFrameVars, node(CallerPid), Timeout, Deps) of
                     {failed_to_load_module, _, _} = LoadFailure ->
                         ?MODULE:raise(error, LoadFailure);
                     EvalResult ->

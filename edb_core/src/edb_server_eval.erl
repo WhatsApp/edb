@@ -20,24 +20,25 @@
 
 -moduledoc false.
 
--export([eval/4]).
+-export([eval/5]).
 -export([stash_object_code/3, get_object_code/1]).
 
 % ---------------------------------------------------------------------------
 % Public functions
 % ---------------------------------------------------------------------------
 
--spec eval(F, X, SourceNode, Timeout) ->
+-spec eval(F, X, SourceNode, Timeout, Deps) ->
     {ok, Result} | {eval_error, edb:eval_error()} | {failed_to_load_module, module(), term()}
 when
     F :: fun((X) -> Result),
     SourceNode :: node(),
-    Timeout :: timeout().
-eval(F, X, SourceNode, Timeout) ->
+    Timeout :: timeout(),
+    Deps :: [module()].
+eval(F, X, SourceNode, Timeout, Deps) ->
     {Mod, _, _} = erlang:fun_info_mfa(F),
-    case load_module_if_necessary(Mod, SourceNode) of
-        {error, LoadFailureReason} ->
-            {failed_to_load_module, Mod, LoadFailureReason};
+    case load_modules_if_necessary([Mod | Deps], SourceNode) of
+        {error, FailedMod, LoadFailureReason} ->
+            {failed_to_load_module, FailedMod, LoadFailureReason};
         ok ->
             ResultRef = erlang:make_ref(),
             Parent = self(),
@@ -110,6 +111,26 @@ get_object_code(Module) ->
 % ---------------------------------------------------------------------------
 % Helpers
 % ---------------------------------------------------------------------------
+
+-spec load_modules_if_necessary(Modules, SourceNode) -> ok | {error, BadModule, Reason} when
+    Modules :: [module()],
+    BadModule :: module(),
+    SourceNode :: node(),
+    Reason :: not_found | badarg | code:load_error_rsn() | {rpc_error, term()}.
+load_modules_if_necessary(Modules, SourceNode) ->
+    lists:foldl(
+        fun
+            (Module, ok) ->
+                case load_module_if_necessary(Module, SourceNode) of
+                    ok -> ok;
+                    {error, Reason} -> {error, Module, Reason}
+                end;
+            (_, Error) ->
+                Error
+        end,
+        ok,
+        Modules
+    ).
 
 -spec load_module_if_necessary(Module, SourceNode) -> ok | {error, Reason} when
     Module :: module(),

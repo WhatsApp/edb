@@ -637,9 +637,9 @@ the process, and the result of the evaluation, if successful, will be
 returned.
 
 Notice that, if missing, the debuggee node will load the given function's module,
-taking the object code from the caller node. If the function has any other
-dependencies, it is the caller's responsibility to ensure they are available on
-the debuggee.
+and any other modules listed under `dependencies`, taking the object code from the
+caller node. It is the caller's responsibility to ensure that any dependency of the
+function is listed under `dependencies`.
 """.
 -spec eval(Opts) ->
     not_paused | undefined | {ok, Result} | {eval_error, eval_error()}
@@ -648,7 +648,8 @@ when
         context := {pid(), frame_id()},
         max_term_size := non_neg_integer(),
         timeout := timeout(),
-        function := fun((Vars :: stack_frame_vars()) -> Result)
+        function := fun((Vars :: stack_frame_vars()) -> Result),
+        dependencies => [module()]
     }.
 eval(Opts0) ->
     {{Pid, FrameId}, Opts1} = take_arg(context, Opts0, #{
@@ -657,7 +658,8 @@ eval(Opts0) ->
     {MaxTermSize, Opts2} = take_arg(max_term_size, Opts1, #{parse => fun parse_non_neg_integer/1}),
     {Timeout, Opts3} = take_arg(timeout, Opts2, #{parse => fun parse_timeout/1}),
     {Function, Opts4} = take_arg(function, Opts3, #{parse => fun(F) when is_function(F, 1) -> F end}),
-    ok = no_more_args(Opts4),
+    {Deps, Opts5} = take_arg(dependencies, Opts4, #{parse => parse_list(fun parse_atom/1), default => []}),
+    ok = no_more_args(Opts5),
 
     CallTimeout =
         case Timeout of
@@ -669,7 +671,8 @@ eval(Opts0) ->
         frame_id => FrameId,
         max_term_size => MaxTermSize,
         timeout => Timeout,
-        function => Function
+        function => Function,
+        dependencies => Deps
     },
     call_server({eval, Opts}, CallTimeout).
 
@@ -858,6 +861,13 @@ parse_name_domain(shortnames) -> shortnames.
     L :: fun((term()) -> A), R :: fun((term()) -> B).
 parse_pair(L, R) ->
     fun({A, B}) -> {L(A), R(B)} end.
+
+-spec parse_list(Parser) -> fun((term()) -> [A]) when
+    Parser :: fun((term()) -> A).
+parse_list(Parser) ->
+    fun(List) when is_list(List) ->
+        [Parser(Item) || Item <- List]
+    end.
 
 -spec no_more_args(map()) -> ok.
 no_more_args(Opts) ->
