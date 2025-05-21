@@ -56,6 +56,7 @@
     test_raises_error_until_reverse_attached/1,
     test_reverse_attaching_picks_the_right_node/1,
     test_can_reverse_attach_to_node_with_dynamic_name/1,
+    test_can_reverse_attach_to_node_with_no_dist/1,
     test_injectable_code_can_be_composed/1,
     test_reverse_attaching_blocks_further_attachs/1,
     test_reverse_attach_fails_after_timeout/1,
@@ -118,6 +119,7 @@ groups() ->
 
             test_reverse_attaching_picks_the_right_node,
             test_can_reverse_attach_to_node_with_dynamic_name,
+            test_can_reverse_attach_to_node_with_no_dist,
 
             test_injectable_code_can_be_composed,
             test_reverse_attaching_blocks_further_attachs,
@@ -447,6 +449,30 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
         {ok, #{peer := Peer, node := undefined}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode],
             node => undefined
+        }),
+
+        % We eventually attach, and no longer error
+        ok = wait_reverse_attach_notification(Ref),
+
+        ?assertMatch(#{}, edb:processes([])),
+
+        {ok, resumed} = edb:continue(),
+
+        ActualNode = peer:call(Peer, erlang, node, []),
+        ?assertEqual(ActualNode, edb:attached_node()),
+        ok
+    end).
+
+test_can_reverse_attach_to_node_with_no_dist(Config) ->
+    on_debugger_node(Config, fun() ->
+        % We are waiting for a node to attach
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % Launch new peer with no distribution, special code to inject
+        {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config, #{
+            extra_args => ["-eval", InjectedCode]
         }),
 
         % We eventually attach, and no longer error

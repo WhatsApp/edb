@@ -55,9 +55,20 @@ new() when node() /= 'nonode@nohost' ->
         []
     ),
 
+    #{name_domain := NameDomain} = net_kernel:get_state(),
+
     CallGatekeeperCode = io_lib:format(
-        "erlang:set_cookie(~p, ~p), true = net_kernel:connect_node(~p), ok = gen_server:call({~p, ~p}, [])",
+        ~"""
+        case net_kernel:get_state() of
+        #{started := no} -> {ok, _} = net_kernel:start(undefined, #{name_domain => ~p});
+        _ -> ok
+        end,
+        erlang:set_cookie(~p, ~p),
+        true = net_kernel:connect_node(~p),
+        ok = gen_server:call({~p, ~p}, [])
+        """,
         [
+            NameDomain,
             node(),
             erlang:get_cookie(),
             node(),
@@ -66,7 +77,8 @@ new() when node() /= 'nonode@nohost' ->
         ]
     ),
 
-    {ok, Id, list_to_binary(CallGatekeeperCode)}.
+    SingleLine = iolist_to_binary(re:replace(CallGatekeeperCode, "\\n", " ", [global])),
+    {ok, Id, SingleLine}.
 
 %% -------------------------------------------------------------------
 %% gen_server callbacks
