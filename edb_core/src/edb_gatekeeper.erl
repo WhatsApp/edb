@@ -56,10 +56,11 @@ new() when node() /= 'nonode@nohost' ->
     ),
 
     CallGatekeeperCode = io_lib:format(
-        "erlang:set_cookie(~p, ~p), ok = gen_server:call({~p, ~p}, [])",
+        "erlang:set_cookie(~p, ~p), true = net_kernel:connect_node(~p), ok = gen_server:call({~p, ~p}, [])",
         [
             node(),
             erlang:get_cookie(),
+            node(),
             GatekeeperName,
             node()
         ]

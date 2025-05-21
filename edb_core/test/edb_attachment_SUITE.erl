@@ -54,8 +54,8 @@
 %% Reverse-attach test-cases
 -export([
     test_raises_error_until_reverse_attached/1,
-
     test_reverse_attaching_picks_the_right_node/1,
+    test_can_reverse_attach_to_node_with_dynamic_name/1,
     test_injectable_code_can_be_composed/1,
     test_reverse_attaching_blocks_further_attachs/1,
     test_reverse_attach_fails_after_timeout/1,
@@ -117,6 +117,8 @@ groups() ->
             test_raises_error_until_reverse_attached,
 
             test_reverse_attaching_picks_the_right_node,
+            test_can_reverse_attach_to_node_with_dynamic_name,
+
             test_injectable_code_can_be_composed,
             test_reverse_attaching_blocks_further_attachs,
             test_reverse_attach_fails_after_timeout,
@@ -397,7 +399,7 @@ test_raises_error_until_reverse_attached(Config) ->
             name_domain => shortnames
         }),
 
-        % Launch new node, injecting special code to inject
+        % Launch new node, injecting special code to reverse-attach
         {ok, #{node := Node}} = edb_test_support:start_peer_node(Config, #{extra_args => ["-eval", InjectedCode]}),
 
         % We eventually attach, and no longer error
@@ -431,6 +433,31 @@ test_reverse_attaching_picks_the_right_node(Config) ->
         % We eventually attach to the node with injected code
         ok = wait_reverse_attach_notification(Ref),
         ?assertEqual(NodeWithInjectedCode, edb:attached_node()),
+        ok
+    end).
+
+test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
+    on_debugger_node(Config, fun() ->
+        % We are waiting for a node to attach
+        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % Launch new node using -sname undefined, injecting special code to reverse-attach
+        {ok, #{peer := Peer, node := undefined}} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode],
+            node => undefined
+        }),
+
+        % We eventually attach, and no longer error
+        ok = wait_reverse_attach_notification(Ref),
+
+        ?assertMatch(#{}, edb:processes([])),
+
+        {ok, resumed} = edb:continue(),
+
+        ActualNode = peer:call(Peer, erlang, node, []),
+        ?assertEqual(ActualNode, edb:attached_node()),
         ok
     end).
 

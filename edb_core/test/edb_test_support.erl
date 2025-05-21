@@ -198,7 +198,7 @@ random_srcdir(CtConfig) ->
 
 -type start_peer_node_opts() ::
     #{
-        node => node() | {prefix, binary() | string()},
+        node => undefined | node() | {prefix, binary() | string()},
         cookie => atom(),
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
@@ -313,6 +313,8 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         case NodeInfo of
             no_dist ->
                 PeerOpts0;
+            #{node := undefined} ->
+                PeerOpts0#{name => undefined};
             #{node := Node} ->
                 [NodeName, NodeHost] = string:split(atom_to_list(Node), "@"),
                 PeerOpts0#{
