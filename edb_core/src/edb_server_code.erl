@@ -64,7 +64,7 @@ get_debug_info(Module, Line) when is_atom(Module) ->
             case lists:keyfind(Line, 1, DebugInfo) of
                 false ->
                     {error, line_not_found};
-                {Line, #{vars := VarValues}} ->
+                {Line, {_NumSlots, VarValues}} ->
                     {ok,
                         #{
                             Var => assert_is_var_debug_info(Val)
