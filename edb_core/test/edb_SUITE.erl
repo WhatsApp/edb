@@ -244,7 +244,7 @@ init_per_group(Group, Config0) ->
     Config1 = lists:foldl(
         fun(SrcFileName, AccConfig) ->
             {ok, _, _} = edb_test_support:compile_module(AccConfig, {filepath, SrcFileName}, #{
-                flags => [beam_debug_info],
+                flags => [debug_info, beam_debug_info],
                 load_it => true
             }),
             [{erl_source, SrcFileName} | AccConfig]
@@ -1466,7 +1466,7 @@ test_set_breakpoints_loads_the_module_if_necessary(Config) ->
         ok.
     """,
     {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
-        flags => [beam_debug_info],
+        flags => [debug_info, beam_debug_info],
         load_it => false
     }),
 
@@ -2007,7 +2007,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 test_step_over_in_unbreakpointable_code(Config) ->
     % Ensure test_step_over_no_beam_debug_info is compiled without beam_debug_info
     {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_step_over_no_beam_debug_info.erl"}, #{
-        flags => [],
+        flags => [debug_info],
         load_it => true
     }),
 
@@ -2282,7 +2282,7 @@ test_step_in_fails_if_fun_not_found(Config) ->
     """,
 
     {ok, Mod, _} = edb_test_support:compile_module(Config, {source, Source}, #{
-        flags => [beam_debug_info],
+        flags => [debug_info, beam_debug_info],
         load_it => true
     }),
 
@@ -2317,7 +2317,7 @@ test_step_in_loads_module_if_necessary(Config) ->
         Config,
         [{source, BlahSource}, {source, LazyModuleSource}],
         #{
-            flags => [beam_debug_info],
+            flags => [debug_info, beam_debug_info],
             load_it => false
         }
     ),
@@ -2510,7 +2510,7 @@ test_step_out_with_unbreakpointable_caller(Config) ->
 
     % Ensure test_step_out_no_beam_debug_info is compiled without beam_debug_info
     {ok, _, _} = edb_test_support:compile_module(Config, {filename, "test_step_out_no_beam_debug_info.erl"}, #{
-        flags => [],
+        flags => [debug_info],
         load_it => true
     }),
 
@@ -3247,7 +3247,7 @@ compile_dummy_apps(Config) ->
     EbinDir = filename:join(PrivDir, "ebin"),
     ok = file:make_dir(EbinDir),
 
-    CompileOpts = [{outdir, EbinDir}, beam_debug_info],
+    CompileOpts = [{outdir, EbinDir}, debug_info, beam_debug_info],
 
     {ok, SrcFiles} = file:list_dir(DataSrcDir),
     [
