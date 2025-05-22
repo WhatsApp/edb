@@ -81,6 +81,12 @@ handle(State, #{threadId := ThreadId}) ->
         edb:call_target_error().
 react_to_call_target_error(not_found) ->
     edb_dap_request:unsupported(~"Couldn't determine call target");
+react_to_call_target_error({no_call_in_expr, Type}) ->
+    edb_dap_request:precondition_violation(
+        io_lib:format(~"No call found in expression of type '~p'", [Type])
+    );
+react_to_call_target_error(unsupported_operator) ->
+    edb_dap_request:unsupported(~"This type of call is not currently supported for stepping-in");
 react_to_call_target_error({module_not_found, Module}) ->
     edb_dap_request:precondition_violation(
         io_lib:format(~"Target module '~p' couldn't be loaded", [Module])

@@ -15,12 +15,6 @@
 
 -module(edb_server_break).
 
-%% erlfmt:ignore
-% @fb-only
--compile(warn_missing_spec_all).
-
--moduledoc false.
-
 % Creation
 -export([create/0]).
 
@@ -38,6 +32,11 @@
 -export([is_process_trapped/2]).
 -export([register_breakpoint_event/5]).
 -export([resume_processes/2]).
+
+-compile(warn_missing_spec_all).
+
+%% erlfmt:ignore
+% @fb-only
 
 %% --------------------------------------------------------------------
 %% Types
@@ -413,32 +412,20 @@ add_step(Pid, Patterns, Module, Line, Breakpoints0) ->
 -spec get_targets_for_step_in(TopFrame) -> {ok, nonempty_list(mfa())} | {error, edb:step_in_error()} when
     TopFrame :: erl_debugger:stack_frame().
 get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_integer(Line) ->
-    case edb_server_code:get_debug_info(M, Line) of
-        {error, not_found} ->
-            {error, {call_target, {module_not_found, M}}};
-        {error, line_not_found} ->
-            {error, {call_target, not_found}};
-        {error, no_debug_info} ->
-            {error, {cannot_breakpoint, M}};
-        {ok, #{calls := Calls0}} ->
-            Calls1 = lists:filtermap(fun(Target) -> try_resolve_mfa(M, Target) end, Calls0),
-            case Calls1 of
-                [] -> {error, {call_target, not_found}};
-                _ -> {ok, Calls1}
+    case edb_server_code:fetch_abstract_forms(M) of
+        {error, _} = Error ->
+            Error;
+        {ok, Forms} ->
+            case edb_server_code:get_call_targets(Line, Forms) of
+                {ok, CallTargets} ->
+                    MFAs = [MFA || {MFA, _Args} <- CallTargets],
+                    {ok, MFAs};
+                {error, CallTargetError} ->
+                    {error, {call_target, CallTargetError}}
             end
     end;
 get_targets_for_step_in(_TopFrame) ->
     edb_server:invariant_violation(stepping_from_unbreakable_frame).
-
--spec try_resolve_mfa(Mod, Target) -> false | {true, mfa()} when
-    Mod :: module(),
-    Target :: edb_server_code:call_target().
-try_resolve_mfa(_, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
-    {true, MFA};
-try_resolve_mfa(M, {F, A}) when is_atom(F) ->
-    {true, {M, F, A}};
-try_resolve_mfa(_, _) ->
-    false.
 
 %% --------------------------------------------------------------------
 %% Execution control
