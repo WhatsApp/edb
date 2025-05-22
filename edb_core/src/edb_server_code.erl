@@ -34,19 +34,8 @@
 
 -export_type([var_debug_info/0]).
 
--type var_name() :: binary().
-
 -type var_debug_info() ::
     {x, non_neg_integer()} | {y, non_neg_integer()} | {value, term()}.
-
--export_type([call_target/0]).
--type call_target() ::
-    % remote function
-    {M :: module() | var_name(), F :: atom() | var_name(), A :: non_neg_integer()}
-    % local function
-    | {F :: atom() | var_name(), A :: non_neg_integer()}
-    % function reference
-    | var_name().
 
 -type line() :: edb:line().
 
@@ -63,10 +52,7 @@
     Module :: module(),
     Line :: pos_integer(),
     Reason :: not_found | no_debug_info | line_not_found,
-    Result :: #{
-        vars := #{var_name() => var_debug_info()},
-        calls := [call_target()]
-    }.
+    Result :: #{binary() => var_debug_info()}.
 get_debug_info(Module, Line) when is_atom(Module) ->
     try
         % elp:ignore W0017 function available only on patched version of OTP
@@ -78,14 +64,12 @@ get_debug_info(Module, Line) when is_atom(Module) ->
             case lists:keyfind(Line, 1, DebugInfo) of
                 false ->
                     {error, line_not_found};
-                {Line, LineDebugInfo} ->
-                    Vars =
+                {Line, #{vars := VarValues}} ->
+                    {ok,
                         #{
                             Var => assert_is_var_debug_info(Val)
-                         || {Var, Val} <- maps:get(vars, LineDebugInfo, []), is_binary(Var)
-                        },
-                    Calls = maps:get(calls, LineDebugInfo, []),
-                    {ok, #{vars => Vars, calls => Calls}}
+                         || {Var, Val} <- VarValues, is_binary(Var)
+                        }}
             end
     catch
         _:badarg ->
