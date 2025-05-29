@@ -28,7 +28,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
 -behaviour(gen_server).
 
 -include_lib("kernel/include/logger.hrl").
--include("edb_dap.hrl").
+-include_lib("edb/include/edb_dap.hrl").
 
 % Public API
 -export([start_link/0]).

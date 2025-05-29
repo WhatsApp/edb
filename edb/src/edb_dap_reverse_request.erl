@@ -30,7 +30,7 @@ Behaviour for handling reverse-requests to the client
 %% Helpers for behaviour implementations
 -export([unexpected_response/0]).
 
--include("edb_dap.hrl").
+-include_lib("edb/include/edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types
