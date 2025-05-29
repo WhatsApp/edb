@@ -40,7 +40,7 @@ Behaviour for handling client requests
 
 -export([parse_empty_arguments/1]).
 
--include("edb_dap.hrl").
+-include_lib("edb/include/edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types

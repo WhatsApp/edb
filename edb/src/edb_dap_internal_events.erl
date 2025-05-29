@@ -27,7 +27,7 @@ Handle events coming from the debugger.
 -export([handle_edb_event/2]).
 
 -include_lib("kernel/include/logger.hrl").
--include("edb_dap.hrl").
+-include_lib("edb/include/edb_dap.hrl").
 
 %%%---------------------------------------------------------------------------------
 %%% Types
