@@ -25,7 +25,9 @@ Code needed to initialize a debuggee node on attach.
 
 -export([bootstrap_debuggee/2]).
 
--define(BOOTSTRAP_FAILURE_MARKER, '__edb_bootstrap_failure__').
+-record('__edb_bootstrap_failure__', {
+    reason :: edb:bootstrap_failure()
+}).
 
 %% erlfmt:ignore-begin
 % @fb-only
@@ -53,7 +55,7 @@ bootstrap_debuggee(Debugger, PauseAction) ->
                         ok = edb_server:call(node(), pause)
                 end
             catch
-                throw:Failure = {?BOOTSTRAP_FAILURE_MARKER, _} ->
+                throw:Failure = #'__edb_bootstrap_failure__'{} ->
                     {error, bootstrap_failure_reason(Failure)}
             end
     end.
@@ -134,12 +136,11 @@ start_edb_server() ->
 -spec bootstrap_failure(Reason) -> none() when
     Reason :: edb:bootstrap_failure().
 bootstrap_failure(Reason) ->
-    throw({?BOOTSTRAP_FAILURE_MARKER, Reason}).
+    throw(#'__edb_bootstrap_failure__'{reason = Reason}).
 
--spec bootstrap_failure_reason({?BOOTSTRAP_FAILURE_MARKER, term()}) -> Reason when
+-spec bootstrap_failure_reason(#'__edb_bootstrap_failure__'{}) -> Reason when
     Reason :: edb:bootstrap_failure().
-bootstrap_failure_reason({?BOOTSTRAP_FAILURE_MARKER, Reason}) ->
-    % eqwalizer:ignore -- term will only be produced using bootstrap_failure/0
+bootstrap_failure_reason(#'__edb_bootstrap_failure__'{reason = Reason}) ->
     Reason.
 
 %% --------------------------------------------------------------------
