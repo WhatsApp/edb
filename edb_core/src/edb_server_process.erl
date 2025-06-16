@@ -45,7 +45,7 @@
     | message_queue_len
     | parent
     | registered_name.
--type erlang_process_info_result_item() :: {term(), term()}.
+-type erlang_process_info_result_item() :: {dynamic(), dynamic()}.
 
 %% ------------------------------------------------------------------
 %% Suspending processes
@@ -325,7 +325,6 @@ fold_process_info(ProcInfo, Acc, Fields) ->
                 end,
             case Loc of
                 [{file, File}, {line, Line}] when WantsLoc, is_list(File), is_number(Line) ->
-                    % eqwalizer:ignore We know File is a string
                     Acc1#{current_loc => {File, Line}};
                 _ ->
                     Acc1
