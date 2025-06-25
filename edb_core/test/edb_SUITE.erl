@@ -221,7 +221,6 @@ all() ->
 
 init_per_suite(Config) ->
     erts_debug:set_internal_state(available_internal_state, true),
-    % eqwalizer:fixme new erts_debug not yet in default toolchain
     erts_debug:set_internal_state(debugger_support, true),
     erts_debug:set_internal_state(available_internal_state, false),
 
