@@ -19,6 +19,8 @@
 %% erlfmt:ignore
 % @fb-only
 
+-moduledoc false.
+
 %% Public API
 -export([
     is_element/2,

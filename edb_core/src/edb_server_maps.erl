@@ -19,6 +19,8 @@
 %% erlfmt:ignore
 % @fb-only
 
+-moduledoc false.
+
 %% Public API
 -export([add/3, add/4, add/5]).
 
