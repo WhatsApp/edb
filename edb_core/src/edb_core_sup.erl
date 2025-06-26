@@ -12,14 +12,14 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%% % @format
+%%
+%% edb_core top level supervisor.
 
 -module(edb_core_sup).
 
 %% erlfmt:ignore
 % @fb-only
--moduledoc """
-edb_core top level supervisor.
-""".
+-moduledoc false.
 -compile(warn_missing_spec_all).
 
 -behaviour(supervisor).

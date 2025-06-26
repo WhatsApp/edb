@@ -13,19 +13,19 @@
 %% limitations under the License.
 %% %%%---------------------------------------------------------------------------------
 %% % @format
+%%
+%% Support for calling node processes that could be paused
+%% There are times were we want to call standard processed to query
+%% node state. Typically these processes will be excluded from debugging
+%% but if they are not, we want to make sure that the call fails, instead
+%% of the debugger getting blocked
 
 -module(edb_server_call_proc).
 -compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
 % @fb-only
--moduledoc """
-Support for calling node processes that could be paused
-There are times were we want to call standard processed to query
-node state. Typically these processes will be excluded from debugging
-but if they are not, we want to make sure that the call fails, instead
-of the debugger getting blocked
-""".
+-moduledoc false.
 -compile(warn_missing_spec_all).
 
 % Supported calls to standard services

@@ -12,13 +12,14 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %% % @format
+%%
+%% The edb_core application
+
 -module(edb_core_app).
 
 %% erlfmt:ignore
 % @fb-only
--moduledoc """
-The edb_core application
-""".
+-moduledoc false.
 -compile(warn_missing_spec_all).
 
 -behaviour(application).

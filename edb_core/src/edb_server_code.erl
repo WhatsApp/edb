@@ -19,6 +19,8 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
+-moduledoc false.
+
 -export([get_debug_info/2]).
 -export([module_source/1]).
 

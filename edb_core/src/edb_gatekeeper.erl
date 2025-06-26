@@ -22,6 +22,8 @@
 % @fb-only
 -compile(warn_missing_spec_all).
 
+-moduledoc false.
+
 -behavior(gen_server).
 
 %% Public API
