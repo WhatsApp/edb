@@ -235,6 +235,7 @@ structure_callback(Accessor, EvalName, Window) ->
                     List when is_list(List) -> list_structure(List, Accessor, EvalName, Window);
                     Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, EvalName, Window);
                     Map when is_map(Map) -> map_structure(Map, Accessor, EvalName, Window);
+                    Fun when is_function(Fun) -> fun_structure(Fun, Accessor, EvalName, Window);
                     _ -> []
                 end
             end
@@ -344,6 +345,34 @@ extend_accessor(Accessor, EvalName, Step, StepStr) ->
         end,
     {Accessor1, EvalName1}.
 
+-spec fun_structure(Fun, Accessor, EvalName, Window) -> [variable()] when
+    Fun :: fun(),
+    Accessor :: accessor(),
+    EvalName :: eval_name(),
+    Window :: window().
+fun_structure(Fun, Accessor, EvalName, _Window) ->
+    FunInfo = maps:from_list(erlang:fun_info(Fun)),
+    EnvStep = fun(_) -> maps:get(env, FunInfo) end,
+    EnvStepStr = fun(E) -> format("erlang:element(2, erlang:fun_info(~s, env))", [E]) end,
+    [
+        #{
+            name => ~"fun",
+            value_rep => format("~s:~s/~s", [
+                value_rep({value, maps:get(module, FunInfo)}),
+                value_rep({value, maps:get(name, FunInfo)}),
+                value_rep({value, maps:get(arity, FunInfo)})
+            ]),
+            structure => none
+        },
+        #{
+            name => ~"env",
+            value_rep => value_rep({value, maps:get(env, FunInfo)}),
+            structure => structure(
+                {value, Fun}, extend_accessor(Accessor, EvalName, EnvStep, EnvStepStr)
+            )
+        }
+    ].
+
 % -----------------------------------------------------------------------------
 % Callback for the "evaluate" request
 % -----------------------------------------------------------------------------
@@ -428,6 +457,13 @@ structure({value, Val}, {ValAccessor, EvalName}) when is_tuple(Val), tuple_size(
 structure({value, Val}, {ValAccessor, EvalName}) when is_map(Val), map_size(Val) > 0 ->
     #{
         count => map_size(Val),
+        accessor => ValAccessor,
+        evaluate_name => EvalName
+    };
+structure({value, Val}, {ValAccessor, EvalName}) when is_function(Val) ->
+    NumItemsInExpansionOfClosure = 2,
+    #{
+        count => NumItemsInExpansionOfClosure,
         accessor => ValAccessor,
         evaluate_name => EvalName
     };
