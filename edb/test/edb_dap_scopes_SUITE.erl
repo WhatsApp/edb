@@ -35,7 +35,8 @@
 -export([
     test_reports_locals_scope/1,
     test_reports_registers_scope_when_locals_not_available/1,
-    test_reports_messages_in_process_scope/1,
+    test_reports_process_pid_info_in_process_scope/1,
+    test_reports_process_messages_info_in_process_scope/1,
 
     test_structured_variables/1,
     test_structured_variables_with_pagination/1
@@ -45,7 +46,8 @@ all() ->
     [
         test_reports_locals_scope,
         test_reports_registers_scope_when_locals_not_available,
-        test_reports_messages_in_process_scope,
+        test_reports_process_pid_info_in_process_scope,
+        test_reports_process_messages_info_in_process_scope,
 
         test_structured_variables,
         test_structured_variables_with_pagination
@@ -410,65 +412,78 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
     end,
     ok.
 
-test_reports_messages_in_process_scope(Config) ->
+test_reports_process_pid_info_in_process_scope(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [
                     ~"-module(foo).      %L01\n",
-                    ~"-export([go/2]).   %L02\n",
-                    ~"go(X, Y) ->        %L03\n",
-                    ~"    self() ! hola, %L04\n",
-                    ~"    self() ! chau, %L05\n",
-                    ~"    X + 2 * Y.     %L06\n"
+                    ~"-export([go/1]).   %L02\n",
+                    ~"go(X) ->           %L03\n",
+                    ~"    X * 3.         %L04\n"
                 ]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 6}]}]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [42, 7]}),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [15]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
             Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
-            ?assertEqual(
-                #{
-                    ~"Process" =>
-                        #{
-                            name => ~"Process",
-                            expensive => false,
-                            variablesReference => 3
-                        },
-                    ~"Registers" =>
-                        #{
-                            name => ~"Registers",
-                            expensive => false,
-                            presentationHint => ~"registers",
-                            variablesReference => 1
-                        }
-                },
-                Scopes
-            ),
-
             ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
             ProcessVars = edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef),
+
+            ?assertMatch(
+                #{
+                    name := ~"self()",
+                    value := <<"<0.", _/binary>>,
+                    variablesReference := 0
+                },
+                maps:get(~"self()", ProcessVars)
+            )
+    end,
+    ok.
+
+test_reports_process_messages_info_in_process_scope(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).      %L01\n",
+                    ~"-export([go/1]).   %L02\n",
+                    ~"go(X) ->           %L03\n",
+                    ~"    self() ! msg1, %L04\n",
+                    ~"    self() ! msg2, %L05\n",
+                    ~"    self() ! msg3, %L06\n",
+                    ~"    X * 5.         %L07\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
+    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
+    case ST of
+        [_, #{id := NonTopFrameId} | _] ->
+            Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
+            ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
+            ProcessVars = edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef),
+
             ?assertEqual(
                 #{
-                    ~"Messages in queue" => #{
-                        name => ~"Messages in queue",
-                        value => ~"2",
-                        evaluateName =>
-                            ~"erlang:element(2, erlang:process_info(erlang:list_to_pid(\"<0.95.0>\"), messages))",
-                        variablesReference => 2
-                    }
+                    name => ~"Messages in queue",
+                    value => ~"3",
+                    evaluateName =>
+                        ~"erlang:element(2, erlang:process_info(erlang:list_to_pid(\"<0.95.0>\"), messages))",
+                    variablesReference => 2
                 },
-                ProcessVars
+                maps:get(~"Messages in queue", ProcessVars)
             ),
 
             MessagesVarsRefs = maps:get(variablesReference, maps:get(~"Messages in queue", ProcessVars)),
             MessagesVars = edb_dap_test_support:get_variables(Client, MessagesVarsRefs),
             ?assertMatch(
                 #{
-                    ~"1" := #{name := ~"1", value := ~"hola", variablesReference := 0},
-                    ~"2" := #{name := ~"2", value := ~"chau", variablesReference := 0}
+                    ~"1" := #{name := ~"1", value := ~"msg1", variablesReference := 0},
+                    ~"2" := #{name := ~"2", value := ~"msg2", variablesReference := 0},
+                    ~"3" := #{name := ~"3", value := ~"msg3", variablesReference := 0}
                 },
                 MessagesVars
             )
