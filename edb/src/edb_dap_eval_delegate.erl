@@ -193,6 +193,15 @@ access_reg(Type, Index) ->
 
 -spec process_scope(Pid) -> scope() when Pid :: pid().
 process_scope(Pid) ->
+    PidVar =
+        [
+            #{
+                name => ~"self()",
+                value_rep => format("~p", [Pid]),
+                structure => none
+            }
+        ],
+
     MessagesVar =
         case erlang:process_info(Pid, messages) of
             {messages, Messages} ->
@@ -206,7 +215,7 @@ process_scope(Pid) ->
             _ ->
                 []
         end,
-    #{type => process, variables => MessagesVar}.
+    #{type => process, variables => PidVar ++ MessagesVar}.
 
 -spec access_process_info(Pid, Type) -> {accessor(), eval_name()} when
     Pid :: pid(),
