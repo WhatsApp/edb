@@ -36,6 +36,7 @@
     test_reports_locals_scope/1,
     test_reports_registers_scope_when_locals_not_available/1,
     test_reports_process_pid_info_in_process_scope/1,
+    test_reports_process_registered_name_info_in_process_scope/1,
     test_reports_process_messages_info_in_process_scope/1,
 
     test_structured_variables/1,
@@ -47,6 +48,7 @@ all() ->
         test_reports_locals_scope,
         test_reports_registers_scope_when_locals_not_available,
         test_reports_process_pid_info_in_process_scope,
+        test_reports_process_registered_name_info_in_process_scope,
         test_reports_process_messages_info_in_process_scope,
 
         test_structured_variables,
@@ -428,9 +430,7 @@ test_reports_process_pid_info_in_process_scope(Config) ->
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [15]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
-            Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
-            ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
-            ProcessVars = edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef),
+            ProcessVars = get_process_vars(Client, NonTopFrameId),
 
             ?assertMatch(
                 #{
@@ -441,6 +441,39 @@ test_reports_process_pid_info_in_process_scope(Config) ->
                 maps:get(~"self()", ProcessVars)
             )
     end,
+    ok.
+
+test_reports_process_registered_name_info_in_process_scope(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                       %L01\n",
+                    ~"-export([go/1]).                    %L02\n",
+                    ~"go(X) ->                            %L03\n",
+                    ~"    register(test_process, self()), %L04\n",
+                    ~"    X * 5.                          %L05\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}, {line, 5}]}]),
+    {ok, ThreadId, [#{id := FrameId1} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
+    ProcessVars1 = get_process_vars(Client, FrameId1),
+
+    ?assertNot(maps:is_key(~"Registered name", ProcessVars1)),
+
+    edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
+    {ok, _, [#{id := FrameId2} | _]} = edb_dap_test_support:wait_for_bp(Client),
+    ProcessVars2 = get_process_vars(Client, FrameId2),
+
+    ?assertEqual(
+        #{
+            name => ~"Registered name",
+            value => ~"test_process",
+            variablesReference => 0
+        },
+        maps:get(~"Registered name", ProcessVars2)
+    ),
     ok.
 
 test_reports_process_messages_info_in_process_scope(Config) ->
@@ -462,9 +495,7 @@ test_reports_process_messages_info_in_process_scope(Config) ->
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
     case ST of
         [_, #{id := NonTopFrameId} | _] ->
-            Scopes = edb_dap_test_support:get_scopes(Client, NonTopFrameId),
-            ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
-            ProcessVars = edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef),
+            ProcessVars = get_process_vars(Client, NonTopFrameId),
 
             ?assertEqual(
                 #{
@@ -533,3 +564,11 @@ assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expect
         #{command := ~"evaluate", type := response, success := true, body := #{result := Result}} ->
             ?assertEqual(Expected, Result)
     end.
+
+-spec get_process_vars(Client, FrameId) -> #{binary() => edb_dap_request_variables:variable()} when
+    Client :: edb_dap_test_support:client(),
+    FrameId :: number().
+get_process_vars(Client, FrameId) ->
+    Scopes = edb_dap_test_support:get_scopes(Client, FrameId),
+    ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
+    edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef).

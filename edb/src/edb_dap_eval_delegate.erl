@@ -202,20 +202,39 @@ process_scope(Pid) ->
             }
         ],
 
-    MessagesVar =
-        case erlang:process_info(Pid, messages) of
-            {messages, Messages} ->
-                [
+    ProcessInfoVars =
+        case erlang:process_info(Pid, [registered_name, messages, dictionary]) of
+            ProcessInfo when is_list(ProcessInfo) ->
+                Messages = proplists:get_value(messages, ProcessInfo, []),
+                RegisteredName = proplists:get_value(registered_name, ProcessInfo),
+
+                BaseVars = [
                     #{
                         name => ~"Messages in queue",
                         value_rep => format("~p", [length(Messages)]),
                         structure => structure({value, Messages}, access_process_info(Pid, messages))
                     }
-                ];
+                ],
+
+                case RegisteredName of
+                    undefined ->
+                        BaseVars;
+                    [] ->
+                        BaseVars;
+                    Name ->
+                        [
+                            #{
+                                name => ~"Registered name",
+                                value_rep => format("~p", [Name]),
+                                structure => none
+                            }
+                            | BaseVars
+                        ]
+                end;
             _ ->
                 []
         end,
-    #{type => process, variables => PidVar ++ MessagesVar}.
+    #{type => process, variables => PidVar ++ ProcessInfoVars}.
 
 -spec access_process_info(Pid, Type) -> {accessor(), eval_name()} when
     Pid :: pid(),
