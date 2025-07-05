@@ -193,48 +193,47 @@ access_reg(Type, Index) ->
 
 -spec process_scope(Pid) -> scope() when Pid :: pid().
 process_scope(Pid) ->
-    PidVar =
-        [
-            #{
-                name => ~"self()",
-                value_rep => format("~p", [Pid]),
-                structure => none
-            }
-        ],
-
-    ProcessInfoVars =
-        case erlang:process_info(Pid, [registered_name, messages, dictionary]) of
-            ProcessInfo when is_list(ProcessInfo) ->
-                Messages = proplists:get_value(messages, ProcessInfo, []),
-                RegisteredName = proplists:get_value(registered_name, ProcessInfo),
-
-                BaseVars = [
-                    #{
-                        name => ~"Messages in queue",
-                        value_rep => format("~p", [length(Messages)]),
-                        structure => structure({value, Messages}, access_process_info(Pid, messages))
-                    }
-                ],
-
-                case RegisteredName of
-                    undefined ->
-                        BaseVars;
-                    [] ->
-                        BaseVars;
-                    Name ->
-                        [
-                            #{
-                                name => ~"Registered name",
-                                value_rep => format("~p", [Name]),
-                                structure => none
-                            }
-                            | BaseVars
-                        ]
-                end;
-            _ ->
-                []
+    ProcessInfo = [
+        {pid, Pid}
+        % eqwalizer:fixme label is only available in OTP 28+
+        | erlang:process_info(Pid, [registered_name, label, messages])
+    ],
+    ProcessInfoVars = lists:filtermap(
+        fun
+            ({pid, PidVal}) ->
+                {true, #{
+                    name => ~"self()",
+                    value_rep => format("~p", [PidVal]),
+                    structure => none
+                }};
+            ({registered_name, undefined}) ->
+                false;
+            ({registered_name, []}) ->
+                false;
+            ({registered_name, RegisteredName}) ->
+                {true, #{
+                    name => ~"Registered name",
+                    value_rep => format("~p", [RegisteredName]),
+                    structure => none
+                }};
+            ({label, undefined}) ->
+                false;
+            ({label, Label}) ->
+                {true, #{
+                    name => ~"Process label",
+                    value_rep => format("~p", [Label]),
+                    structure => none
+                }};
+            ({messages, Messages}) ->
+                {true, #{
+                    name => ~"Messages in queue",
+                    value_rep => format("~p", [length(Messages)]),
+                    structure => structure({value, Messages}, access_process_info(Pid, messages))
+                }}
         end,
-    #{type => process, variables => PidVar ++ ProcessInfoVars}.
+        ProcessInfo
+    ),
+    #{type => process, variables => ProcessInfoVars}.
 
 -spec access_process_info(Pid, Type) -> {accessor(), eval_name()} when
     Pid :: pid(),

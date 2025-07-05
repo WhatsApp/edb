@@ -38,6 +38,7 @@
     test_reports_process_pid_info_in_process_scope/1,
     test_reports_process_registered_name_info_in_process_scope/1,
     test_reports_process_messages_info_in_process_scope/1,
+    test_reports_process_label_info_in_process_scope/1,
 
     test_structured_variables/1,
     test_structured_variables_with_pagination/1
@@ -50,6 +51,7 @@ all() ->
         test_reports_process_pid_info_in_process_scope,
         test_reports_process_registered_name_info_in_process_scope,
         test_reports_process_messages_info_in_process_scope,
+        test_reports_process_label_info_in_process_scope,
 
         test_structured_variables,
         test_structured_variables_with_pagination
@@ -519,6 +521,39 @@ test_reports_process_messages_info_in_process_scope(Config) ->
                 MessagesVars
             )
     end,
+    ok.
+
+test_reports_process_label_info_in_process_scope(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                       %L01\n",
+                    ~"-export([go/1]).                    %L02\n",
+                    ~"go(X) ->                            %L03\n",
+                    ~"    proc_lib:set_label(test_label), %L04\n",
+                    ~"    X * 5.                          %L05\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}, {line, 5}]}]),
+    {ok, ThreadId, [#{id := FrameId1} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
+    ProcessVars1 = get_process_vars(Client, FrameId1),
+
+    ?assertNot(maps:is_key(~"Process label", ProcessVars1)),
+
+    edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
+    {ok, _, [#{id := FrameId2} | _]} = edb_dap_test_support:wait_for_bp(Client),
+    ProcessVars2 = get_process_vars(Client, FrameId2),
+
+    ?assertEqual(
+        #{
+            name => ~"Process label",
+            value => ~"test_label",
+            variablesReference => 0
+        },
+        maps:get(~"Process label", ProcessVars2)
+    ),
     ok.
 
 % -----------------------------------------------------------------------------
