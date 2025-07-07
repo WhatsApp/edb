@@ -90,6 +90,9 @@ be assumed to be running on the debuggee.
 
 -type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
+-type process_info_item() ::
+    heap_size | label | messages | registered_name | memory | stack_size | total_heap_size.
+
 -export_type([scope/0, variable/0, evaluation_result/0, structure/0, accessor/0, eval_name/0]).
 -export_type([window/0]).
 
@@ -196,7 +199,7 @@ process_scope(Pid) ->
     ProcessInfo = [
         {pid, Pid}
         % eqwalizer:fixme label is only available in OTP 28+
-        | erlang:process_info(Pid, [registered_name, label, messages])
+        | erlang:process_info(Pid, [registered_name, label, messages, memory])
     ],
     ProcessInfoVars = lists:filtermap(
         fun
@@ -229,7 +232,19 @@ process_scope(Pid) ->
                     name => ~"Messages in queue",
                     value_rep => format("~p", [length(Messages)]),
                     structure => structure({value, Messages}, access_process_info(Pid, messages))
-                }}
+                }};
+            ({memory, Memory}) ->
+                Bytes = erlang:system_info(wordsize) * Memory,
+                {true, #{
+                    name => ~"Memory usage",
+                    value_rep => format("~p B", [Bytes]),
+                    structure => structure(
+                        {value, #{total_heap_size => 0, stack_size => 0}},
+                        access_process_info(Pid, [memory, total_heap_size, stack_size])
+                    )
+                }};
+            (_) ->
+                false
         end,
         ProcessInfo
     ),
@@ -237,11 +252,28 @@ process_scope(Pid) ->
 
 -spec access_process_info(Pid, Type) -> {accessor(), eval_name()} when
     Pid :: pid(),
-    Type :: messages.
-access_process_info(Pid, Type) ->
+    Type :: process_info_item() | [process_info_item()].
+access_process_info(Pid, Types) when is_list(Types) ->
     Accessor = fun(_) ->
-        {Type, Value} = erlang:process_info(Pid, Type),
-        Value
+        % eqwalizer:fixme label is only available in OTP 28+
+        case erlang:process_info(Pid, Types) of
+            undefined -> #{};
+            Values -> maps:from_list(Values)
+        end
+    end,
+    EvalName = format("maps:from_list(erlang:process_info(erlang:list_to_pid(\"~p\"), ~w))", [
+        Pid, Types
+    ]),
+    {Accessor, EvalName};
+access_process_info(Pid, Type) when is_atom(Type) ->
+    Accessor = fun(_) ->
+        % eqwalizer:fixme label is only available in OTP 28+
+        case erlang:process_info(Pid, Type) of
+            undefined ->
+                undefined;
+            {_, Value} ->
+                Value
+        end
     end,
     EvalName = format("erlang:element(2, erlang:process_info(erlang:list_to_pid(\"~p\"), ~p))", [Pid, Type]),
     {Accessor, EvalName}.
