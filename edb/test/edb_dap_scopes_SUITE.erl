@@ -38,6 +38,7 @@
     test_reports_process_pid_info_in_process_scope/1,
     test_reports_process_registered_name_info_in_process_scope/1,
     test_reports_process_messages_info_in_process_scope/1,
+    test_reports_process_memory_usage_info_in_process_scope/1,
     test_reports_process_label_info_in_process_scope/1,
 
     test_structured_variables/1,
@@ -51,6 +52,7 @@ all() ->
         test_reports_process_pid_info_in_process_scope,
         test_reports_process_registered_name_info_in_process_scope,
         test_reports_process_messages_info_in_process_scope,
+        test_reports_process_memory_usage_info_in_process_scope,
         test_reports_process_label_info_in_process_scope,
 
         test_structured_variables,
@@ -97,7 +99,7 @@ test_reports_locals_scope(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 2
+                            variablesReference => 3
                         }
                 },
                 Scopes
@@ -149,7 +151,7 @@ test_structured_variables(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 6
+                            variablesReference => 7
                         }
                 },
                 Scopes
@@ -202,7 +204,7 @@ test_structured_variables(Config) ->
                         name => ~"3",
                         value => ~"{6,7}",
                         evaluateName => ~"lists:nth(3, M)",
-                        variablesReference => 7
+                        variablesReference => 8
                     }
                 },
                 ChildrenListVars
@@ -229,7 +231,7 @@ test_structured_variables(Config) ->
                     ~"env" => #{
                         name => ~"env",
                         value => ~"[[1,2,3],[4,[]|...]]",
-                        variablesReference => 8,
+                        variablesReference => 9,
                         evaluateName => ~"erlang:element(2, erlang:fun_info(F, env))"
                     }
                 },
@@ -340,7 +342,7 @@ test_structured_variables_with_pagination(Config) ->
                 name => ~"3",
                 value => ~"{6,7}",
                 evaluateName => ~"erlang:element(3, T)",
-                variablesReference => 6,
+                variablesReference => 7,
                 indexedVariables => 2
             },
             #{name => ~"4", value => ~"8", variablesReference => 0},
@@ -358,7 +360,7 @@ test_structured_variables_with_pagination(Config) ->
             #{
                 name => ~"more",
                 value => ~"{45,46,47}",
-                variablesReference => 7,
+                variablesReference => 8,
                 evaluateName => ~"maps:get(more, M)",
                 indexedVariables => 3
             }
@@ -390,7 +392,7 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
                         #{
                             name => ~"Process",
                             expensive => false,
-                            variablesReference => 2
+                            variablesReference => 3
                         },
                     ~"Registers" =>
                         #{
@@ -553,6 +555,53 @@ test_reports_process_label_info_in_process_scope(Config) ->
             variablesReference => 0
         },
         maps:get(~"Process label", ProcessVars2)
+    ),
+    ok.
+
+test_reports_process_memory_usage_info_in_process_scope(Config) ->
+    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                   %L01\n",
+                    ~"-export([go/1]).                %L02\n",
+                    ~"go(X) ->                        %L03\n",
+                    ~"    X * 5.                      %L04\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
+        Client, Peer, {foo, go, [10]}
+    ),
+    ProcessVars = get_process_vars(Client, TopFrameId),
+
+    ?assertMatch(
+        #{
+            name := ~"Memory usage",
+            value := ~"22208 B",
+            variablesReference := 2,
+            evaluateName :=
+                <<"maps:from_list(erlang:process_info(erlang:list_to_pid(", _/binary>>
+        },
+        maps:get(~"Memory usage", ProcessVars)
+    ),
+
+    MemoryVarRefs = maps:get(variablesReference, maps:get(~"Memory usage", ProcessVars)),
+    MemoryVars = edb_dap_test_support:get_variables(Client, MemoryVarRefs),
+    ?assertMatch(
+        #{
+            ~"total_heap_size" := #{name := ~"total_heap_size", value := ~"233", variablesReference := 0},
+            ~"stack_size" := #{name := ~"stack_size", value := ~"15", variablesReference := 0}
+        },
+        MemoryVars
+    ),
+
+    assertEvaluateNameIsCorrect(
+        Client,
+        TopFrameId,
+        maps:get(~"Memory usage", ProcessVars),
+        ~"#{memory => 2776,stack_size => 15,total_heap_size => 233}"
     ),
     ok.
 

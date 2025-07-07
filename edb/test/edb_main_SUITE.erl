@@ -137,7 +137,7 @@ escript_dap(Config) ->
                     #{
                         name := ~"Process",
                         expensive := false,
-                        variablesReference := 2
+                        variablesReference := 3
                     }
                 ]
             },
