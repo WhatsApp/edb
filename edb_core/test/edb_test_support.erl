@@ -396,7 +396,11 @@ stop_all_peers() ->
                             % the peer node. The actual node keeps up, though, so we leak
                             % a OS process on each invocation of the test. So let's ensure the debugger
                             % is stopped (which resumes every process) to avoid leaking resources
-                            catch erpc:call(Node, edb_server, stop, [], 30_000)
+                            try
+                                erpc:call(Node, edb_server, stop, [], 30_000)
+                            catch
+                                _:_ -> ok
+                            end
                     end,
                     ok = stop_peer(Peer)
                 end
