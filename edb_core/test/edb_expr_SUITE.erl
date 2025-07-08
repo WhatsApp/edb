@@ -27,6 +27,7 @@
 
 %% compile_expr test cases
 -export([test_compile_expr_evaluates/1]).
+-export([test_compile_expr_ignores_vars_when_no_free_vars_are_given/1]).
 -export([test_compile_expr_fails_to_eval_if_value_is_too_large/1]).
 -export([test_compile_expr_uses_given_location_on_exceptions/1]).
 -export([test_compile_expr_reports_parsing_errors_using_given_location/1]).
@@ -50,6 +51,7 @@ groups() ->
     [
         {compile_expr, [
             test_compile_expr_evaluates,
+            test_compile_expr_ignores_vars_when_no_free_vars_are_given,
             test_compile_expr_fails_to_eval_if_value_is_too_large,
             test_compile_expr_uses_given_location_on_exceptions,
             test_compile_expr_reports_parsing_errors_using_given_location,
@@ -74,6 +76,14 @@ test_compile_expr_evaluates(_Config) ->
     ?assertEqual(15 * 7 + 1, Eval(#{vars => #{~"X" => {value, 15}, ~"Y" => {value, 7}, ~"Z" => {value, 1000}}})),
     ok.
 
+test_compile_expr_ignores_vars_when_no_free_vars_are_given(_Config) ->
+    {ok, Expr} = edb_expr:compile_expr(~"40 + 2", #{free_vars => []}),
+    Eval = edb_expr:entrypoint(Expr),
+
+    ?assertEqual(42, Eval(#{vars => #{}}), "Works if vars is given and an empty map"),
+    ?assertEqual(42, Eval(#{}), "Works if vars is not provided"),
+    ok.
+
 test_compile_expr_fails_to_eval_if_value_is_too_large(_Config) ->
     {ok, Expr} = edb_expr:compile_expr(~"X * Y + 1", #{free_vars => [~"X", ~"Y", ~"Z"]}),
     Eval = edb_expr:entrypoint(Expr),
@@ -83,7 +93,7 @@ test_compile_expr_fails_to_eval_if_value_is_too_large(_Config) ->
     catch
         error:Reason:ST ->
             ?assertEqual(
-                {unavailable_values, #{~"X" => {too_large, 1000, 500}, ~"Z" => {too_large, 2000, 500}}},
+                {unavailable_values, #{~"X" => {too_large, 1000, 500}}},
                 Reason
             ),
             ?assertEqual([], ST, "We don't leak implementation details to the caller")
@@ -169,7 +179,7 @@ test_compile_guard_fails_to_eval_if_value_is_too_large(_Config) ->
     catch
         error:Reason:ST ->
             ?assertEqual(
-                {unavailable_values, #{~"X" => {too_large, 1000, 500}, ~"Z" => {too_large, 2000, 500}}},
+                {unavailable_values, #{~"X" => {too_large, 1000, 500}}},
                 Reason
             ),
             ?assertEqual([], ST, "We don't leak implementation details to the caller")

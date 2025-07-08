@@ -23,7 +23,8 @@
         kernel,
         stdlib,
         compiler,
-        crypto
+        crypto,
+        syntax_tools
     ]},
     {licenses, ["Apache-2.0"]},
     {links, []},
