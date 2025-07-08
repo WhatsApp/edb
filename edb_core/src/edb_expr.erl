@@ -81,7 +81,9 @@ Any error at compile or run-time, will refer to locations relative to
     Expr :: source_code(),
     Opts :: compile_opts().
 compile_expr(Expr, Opts = #{free_vars := FreeVars}) ->
-    Module = module_name(expr, FreeVars, Expr),
+    ExprFreeVars = try_find_free_vars({expr, Expr}),
+    CommonFreeVars = [V || V <- FreeVars, maps:is_key(V, ExprFreeVars)],
+    Module = module_name(expr, CommonFreeVars, Expr),
     case code:get_object_code(Module) of
         {Module, Code, _} ->
             {exports, [{Entrypoint, 1}]} = Module:module_info(exports),
@@ -92,24 +94,28 @@ compile_expr(Expr, Opts = #{free_vars := FreeVars}) ->
             StartLine = maps:get(start_line, Opts, 1),
             StartCol = maps:get(start_col, Opts, 1),
 
-            VarsMatch = lists:join(~",", [io_lib:format("~p := {value, ~s}", [V, V]) || V <- FreeVars]),
             ModuleSource = #{
-                header => io_lib:format(
-                    ~"""
-                    -module(~s).
-                    -export([~s/1]).
-                    ~s(#{vars := #{~s}}) ->
-                    """,
-                    [Module, Entrypoint, Entrypoint, VarsMatch]
-                ),
+                header =>
+                    io_lib:format(
+                        ~"""
+                        -module(~s).
+                        -export([~s/1]).
+                        ~s(#{~s}) ->
+                        """,
+                        [Module, Entrypoint, Entrypoint, vars_match(CommonFreeVars)]
+                    ),
                 body_start => {StartLine, StartCol},
                 body => Expr,
-                footer => [io_lib:format("""
-                ;
-                ~s(#{vars := Vars}) when map_size(Vars) =:= ~p ->
-                    Unavailable = maps:filter(fun(_, {value, _}) -> false; (_, _) -> true end, Vars),
-                    erlang:raise(error, {unavailable_values, Unavailable}, []).
-                """, [Entrypoint, length(FreeVars)])]
+                footer => [
+                    io_lib:format(~"""
+                    ;
+                    ~s(Args) when is_map(Args) ->
+                        Expected = ~p,
+                        Vars = maps:with(Expected, maps:get(vars, Args, #{})),
+                        Unavailable = maps:filter(fun(_, {value, _}) -> false; (_, _) -> true end, Vars),
+                        erlang:raise(error, {unavailable_values, Unavailable}, []).
+                    """, [Entrypoint, CommonFreeVars])
+                ]
             },
             compile(ModuleSource)
     end.
@@ -118,6 +124,8 @@ compile_expr(Expr, Opts = #{free_vars := FreeVars}) ->
     GuardExpr :: source_code(),
     Opts :: compile_opts().
 compile_guard(GuardExpr, Opts = #{free_vars := FreeVars}) ->
+    ExprFreeVars = try_find_free_vars({guard, GuardExpr}),
+    CommonFreeVars = [V || V <- FreeVars, maps:is_key(V, ExprFreeVars)],
     Module = module_name(guard, FreeVars, GuardExpr),
     case code:get_object_code(Module) of
         {Module, Code, _} ->
@@ -129,29 +137,30 @@ compile_guard(GuardExpr, Opts = #{free_vars := FreeVars}) ->
             StartLine = maps:get(start_line, Opts, 1),
             StartCol = maps:get(start_col, Opts, 1),
 
-            VarsMatch = lists:join(~",", [io_lib:format("~p := {value, ~s}", [V, V]) || V <- FreeVars]),
             ModuleSource = #{
                 header => io_lib:format(
                     ~"""
                     -module(~s).
                     -export([~s/1]).
-                    ~s(#{vars := #{~s}}) when
+                    ~s(#{~s}) when
                     """,
-                    [Module, Entrypoint, Entrypoint, VarsMatch]
+                    [Module, Entrypoint, Entrypoint, vars_match(CommonFreeVars)]
                 ),
                 body_start => {StartLine, StartCol},
                 body => GuardExpr,
                 footer => io_lib:format(
                     ~"""
                        -> true;
-                    ~s(#{vars := Vars}) when map_size(Vars) =:= ~p ->
+                    ~s(Args) when is_map(Args) ->
+                        Expected = ~p,
+                        Vars = maps:with(Expected, maps:get(vars, Args, #{})),
                         Unavailable = maps:filter(fun(_, {value, _}) -> false; (_, _) -> true end, Vars),
                         case map_size(Unavailable) of
                             0 -> false;
                             _ -> erlang:raise(error, {unavailable_values, Unavailable}, [])
                         end.
                     """,
-                    [Entrypoint, length(FreeVars)]
+                    [Entrypoint, CommonFreeVars]
                 )
             },
             compile(ModuleSource)
@@ -176,6 +185,14 @@ module_name(Type, FreeVars, Source) ->
     Hash = crypto:hash(sha256, Input),
     ModuleName = io_lib:format("~s_~.16b", [?MODULE, crypto:bytes_to_integer(Hash)]),
     binary_to_atom(iolist_to_binary(ModuleName), utf8).
+
+-spec vars_match(FreeVars) -> io_lib:chars() when
+    FreeVars :: [binary()].
+vars_match([]) ->
+    "";
+vars_match(FreeVars) ->
+    VarsMatch = lists:join(~",", [io_lib:format("~p := {value, ~s}", [V, V]) || V <- FreeVars]),
+    io_lib:format(~"vars := #{~s}", [VarsMatch]).
 
 -spec compile(Source) -> {ok, compiled_expr()} | {error, compile_error()} when
     Source :: generated_source_code().
@@ -211,6 +228,13 @@ strip_trailing_dot([]) -> [];
 strip_trailing_dot([{dot, _}]) -> [];
 strip_trailing_dot([Tok | Tokens]) -> [Tok | strip_trailing_dot(Tokens)].
 
+-spec ensure_trailing_dot(Tokens) -> Tokens when
+    Tokens :: erl_scan:tokens().
+ensure_trailing_dot([]) -> [];
+ensure_trailing_dot(TrailingDot = [{dot, _}]) -> TrailingDot;
+ensure_trailing_dot([Tok]) -> [Tok, {dot, 1}];
+ensure_trailing_dot([Tok | Tokens]) -> [Tok | ensure_trailing_dot(Tokens)].
+
 -spec parse_forms(Tokens, AccForm, AccForms) -> {ok, Forms} | {error, erl_parse:error_info()} when
     Tokens :: erl_scan:tokens(),
     AccForm :: erl_scan:tokens(),
@@ -233,4 +257,33 @@ parse_forms([Tok | Toks], AccForm, AccForms) ->
 binary_to_string(B) ->
     case unicode:characters_to_list(B, utf8) of
         S when is_list(S) -> S
+    end.
+
+-doc """
+Try to find the free variables in an expression. If it contains
+errors, return an empty list since the actual compilation of the
+expression will fail returning a proper error message.
+""".
+-spec try_find_free_vars({guard | expr, Source}) -> #{FreeVar => []} when
+    Source :: source_code() | string(),
+    FreeVar :: binary().
+try_find_free_vars({guard, Source}) when is_binary(Source) ->
+    try_find_free_vars({guard, binary_to_string(Source)});
+try_find_free_vars({expr, Source}) when is_binary(Source) ->
+    try_find_free_vars({expr, binary_to_string(Source)});
+try_find_free_vars({guard, Source}) ->
+    Expr = "case [] of _ when " ++ Source ++ " -> [] end",
+    try_find_free_vars({expr, Expr});
+try_find_free_vars({expr, Source}) ->
+    maybe
+        {ok, Tokens, _} ?= erl_scan:string(Source, 1),
+        {ok, Trees} ?= erl_parse:parse_exprs(ensure_trailing_dot(Tokens)),
+        AnnotatedTrees = [erl_syntax_lib:annotate_bindings(Tree, ordsets:new()) || Tree <- Trees],
+        #{
+            atom_to_binary(FreeVar) => []
+         || Tree <- AnnotatedTrees,
+            FreeVar <- proplists:get_value(free, erl_syntax:get_ann(Tree), [])
+        }
+    else
+        _ -> #{}
     end.
