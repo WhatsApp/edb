@@ -558,30 +558,41 @@ test_reports_process_label_info_in_process_scope(Config) ->
     ok.
 
 test_reports_process_memory_usage_info_in_process_scope(Config) ->
-    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+    {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [
-                    ~"-module(foo).                   %L01\n",
-                    ~"-export([go/1]).                %L02\n",
-                    ~"go(X) ->                        %L03\n",
-                    ~"    X * 5.                      %L04\n"
+                    ~"-module(foo).                                                 %L01\n",
+                    ~"-export([go/1]).                                              %L02\n",
+                    ~"go(X) ->                                                      %L03\n",
+                    ~"    persistent_term:put(pid_repr, pid_to_list(self())),       %L04\n",
+                    ~"    X * 5.                                                    %L05\n"
                 ]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
         Client, Peer, {foo, go, [10]}
     ),
-    ProcessVars = get_process_vars(Client, TopFrameId),
 
-    ?assertMatch(
+    {ok, Inspector} = start_node_inspector(Config, Node, Cookie),
+    PidRepr = inspect(Inspector, persistent_term, get, [pid_repr]),
+    Pid = inspect(Inspector, erlang, list_to_pid, [PidRepr]),
+    MemInfo = maps:from_list(
+        inspect(Inspector, erlang, process_info, [Pid, [memory, total_heap_size, stack_size]])
+    ),
+
+    ProcessVars = get_process_vars(Client, TopFrameId),
+    ?assertEqual(
         #{
-            name := ~"Memory usage",
-            value := ~"22208 B",
-            variablesReference := 2,
-            evaluateName :=
-                <<"maps:from_list(erlang:process_info(erlang:list_to_pid(", _/binary>>
+            name => ~"Memory usage",
+            value => format(~"~p B", [maps:get(memory, MemInfo) * erlang:system_info(wordsize)]),
+            variablesReference => 2,
+            evaluateName =>
+                format(
+                    ~"maps:from_list(erlang:process_info(erlang:list_to_pid(~p), [memory,total_heap_size,stack_size]))",
+                    [PidRepr]
+                )
         },
         maps:get(~"Memory usage", ProcessVars)
     ),
@@ -590,9 +601,17 @@ test_reports_process_memory_usage_info_in_process_scope(Config) ->
     MemoryVars = edb_dap_test_support:get_variables(Client, MemoryVarRefs),
     ?assertEqual(
         #{
-            ~"memory" => #{name => ~"memory", value => ~"2776", variablesReference => 0},
-            ~"total_heap_size" => #{name => ~"total_heap_size", value => ~"233", variablesReference => 0},
-            ~"stack_size" => #{name => ~"stack_size", value => ~"15", variablesReference => 0}
+            ~"memory" => #{
+                name => ~"memory", value => format("~p", [maps:get(memory, MemInfo)]), variablesReference => 0
+            },
+            ~"total_heap_size" => #{
+                name => ~"total_heap_size",
+                value => format("~p", [maps:get(total_heap_size, MemInfo)]),
+                variablesReference => 0
+            },
+            ~"stack_size" => #{
+                name => ~"stack_size", value => format("~p", [maps:get(stack_size, MemInfo)]), variablesReference => 0
+            }
         },
         MemoryVars
     ),
@@ -601,7 +620,7 @@ test_reports_process_memory_usage_info_in_process_scope(Config) ->
         Client,
         TopFrameId,
         maps:get(~"Memory usage", ProcessVars),
-        ~"#{memory => 2776,stack_size => 15,total_heap_size => 233}"
+        format("~p", [MemInfo])
     ),
     ok.
 
@@ -623,7 +642,7 @@ start_node_inspector(Config, Node, Cookie) ->
     ok = peer:call(Peer, persistent_term, put, [inspected_node, Node]),
     {ok, Peer}.
 
--spec inspect(Inspector, Module, Fun, Args) -> term() when
+-spec inspect(Inspector, Module, Fun, Args) -> dynamic() when
     Inspector :: peer:server_ref(),
     Module :: module(),
     Fun :: atom(),
