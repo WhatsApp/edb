@@ -416,32 +416,33 @@ test_reports_registers_scope_when_locals_not_available(Config) ->
     ok.
 
 test_reports_process_pid_info_in_process_scope(Config) ->
-    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+    {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [
-                    ~"-module(foo).      %L01\n",
-                    ~"-export([go/1]).   %L02\n",
-                    ~"go(X) ->           %L03\n",
-                    ~"    X * 3.         %L04\n"
+                    ~"-module(foo).                                             %L01\n",
+                    ~"-export([go/1]).                                          %L02\n",
+                    ~"go(X) ->                                                  %L03\n",
+                    ~"    persistent_term:put(pid_repr, pid_to_list(self())),   %L04\n",
+                    ~"    X * 3.                                                %L05\n"
                 ]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [15]}),
-    case ST of
-        [_, #{id := NonTopFrameId} | _] ->
-            ProcessVars = get_process_vars(Client, NonTopFrameId),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),
+    {ok, _ThreadId, [#{id := FrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [15]}),
 
-            ?assertMatch(
-                #{
-                    name := ~"self()",
-                    value := <<"<0.", _/binary>>,
-                    variablesReference := 0
-                },
-                maps:get(~"self()", ProcessVars)
-            )
-    end,
+    {ok, Inspector} = start_node_inspector(Config, Node, Cookie),
+    PidRepr = inspect(Inspector, persistent_term, get, [pid_repr]),
+
+    ProcessVars = get_process_vars(Client, FrameId),
+    ?assertEqual(
+        #{
+            name => ~"self()",
+            value => format("~s", [PidRepr]),
+            variablesReference => 0
+        },
+        maps:get(~"self()", ProcessVars)
+    ),
     ok.
 
 test_reports_process_registered_name_info_in_process_scope(Config) ->
