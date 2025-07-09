@@ -91,7 +91,7 @@ be assumed to be running on the debuggee.
 -type window() :: #{start := pos_integer(), count := non_neg_integer() | infinity}.
 
 -type process_info_item() ::
-    heap_size | label | messages | registered_name | memory | stack_size | total_heap_size.
+    dictionary | heap_size | label | messages | registered_name | memory | stack_size | total_heap_size.
 
 -export_type([scope/0, variable/0, evaluation_result/0, structure/0, accessor/0, eval_name/0]).
 -export_type([window/0]).
@@ -199,7 +199,7 @@ process_scope(Pid) ->
     ProcessInfo = [
         {pid, Pid}
         % eqwalizer:fixme label is only available in OTP 28+
-        | erlang:process_info(Pid, [registered_name, label, messages, memory])
+        | erlang:process_info(Pid, [registered_name, label, messages, dictionary, memory])
     ],
     ProcessInfoVars = lists:filtermap(
         fun
@@ -232,6 +232,14 @@ process_scope(Pid) ->
                     name => ~"Messages in queue",
                     value_rep => format("~p", [length(Messages)]),
                     structure => structure({value, Messages}, access_process_info(Pid, messages))
+                }};
+            ({dictionary, Dictionary}) ->
+                {true, #{
+                    name => ~"Process dictionary",
+                    value_rep => ~"",
+                    structure => structure(
+                        {value, maps:from_list(Dictionary)}, access_process_info(Pid, dictionary)
+                    )
                 }};
             ({memory, Memory}) ->
                 Bytes = erlang:system_info(wordsize) * Memory,
@@ -271,8 +279,11 @@ access_process_info(Pid, Type) when is_atom(Type) ->
         case erlang:process_info(Pid, Type) of
             undefined ->
                 undefined;
-            {_, Value} ->
-                Value
+            {Type, Value} ->
+                case Type of
+                    dictionary when is_list(Value) -> maps:from_list(Value);
+                    _ -> Value
+                end
         end
     end,
     EvalName = format("erlang:element(2, erlang:process_info(erlang:list_to_pid(\"~p\"), ~p))", [Pid, Type]),
