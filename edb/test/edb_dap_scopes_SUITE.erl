@@ -118,143 +118,140 @@ test_reports_locals_scope(Config) ->
     ok.
 
 test_structured_variables(Config) ->
-    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+    {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [~"""
-                    -module(foo).             %L01\n
-                    -export([go/2]).          %L02\n
-                    go(L, X) ->               %L03\n
-                        M = [4, [], {6, 7}],  %L04\n
-                        F = fun(_A) -> length(L) == length(M) orelse ok end, %L05\n
-                        {L ++ M, X}.          %L06\n
+                    -module(foo).                                               %L01\n
+                    -export([go/2]).                                            %L02\n
+                    go(L, X) ->                                                 %L03\n
+                        M = [4, [], {6, 7}],                                    %L04\n
+                        F = fun(_A) -> length(L) == length(M) orelse ok end,    %L05\n
+                        persistent_term:put(fun_repr, io_lib:format("~p", [F])),%L06\n
+                        {L ++ M, X, F}.                                         %L07\n
                 """]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 6}]}]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
+    {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
         Client, Peer, {foo, go, [[1, 2, 3], #{life => 42}]}
     ),
-    case ST of
-        [#{id := TopFrameId} | _] ->
-            Scopes = edb_dap_test_support:get_scopes(Client, TopFrameId),
-            ?assertEqual(
-                #{
-                    ~"Locals" =>
-                        #{
-                            name => ~"Locals",
-                            expensive => false,
-                            presentationHint => ~"locals",
-                            variablesReference => 5
-                        },
-                    ~"Process" =>
-                        #{
-                            name => ~"Process",
-                            expensive => false,
-                            variablesReference => 7
-                        }
-                },
-                Scopes
-            ),
 
-            VarRef = maps:get(variablesReference, maps:get(~"Locals", Scopes)),
-            LocalVars = edb_dap_test_support:get_variables(Client, VarRef),
-            ?assertEqual(
+    Scopes = edb_dap_test_support:get_scopes(Client, TopFrameId),
+    ?assertEqual(
+        #{
+            ~"Locals" =>
                 #{
-                    ~"L" => #{
-                        name => ~"L",
-                        value => ~"[1,2,3]",
-                        evaluateName => ~"L",
-                        variablesReference => 2
-                    },
-                    ~"M" => #{
-                        name => ~"M",
-                        value => ~"[4,[],{6,...}]",
-                        evaluateName => ~"M",
-                        variablesReference => 3
-                    },
-                    ~"X" => #{
-                        name => ~"X",
-                        value => ~"#{life => 42}",
-                        evaluateName => ~"X",
-                        variablesReference => 4
-                    }
+                    name => ~"Locals",
+                    expensive => false,
+                    presentationHint => ~"locals",
+                    variablesReference => 5
                 },
-                maps:remove(~"F", LocalVars)
-            ),
-
-            FVal = maps:get(~"F", LocalVars),
-            ?assertMatch(
+            ~"Process" =>
                 #{
-                    name := ~"F",
-                    value := <<"#Fun<foo.0.", _/binary>>,
-                    evaluateName := ~"F",
-                    variablesReference := 1
-                },
-                FVal
-            ),
+                    name => ~"Process",
+                    expensive => false,
+                    variablesReference => 7
+                }
+        },
+        Scopes
+    ),
 
-            ChildListVarRef = maps:get(variablesReference, maps:get(~"M", LocalVars)),
-            ChildrenListVars = edb_dap_test_support:get_variables(Client, ChildListVarRef),
-            ?assertEqual(
-                #{
-                    ~"1" => #{name => ~"1", value => ~"4", variablesReference => 0},
-                    ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 0},
-                    ~"3" => #{
-                        name => ~"3",
-                        value => ~"{6,7}",
-                        evaluateName => ~"lists:nth(3, M)",
-                        variablesReference => 8
-                    }
-                },
-                ChildrenListVars
-            ),
+    VarRef = maps:get(variablesReference, maps:get(~"Locals", Scopes)),
+    LocalVars = edb_dap_test_support:get_variables(Client, VarRef),
+    {ok, Inspector} = start_node_inspector(Config, Node, Cookie),
+    FunRepr = inspect(Inspector, persistent_term, get, [fun_repr]),
 
-            ChildMapVarRef = maps:get(variablesReference, maps:get(~"X", LocalVars)),
-            ChildrenMapVars = edb_dap_test_support:get_variables(Client, ChildMapVarRef),
-            ?assertEqual(
-                #{
-                    ~"life" => #{name => ~"life", value => ~"42", variablesReference => 0}
-                },
-                ChildrenMapVars
-            ),
+    ?assertEqual(
+        #{
+            ~"F" => #{
+                name => ~"F",
+                value => format("~s", [FunRepr]),
+                evaluateName => ~"F",
+                variablesReference => 1
+            },
+            ~"L" => #{
+                name => ~"L",
+                value => ~"[1,2,3]",
+                evaluateName => ~"L",
+                variablesReference => 2
+            },
+            ~"M" => #{
+                name => ~"M",
+                value => ~"[4,[],{6,...}]",
+                evaluateName => ~"M",
+                variablesReference => 3
+            },
+            ~"X" => #{
+                name => ~"X",
+                value => ~"#{life => 42}",
+                evaluateName => ~"X",
+                variablesReference => 4
+            }
+        },
+        LocalVars
+    ),
 
-            ChildFunVarRef = maps:get(variablesReference, maps:get(~"F", LocalVars)),
-            ChildrenFunVars = edb_dap_test_support:get_variables(Client, ChildFunVarRef),
-            ?assertEqual(
-                #{
-                    ~"fun" => #{
-                        name => ~"fun",
-                        value => ~"foo:'-go/2-fun-0-'/1",
-                        variablesReference => 0
-                    },
-                    ~"env" => #{
-                        name => ~"env",
-                        value => ~"[[1,2,3],[4,[]|...]]",
-                        variablesReference => 9,
-                        evaluateName => ~"erlang:element(2, erlang:fun_info(F, env))"
-                    }
-                },
-                ChildrenFunVars
-            ),
+    ChildListVarRef = maps:get(variablesReference, maps:get(~"M", LocalVars)),
+    ChildrenListVars = edb_dap_test_support:get_variables(Client, ChildListVarRef),
+    ?assertEqual(
+        #{
+            ~"1" => #{name => ~"1", value => ~"4", variablesReference => 0},
+            ~"2" => #{name => ~"2", value => ~"[]", variablesReference => 0},
+            ~"3" => #{
+                name => ~"3",
+                value => ~"{6,7}",
+                evaluateName => ~"lists:nth(3, M)",
+                variablesReference => 8
+            }
+        },
+        ChildrenListVars
+    ),
 
-            assertEvaluateNameIsCorrect(
-                Client,
-                TopFrameId,
-                maps:get(~"env", ChildrenFunVars),
-                ~"[[1,2,3],[4,[],{6,7}]]"
-            ),
+    ChildMapVarRef = maps:get(variablesReference, maps:get(~"X", LocalVars)),
+    ChildrenMapVars = edb_dap_test_support:get_variables(Client, ChildMapVarRef),
+    ?assertEqual(
+        #{
+            ~"life" => #{name => ~"life", value => ~"42", variablesReference => 0}
+        },
+        ChildrenMapVars
+    ),
 
-            GranChildVarRef = maps:get(variablesReference, maps:get(~"3", ChildrenListVars)),
-            GranChildrenVars = edb_dap_test_support:get_variables(Client, GranChildVarRef),
-            ?assertEqual(
-                #{
-                    ~"1" => #{name => ~"1", value => ~"6", variablesReference => 0},
-                    ~"2" => #{name => ~"2", value => ~"7", variablesReference => 0}
-                },
-                GranChildrenVars
-            )
-    end,
+    ChildFunVarRef = maps:get(variablesReference, maps:get(~"F", LocalVars)),
+    ChildrenFunVars = edb_dap_test_support:get_variables(Client, ChildFunVarRef),
+    ?assertEqual(
+        #{
+            ~"fun" => #{
+                name => ~"fun",
+                value => ~"foo:'-go/2-fun-0-'/1",
+                variablesReference => 0
+            },
+            ~"env" => #{
+                name => ~"env",
+                value => ~"[[1,2,3],[4,[]|...]]",
+                variablesReference => 9,
+                evaluateName => ~"erlang:element(2, erlang:fun_info(F, env))"
+            }
+        },
+        ChildrenFunVars
+    ),
+
+    assertEvaluateNameIsCorrect(
+        Client,
+        TopFrameId,
+        maps:get(~"env", ChildrenFunVars),
+        ~"[[1,2,3],[4,[],{6,7}]]"
+    ),
+
+    GranChildVarRef = maps:get(variablesReference, maps:get(~"3", ChildrenListVars)),
+    GranChildrenVars = edb_dap_test_support:get_variables(Client, GranChildVarRef),
+    ?assertEqual(
+        #{
+            ~"1" => #{name => ~"1", value => ~"6", variablesReference => 0},
+            ~"2" => #{name => ~"2", value => ~"7", variablesReference => 0}
+        },
+        GranChildrenVars
+    ),
     ok.
 
 test_structured_variables_with_pagination(Config) ->
