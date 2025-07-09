@@ -38,6 +38,7 @@
     test_reports_process_pid_info_in_process_scope/1,
     test_reports_process_registered_name_info_in_process_scope/1,
     test_reports_process_messages_info_in_process_scope/1,
+    test_reports_process_dictionary_info_in_process_scope/1,
     test_reports_process_memory_usage_info_in_process_scope/1,
     test_reports_process_label_info_in_process_scope/1,
 
@@ -52,6 +53,7 @@ all() ->
         test_reports_process_pid_info_in_process_scope,
         test_reports_process_registered_name_info_in_process_scope,
         test_reports_process_messages_info_in_process_scope,
+        test_reports_process_dictionary_info_in_process_scope,
         test_reports_process_memory_usage_info_in_process_scope,
         test_reports_process_label_info_in_process_scope,
 
@@ -525,6 +527,66 @@ test_reports_process_messages_info_in_process_scope(Config) ->
     ),
     ok.
 
+test_reports_process_dictionary_info_in_process_scope(Config) ->
+    {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{
+            modules => [
+                {source, [
+                    ~"-module(foo).                                                     %L01\n",
+                    ~"-export([go/1]).                                                  %L02\n",
+                    ~"go(X) ->                                                          %L03\n",
+                    ~"    persistent_term:put(go_runner_pid, pid_to_list(self())),      %L04\n",
+                    ~"    put(test_key1,test_value1),                                   %L05\n",
+                    ~"    put(test_key2,test_value2),                                   %L06\n",
+                    ~"    X * 5.                                                        %L07\n"
+                ]}
+            ]
+        }),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
+    {ok, Inspector} = start_node_inspector(Config, Node, Cookie),
+    {ok, _ThreadId, [#{id := FrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
+        Client, Peer, {foo, go, [10]}
+    ),
+    ExpectedPidStr = inspect(Inspector, persistent_term, get, [go_runner_pid]),
+    ProcessVars = get_process_vars(Client, FrameId),
+
+    ?assertEqual(
+        #{
+            name => ~"Process dictionary",
+            value => ~"",
+            evaluateName =>
+                format(~"erlang:element(2, erlang:process_info(erlang:list_to_pid(~p), dictionary))", [
+                    ExpectedPidStr
+                ]),
+            variablesReference => 2
+        },
+        maps:get(~"Process dictionary", ProcessVars)
+    ),
+
+    DictionaryVarRefs = maps:get(variablesReference, maps:get(~"Process dictionary", ProcessVars)),
+    DictionaryVars = edb_dap_test_support:get_variables(Client, DictionaryVarRefs),
+    ?assertMatch(
+        #{
+            ~"test_key1" := #{name := ~"test_key1", value := ~"test_value1", variablesReference := 0},
+            ~"test_key2" := #{name := ~"test_key2", value := ~"test_value2", variablesReference := 0}
+        },
+        DictionaryVars
+    ),
+
+    assertEvaluateNameIsCorrect(
+        Client,
+        FrameId,
+        maps:get(~"Process dictionary", ProcessVars),
+        ~"[{test_key1,test_value1},{test_key2,test_value2}]",
+        fun(BinaryResult) ->
+            ResultString = binary_to_list(BinaryResult),
+            {ok, Tokens, _} = erl_scan:string(ResultString ++ "."),
+            {ok, Term} = erl_parse:parse_term(Tokens),
+            lists:sort(Term)
+        end
+    ),
+    ok.
+
 test_reports_process_label_info_in_process_scope(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
@@ -686,7 +748,16 @@ get_variables_page(Client, VarRef, Window) ->
 -spec assertEvaluateNameIsCorrect(Client, FrameId, edb_dap_request_variables:variable(), binary()) -> ok when
     Client :: edb_dap_test_support:client(),
     FrameId :: number().
-assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expected) ->
+assertEvaluateNameIsCorrect(Client, FrameId, EvalName, Expected) ->
+    assertEvaluateNameIsCorrect(Client, FrameId, EvalName, Expected, fun(X) -> X end).
+
+-spec assertEvaluateNameIsCorrect(Client, FrameId, edb_dap_request_variables:variable(), binary(), Comparator) ->
+    ok
+when
+    Client :: edb_dap_test_support:client(),
+    FrameId :: number(),
+    Comparator :: fun((binary()) -> binary() | dynamic()).
+assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expected, Comparator) ->
     Response = edb_dap_test_client:evaluate(Client, #{
         expression => EvalName,
         frameId => FrameId,
@@ -694,7 +765,7 @@ assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expect
     }),
     case Response of
         #{command := ~"evaluate", type := response, success := true, body := #{result := Result}} ->
-            ?assertEqual(Expected, Result)
+            ?assertEqual(Comparator(Expected), Comparator(Result))
     end.
 
 -spec get_process_vars(Client, FrameId) -> #{binary() => edb_dap_request_variables:variable()} when
