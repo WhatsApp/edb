@@ -481,48 +481,49 @@ test_reports_process_registered_name_info_in_process_scope(Config) ->
     ok.
 
 test_reports_process_messages_info_in_process_scope(Config) ->
-    {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
+    {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
                 {source, [
-                    ~"-module(foo).      %L01\n",
-                    ~"-export([go/1]).   %L02\n",
-                    ~"go(X) ->           %L03\n",
-                    ~"    self() ! msg1, %L04\n",
-                    ~"    self() ! msg2, %L05\n",
-                    ~"    self() ! msg3, %L06\n",
-                    ~"    X * 5.         %L07\n"
+                    ~"-module(foo).                                                     %L01\n",
+                    ~"-export([go/1]).                                                  %L02\n",
+                    ~"go(X) ->                                                          %L03\n",
+                    ~"    persistent_term:put(go_runner_pid, pid_to_list(self())),      %L04\n",
+                    ~"    self() ! msg1,                                                %L05\n",
+                    ~"    self() ! msg2,                                                %L06\n",
+                    ~"    self() ! msg3,                                                %L07\n",
+                    ~"    X * 5.                                                        %L08\n"
                 ]}
             ]
         }),
-    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
-    {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
-    case ST of
-        [_, #{id := NonTopFrameId} | _] ->
-            ProcessVars = get_process_vars(Client, NonTopFrameId),
+    ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 8}]}]),
+    {ok, Inspector} = start_node_inspector(Config, Node, Cookie),
+    {ok, _ThreadId, [#{id := FrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
+    ExpectedPidStr = inspect(Inspector, persistent_term, get, [go_runner_pid]),
+    ProcessVars = get_process_vars(Client, FrameId),
 
-            ?assertEqual(
-                #{
-                    name => ~"Messages in queue",
-                    value => ~"3",
-                    evaluateName =>
-                        ~"erlang:element(2, erlang:process_info(erlang:list_to_pid(\"<0.95.0>\"), messages))",
-                    variablesReference => 2
-                },
-                maps:get(~"Messages in queue", ProcessVars)
-            ),
+    ?assertEqual(
+        #{
+            name => ~"Messages in queue",
+            value => ~"3",
+            evaluateName => format(~"erlang:element(2, erlang:process_info(erlang:list_to_pid(~p), messages))", [
+                ExpectedPidStr
+            ]),
+            variablesReference => 2
+        },
+        maps:get(~"Messages in queue", ProcessVars)
+    ),
 
-            MessagesVarsRefs = maps:get(variablesReference, maps:get(~"Messages in queue", ProcessVars)),
-            MessagesVars = edb_dap_test_support:get_variables(Client, MessagesVarsRefs),
-            ?assertMatch(
-                #{
-                    ~"1" := #{name := ~"1", value := ~"msg1", variablesReference := 0},
-                    ~"2" := #{name := ~"2", value := ~"msg2", variablesReference := 0},
-                    ~"3" := #{name := ~"3", value := ~"msg3", variablesReference := 0}
-                },
-                MessagesVars
-            )
-    end,
+    MessagesVarsRefs = maps:get(variablesReference, maps:get(~"Messages in queue", ProcessVars)),
+    MessagesVars = edb_dap_test_support:get_variables(Client, MessagesVarsRefs),
+    ?assertMatch(
+        #{
+            ~"1" := #{name := ~"1", value := ~"msg1", variablesReference := 0},
+            ~"2" := #{name := ~"2", value := ~"msg2", variablesReference := 0},
+            ~"3" := #{name := ~"3", value := ~"msg3", variablesReference := 0}
+        },
+        MessagesVars
+    ),
     ok.
 
 test_reports_process_label_info_in_process_scope(Config) ->
@@ -606,6 +607,33 @@ test_reports_process_memory_usage_info_in_process_scope(Config) ->
     ok.
 
 % -----------------------------------------------------------------------------
+% Inspecting nodes
+% -----------------------------------------------------------------------------
+-spec start_node_inspector(Config, Node, Cookie) -> {ok, Peer} when
+    Config :: ct_suite:ct_config(),
+    Node :: node(),
+    Cookie :: atom(),
+    Peer :: peer:server_ref().
+start_node_inspector(Config, Node, Cookie) ->
+    {ok, #{peer := Peer}} = edb_test_support:start_peer_node(Config, #{
+        node => {prefix, "inspector"},
+        cookie => Cookie,
+        extra_args => ["-hidden"]
+    }),
+    true = peer:call(Peer, net_kernel, connect_node, [Node]),
+    ok = peer:call(Peer, persistent_term, put, [inspected_node, Node]),
+    {ok, Peer}.
+
+-spec inspect(Inspector, Module, Fun, Args) -> term() when
+    Inspector :: peer:server_ref(),
+    Module :: module(),
+    Fun :: atom(),
+    Args :: [term()].
+inspect(Inspector, Module, Fun, Args) ->
+    Node = peer:call(Inspector, persistent_term, get, [inspected_node]),
+    peer:call(Inspector, erpc, call, [Node, erlang, apply, [Module, Fun, Args]]).
+
+% -----------------------------------------------------------------------------
 % Helpers
 % -----------------------------------------------------------------------------
 -spec get_variables_page(Client, VarRef, Window) -> [edb_dap_request_variables:variable()] when
@@ -656,3 +684,9 @@ get_process_vars(Client, FrameId) ->
     Scopes = edb_dap_test_support:get_scopes(Client, FrameId),
     ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),
     edb_dap_test_support:get_variables(Client, ProcessScopeVarsRef).
+
+-spec format(Format, Args) -> binary() when
+    Format :: io:format(),
+    Args :: [term()].
+format(Format, Args) ->
+    iolist_to_binary(io_lib:format(Format, Args)).
