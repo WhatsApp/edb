@@ -514,11 +514,11 @@ test_reports_process_messages_info_in_process_scope(Config) ->
 
     MessagesVarsRefs = maps:get(variablesReference, maps:get(~"Messages in queue", ProcessVars)),
     MessagesVars = edb_dap_test_support:get_variables(Client, MessagesVarsRefs),
-    ?assertMatch(
+    ?assertEqual(
         #{
-            ~"1" := #{name := ~"1", value := ~"msg1", variablesReference := 0},
-            ~"2" := #{name := ~"2", value := ~"msg2", variablesReference := 0},
-            ~"3" := #{name := ~"3", value := ~"msg3", variablesReference := 0}
+            ~"1" => #{name => ~"1", value => ~"msg1", variablesReference => 0},
+            ~"2" => #{name => ~"2", value => ~"msg2", variablesReference => 0},
+            ~"3" => #{name => ~"3", value => ~"msg3", variablesReference => 0}
         },
         MessagesVars
     ),
@@ -588,10 +588,11 @@ test_reports_process_memory_usage_info_in_process_scope(Config) ->
 
     MemoryVarRefs = maps:get(variablesReference, maps:get(~"Memory usage", ProcessVars)),
     MemoryVars = edb_dap_test_support:get_variables(Client, MemoryVarRefs),
-    ?assertMatch(
+    ?assertEqual(
         #{
-            ~"total_heap_size" := #{name := ~"total_heap_size", value := ~"233", variablesReference := 0},
-            ~"stack_size" := #{name := ~"stack_size", value := ~"15", variablesReference := 0}
+            ~"memory" => #{name => ~"memory", value => ~"2776", variablesReference => 0},
+            ~"total_heap_size" => #{name => ~"total_heap_size", value => ~"233", variablesReference => 0},
+            ~"stack_size" => #{name => ~"stack_size", value => ~"15", variablesReference => 0}
         },
         MemoryVars
     ),
