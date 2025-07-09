@@ -462,7 +462,8 @@ test_reports_process_registered_name_info_in_process_scope(Config) ->
     {ok, ThreadId, [#{id := FrameId1} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
     ProcessVars1 = get_process_vars(Client, FrameId1),
 
-    ?assertNot(maps:is_key(~"Registered name", ProcessVars1)),
+    RegisteredNameKey = ~"Registered name",
+    ?assertNot(maps:is_key(RegisteredNameKey, ProcessVars1)),
 
     edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     {ok, _, [#{id := FrameId2} | _]} = edb_dap_test_support:wait_for_bp(Client),
@@ -470,11 +471,11 @@ test_reports_process_registered_name_info_in_process_scope(Config) ->
 
     ?assertEqual(
         #{
-            name => ~"Registered name",
+            name => RegisteredNameKey,
             value => ~"test_process",
             variablesReference => 0
         },
-        maps:get(~"Registered name", ProcessVars2)
+        maps:get(RegisteredNameKey, ProcessVars2)
     ),
     ok.
 
@@ -541,7 +542,8 @@ test_reports_process_label_info_in_process_scope(Config) ->
     {ok, ThreadId, [#{id := FrameId1} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, [10]}),
     ProcessVars1 = get_process_vars(Client, FrameId1),
 
-    ?assertNot(maps:is_key(~"Process label", ProcessVars1)),
+    ProcessLabelKey = ~"Process label",
+    ?assertNot(maps:is_key(ProcessLabelKey, ProcessVars1)),
 
     edb_dap_test_client:continue(Client, #{threadId => ThreadId}),
     {ok, _, [#{id := FrameId2} | _]} = edb_dap_test_support:wait_for_bp(Client),
@@ -549,11 +551,11 @@ test_reports_process_label_info_in_process_scope(Config) ->
 
     ?assertEqual(
         #{
-            name => ~"Process label",
+            name => ProcessLabelKey,
             value => ~"test_label",
             variablesReference => 0
         },
-        maps:get(~"Process label", ProcessVars2)
+        maps:get(ProcessLabelKey, ProcessVars2)
     ),
     ok.
 
