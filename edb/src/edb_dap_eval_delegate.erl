@@ -40,6 +40,13 @@ be assumed to be running on the debuggee.
 
 % Helpers
 -export([slice_list/2]).
+-export([format_bytes/1]).
+
+%% Size constants for byte formatting
+-define(BYTES_PER_KB, 1024).
+-define(BYTES_PER_MB, (?BYTES_PER_KB * ?BYTES_PER_KB)).
+-define(BYTES_PER_GB, (?BYTES_PER_KB * ?BYTES_PER_KB * ?BYTES_PER_KB)).
+-define(BYTES_PER_TB, (?BYTES_PER_KB * ?BYTES_PER_KB * ?BYTES_PER_KB * ?BYTES_PER_KB)).
 
 % -----------------------------------------------------------------------------
 % Types
@@ -245,7 +252,7 @@ process_scope(Pid) ->
                 Bytes = erlang:system_info(wordsize) * Memory,
                 {true, #{
                     name => ~"Memory usage",
-                    value_rep => format("~p B", [Bytes]),
+                    value_rep => format_bytes(Bytes),
                     structure => structure(
                         {value, #{total_heap_size => 0, stack_size => 0}},
                         access_process_info(Pid, [memory, total_heap_size, stack_size])
@@ -495,6 +502,18 @@ value_rep({too_large, Size, Max}) ->
     Val :: {value, term()}.
 value_full({value, Value}) ->
     format("~0kp", [Value]).
+
+-spec format_bytes(Bytes :: non_neg_integer()) -> binary().
+format_bytes(Bytes) when Bytes < ?BYTES_PER_KB ->
+    format("~p B", [Bytes]);
+format_bytes(Bytes) when Bytes < ?BYTES_PER_MB ->
+    format("~.2f KB", [Bytes / ?BYTES_PER_KB]);
+format_bytes(Bytes) when Bytes < ?BYTES_PER_GB ->
+    format("~.2f MB", [Bytes / ?BYTES_PER_MB]);
+format_bytes(Bytes) when Bytes < ?BYTES_PER_TB ->
+    format("~.2f GB", [Bytes / ?BYTES_PER_GB]);
+format_bytes(Bytes) ->
+    format("~.2f TB", [Bytes / ?BYTES_PER_TB]).
 
 -spec format(Format, Args) -> binary() when
     Format :: io:format(),
