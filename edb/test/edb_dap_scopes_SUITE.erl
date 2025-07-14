@@ -650,7 +650,7 @@ test_reports_process_memory_usage_info_in_process_scope(Config) ->
     ?assertEqual(
         #{
             name => ~"Memory usage",
-            value => format(~"~p B", [maps:get(memory, MemInfo) * erlang:system_info(wordsize)]),
+            value => edb_dap_eval_delegate:format_bytes(maps:get(memory, MemInfo) * erlang:system_info(wordsize)),
             variablesReference => 2,
             evaluateName =>
                 format(
