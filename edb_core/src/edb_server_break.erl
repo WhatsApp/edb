@@ -29,6 +29,7 @@
 -export([get_explicits/1, get_explicits/2]).
 -export([clear_explicit/3, clear_explicits/2]).
 -export([get_explicits_hit/1, get_explicit_hit/2]).
+-export([reapply_breakpoints/2]).
 
 % Stepping
 -export([prepare_for_stepping/3]).
@@ -721,6 +722,34 @@ vm_unset_breakpoint(Module, Line) ->
             % have enough info atm to understand what happened, so just acknowled
             % that it isn't set anymore
             vanished
+    end.
+
+-spec reapply_breakpoints(module(), breakpoints()) -> ok | {error, edb:add_breakpoint_error()}.
+reapply_breakpoints(Module, Breakpoints0) ->
+    #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
+    AllLines = [
+        Line
+     || {M, Line} := _ <- VmBreakpoints, M =:= Module
+    ],
+    reapply_breakpoints_with_rollback(Module, AllLines, []).
+
+-spec reapply_breakpoints_with_rollback(module(), [line()], [line()]) ->
+    ok | {error, edb:add_breakpoint_error()}.
+reapply_breakpoints_with_rollback(_Module, [], _Applied) ->
+    ok;
+reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
+    case vm_set_breakpoint(Module, Line) of
+        ok ->
+            reapply_breakpoints_with_rollback(Module, Rest, [Line | Applied]);
+        {error, _} = Error ->
+            % Unset all previously applied breakpoints
+            lists:foreach(
+                fun(AppliedLine) ->
+                    vm_unset_breakpoint(Module, AppliedLine)
+                end,
+                Applied
+            ),
+            Error
     end.
 
 %% --------------------------------------------------------------------
