@@ -33,7 +33,10 @@
     test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module_does_not_support_breakpoints_on_a_line/1
 ]).
 
-suite() -> [].
+%% erlfmt:ignore
+suite() -> [
+    % @fb-only
+].
 
 all() ->
     [
@@ -277,14 +280,13 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
 %%--------------------------------------------------------------------
 -spec start_debugger_node(Config) -> Config when
     Config :: ct_suite:ct_config().
-%% erlfmt:ignore
 start_debugger_node(Config0) ->
     {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config0, #{
         copy_code_path => true
     }),
     Config1 = [{debugger_peer_key(), Peer} | Config0],
     {ok, _} = on_debugger_node(Config1, fun() ->
-        % @fb-only
+        application:ensure_all_started(edb_core)
     end),
     Config1.
 
