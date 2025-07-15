@@ -24,6 +24,9 @@
 %% External exports
 -export([start/0, stop/0, find/0]).
 
+%% Reapply breakpoints
+-export([reapply_breakpoints/1]).
+
 %% gen_server call wrappers that will throw on invariant violations
 -export([call/2, call/3]).
 
@@ -109,6 +112,31 @@ find() ->
     end.
 
 %%--------------------------------------------------------------------
+%% Reapply breakpoints
+%%--------------------------------------------------------------------
+
+-doc """
+Reapply all existing breakpoints for the specified module to the VM.
+
+This function will attempt to set VM breakpoints for all lines that currently
+have explicit breakpoints or step breakpoints registered for the given module.
+
+The operation is atomic - either all breakpoints are successfully reapplied, or
+none are applied at all. If any individual breakpoint fails to be set, all
+previously applied breakpoints from this operation are rolled back and removed.
+
+# Returns
+- `ok` - All breakpoints were successfully reapplied
+- `{error, Reason}` - Operation failed, no breakpoints were applied; `Reason`
+describes the error that occurred when setting the first breakpoint that failed.
+""".
+-spec reapply_breakpoints(Module) -> 'ok' | {error, Reason} when
+    Module :: module(),
+    Reason :: edb:add_breakpoint_error().
+reapply_breakpoints(Module) ->
+    call(node(), {reapply_breakpoints, Module}).
+
+%%--------------------------------------------------------------------
 %% Requests
 %%--------------------------------------------------------------------
 
@@ -122,6 +150,7 @@ find() ->
     | get_breakpoints
     | {get_breakpoints, module()}
     | {set_breakpoints, module(), [line()]}
+    | {reapply_breakpoints, module()}
     | get_breakpoints_hit
     | pause
     | continue
@@ -198,11 +227,11 @@ terminate(Reason, State0) ->
 handle_cast(_, _State) ->
     error(not_implemented).
 
--spec call(Node :: node(), Request :: call_request()) -> term().
+-spec call(Node :: node(), Request :: call_request()) -> dynamic().
 call(Node, Request) ->
     call(Node, Request, 5_000).
 
--spec call(Node :: node(), Request :: call_request(), Timeout :: pos_integer() | infinity) -> term().
+-spec call(Node :: node(), Request :: call_request(), Timeout :: pos_integer() | infinity) -> dynamic().
 call(Node, Request, Timeout) ->
     case gen_server:call({?MODULE, Node}, Request, Timeout) of
         {finished, Reply} ->
@@ -277,6 +306,8 @@ dispatch_call({get_breakpoints, Module}, _From, State0) ->
     get_breakpoints_impl(Module, State0);
 dispatch_call(get_breakpoints_hit, _From, State) ->
     get_breakpoints_hit_impl(State);
+dispatch_call({reapply_breakpoints, Module}, _From, State) ->
+    reapply_breakpoints_impl(Module, State);
 dispatch_call(pause, _From, State0) ->
     pause_impl(State0);
 dispatch_call(continue, _From, State0) ->
@@ -500,6 +531,13 @@ get_breakpoints_hit_impl(State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     BreakpointsHit = edb_server_break:get_explicits_hit(Breakpoints0),
     {reply, BreakpointsHit, State0}.
+
+-spec reapply_breakpoints_impl(module(), State0 :: state()) -> {reply, ok | {error, Reason}, State1 :: state()} when
+    Reason :: edb:add_breakpoint_error().
+reapply_breakpoints_impl(Module, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    Result = edb_server_break:reapply_breakpoints(Module, Breakpoints0),
+    {reply, Result, State0}.
 
 -spec pause_impl(State0 :: state()) -> {reply, ok, State1 :: state()}.
 pause_impl(State0) ->
