@@ -137,6 +137,18 @@ reapply_breakpoints(Module) ->
     call(node(), {reapply_breakpoints, Module}).
 
 %%--------------------------------------------------------------------
+%% Module conversions
+%%--------------------------------------------------------------------
+
+-spec to_vm_module(module(), state()) -> edb_server_break:vm_module().
+to_vm_module(Module, _State) ->
+    Module.
+
+-spec from_vm_module(edb_server_break:vm_module(), state()) -> module().
+from_vm_module(Module, _State) ->
+    Module.
+
+%%--------------------------------------------------------------------
 %% Requests
 %%--------------------------------------------------------------------
 
@@ -377,7 +389,8 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                 State0;
             false ->
                 #state{breakpoints = BP0} = State0,
-                case edb_server_break:register_breakpoint_event(Module, Line, Pid, Resume, BP0) of
+                VmModule = to_vm_module(Module, State0),
+                case edb_server_break:register_breakpoint_event(VmModule, Line, Pid, Resume, BP0) of
                     resume ->
                         ok = Resume(),
                         State0;
@@ -465,7 +478,8 @@ send_sync_event_impl(Subscription, State) ->
     State1 :: state().
 add_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    case edb_server_break:add_explicit(Module, Line, Breakpoints0) of
+    VmModule = to_vm_module(Module, State0),
+    case edb_server_break:add_explicit(VmModule, Line, Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {reply, ok, State1};
@@ -479,7 +493,8 @@ add_breakpoint_impl(Module, Line, State0) ->
     State1 :: state().
 clear_breakpoints_impl(Module, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    {ok, Breakpoints1} = edb_server_break:clear_explicits(Module, Breakpoints0),
+    VmModule = to_vm_module(Module, State0),
+    {ok, Breakpoints1} = edb_server_break:clear_explicits(VmModule, Breakpoints0),
     State1 = State0#state{breakpoints = Breakpoints1},
     {reply, ok, State1}.
 
@@ -490,7 +505,8 @@ clear_breakpoints_impl(Module, State0) ->
     State1 :: state().
 clear_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    case edb_server_break:clear_explicit(Module, Line, Breakpoints0) of
+    VmModule = to_vm_module(Module, State0),
+    case edb_server_break:clear_explicit(VmModule, Line, Breakpoints0) of
         {ok, _, Breakpoints1} ->
             %% We don't do anything particular yet if the breakpoint vanished from the VM
             State1 = State0#state{breakpoints = Breakpoints1},
@@ -507,21 +523,27 @@ clear_breakpoint_impl(Module, Line, State0) ->
     Result :: edb:set_breakpoints_result().
 set_breakpoints_impl(Module, Lines, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    {ok, Breakpoints1} = edb_server_break:clear_explicits(Module, Breakpoints0),
-    {LineResults, Breakpoints2} = edb_server_break:add_explicits(Module, Lines, Breakpoints1),
+    VmModule = to_vm_module(Module, State0),
+    {ok, Breakpoints1} = edb_server_break:clear_explicits(VmModule, Breakpoints0),
+    {LineResults, Breakpoints2} = edb_server_break:add_explicits(VmModule, Lines, Breakpoints1),
     State2 = State0#state{breakpoints = Breakpoints2},
     {reply, LineResults, State2}.
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->
     BPSet = get_breakpoints(State0),
-    Result = #{Module => [#{module => Module, line => Line} || Line := [] <- Lines] || Module := Lines <- BPSet},
+    Result =
+        #{
+            Module => [#{module => Module, line => Line} || Line := [] <- Lines]
+         || VmModule := Lines <- BPSet,
+            Module <- [from_vm_module(VmModule, State0)]
+        },
     {reply, Result, State0}.
 
 -spec get_breakpoints_impl(module(), state()) -> {reply, [edb:breakpoint_info()], state()}.
 get_breakpoints_impl(Module, State0) ->
     BPSet = get_breakpoints(State0),
-    Lines = maps:get(Module, BPSet, #{}),
+    Lines = maps:get(to_vm_module(Module, State0), BPSet, #{}),
     BPInfoList = [#{module => Module, line => Line} || Line := [] <- Lines],
     {reply, BPInfoList, State0}.
 
@@ -529,14 +551,23 @@ get_breakpoints_impl(Module, State0) ->
     BreakpointsHit :: #{pid() => #{module := module(), line := line()}}.
 get_breakpoints_hit_impl(State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    BreakpointsHit = edb_server_break:get_explicits_hit(Breakpoints0),
+    VmBreakpointsHit = edb_server_break:get_explicits_hit(Breakpoints0),
+    BreakpointsHit = maps:map(
+        fun(_Pid, #{line := Line, module := VmModule}) ->
+            #{line => Line, module => from_vm_module(VmModule, State0)}
+        end,
+        VmBreakpointsHit
+    ),
     {reply, BreakpointsHit, State0}.
 
--spec reapply_breakpoints_impl(module(), State0 :: state()) -> {reply, ok | {error, Reason}, State1 :: state()} when
+-spec reapply_breakpoints_impl(module(), State0 :: state()) ->
+    {reply, ok | {error, Reason}, State1 :: state()}
+when
     Reason :: edb:add_breakpoint_error().
 reapply_breakpoints_impl(Module, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    Result = edb_server_break:reapply_breakpoints(Module, Breakpoints0),
+    VmModule = to_vm_module(Module, State0),
+    Result = edb_server_break:reapply_breakpoints(VmModule, Breakpoints0),
     {reply, Result, State0}.
 
 -spec pause_impl(State0 :: state()) -> {reply, ok, State1 :: state()}.
@@ -908,7 +939,7 @@ is_paused(State) ->
     HasAPausedProcess = maps:size(Procs) =/= 0,
     HasAPausedProcess.
 
--spec get_breakpoints(State0) -> #{module() => #{line() => []}} when State0 :: state().
+-spec get_breakpoints(State0) -> #{edb_server_break:vm_module() => #{line() => []}} when State0 :: state().
 get_breakpoints(State0) ->
     #state{breakpoints = Breakpoints} = State0,
     edb_server_break:get_explicits(Breakpoints).
