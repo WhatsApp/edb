@@ -45,7 +45,7 @@ all() ->
     ].
 
 init_per_testcase(_TestCase, Config) ->
-    Config1 = start_debugger_node(Config),
+    Config1 = edb_test_support:start_debugger_node(Config),
     Config1.
 
 end_per_testcase(_TestCase, _Config) ->
@@ -76,7 +76,7 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         "    C,                          %L06\n"
         "    Parent ! done_mod_2.        %L07\n",
 
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Start peer node with the test module
         {ok, #{node := Node, modules := #{test_reapply_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
             Config, #{
@@ -194,7 +194,7 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
         "    C,                          %L07\n"
         "    Parent ! done_mod_2.        %L08\n",
 
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Start peer node with the test module
         {ok, #{node := Node, modules := #{test_reapply_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
             Config, #{
@@ -274,27 +274,3 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
         ok
     end),
     ok.
-
-% %%--------------------------------------------------------------------
-%% Helpers
-%%--------------------------------------------------------------------
--spec start_debugger_node(Config) -> Config when
-    Config :: ct_suite:ct_config().
-start_debugger_node(Config0) ->
-    {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config0, #{
-        copy_code_path => true
-    }),
-    Config1 = [{debugger_peer_key(), Peer} | Config0],
-    {ok, _} = on_debugger_node(Config1, fun() ->
-        application:ensure_all_started(edb_core)
-    end),
-    Config1.
-
--spec on_debugger_node(Config, fun(() -> Result)) -> Result when
-    Config :: ct_suite:ct_config().
-on_debugger_node(Config, Fun) ->
-    Peer = ?config(debugger_peer_key(), Config),
-    peer:call(Peer, erlang, apply, [Fun, []]).
-
--spec debugger_peer_key() -> debugger_peer.
-debugger_peer_key() -> debugger_peer.
