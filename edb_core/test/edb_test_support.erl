@@ -39,6 +39,9 @@
 %% Conversions
 -export([file_name_all_to_string/1, file_name_all_to_binary/1, safe_string_to_binary/1]).
 
+%% Debugger node utils
+-export([start_debugger_node/1, on_debugger_node/2]).
+
 %% --------------------------------------------------------------------
 %% Compiling test modules
 %% --------------------------------------------------------------------
@@ -536,3 +539,27 @@ safe_string_to_binary(String) ->
     case unicode:characters_to_binary(String) of
         Bin when is_binary(Bin) -> Bin
     end.
+
+%% -------------------------------------------------------------------
+%% Debugger node utils
+%% -------------------------------------------------------------------
+-spec start_debugger_node(Config) -> Config when
+    Config :: ct_suite:ct_config().
+start_debugger_node(Config0) ->
+    {ok, #{peer := Peer}} = start_peer_no_dist(Config0, #{
+        copy_code_path => true
+    }),
+    Config1 = [{debugger_peer_key(), Peer} | Config0],
+    {ok, _} = on_debugger_node(Config1, fun() ->
+        application:ensure_all_started(edb_core)
+    end),
+    Config1.
+
+-spec on_debugger_node(Config, fun(() -> Result)) -> Result when
+    Config :: ct_suite:ct_config().
+on_debugger_node(Config, Fun) ->
+    Peer = ?config(debugger_peer_key(), Config),
+    peer:call(Peer, erlang, apply, [Fun, []]).
+
+-spec debugger_peer_key() -> debugger_peer.
+debugger_peer_key() -> debugger_peer.

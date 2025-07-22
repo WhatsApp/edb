@@ -146,7 +146,7 @@ groups() ->
     ].
 
 init_per_testcase(_TestCase, Config0) ->
-    Config1 = start_debugger_node(Config0),
+    Config1 = edb_test_support:start_debugger_node(Config0),
     Config1.
 end_per_testcase(_TestCase, _Config) ->
     ok = edb_test_support:stop_event_collector(),
@@ -154,7 +154,7 @@ end_per_testcase(_TestCase, _Config) ->
     ok.
 
 test_raises_error_until_attached(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Initially, we are not attached to any node, so error on operations
         ?assertError(not_attached, edb:attached_node()),
         ?assertError(not_attached, edb:processes([])),
@@ -182,7 +182,7 @@ test_raises_error_until_attached(Config) ->
     end).
 
 test_attaching_injects_edb_server(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % Initially edb_server is not available in the debuggee
@@ -219,7 +219,7 @@ test_can_attach_async_with_infinity_timeout(Config) ->
     test_can_attach_async(Config, NodeStartupDelayInMs, infinity).
 
 test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         Node = edb_test_support:random_node("debuggee"),
 
         Cookie = 'some_cookie',
@@ -253,14 +253,14 @@ test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) ->
     end).
 
 test_fails_to_attach_after_timeout(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         Node = edb_test_support:random_node("non-existent-debuggee"),
         {error, nodedown} = edb:attach(#{node => Node, timeout => 100}),
         ok
     end).
 
 test_can_attach_with_specific_cookie(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         CustomCookie1 = 'customcookie1',
         CustomCookie2 = 'customcookie2',
 
@@ -280,7 +280,7 @@ test_can_attach_with_specific_cookie(Config) ->
     end).
 
 test_can_attach_when_distribution_is_already_started(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Sanity-check distribution is not started
         ?assertEqual(#{started => no}, net_kernel:get_state()),
 
@@ -298,7 +298,7 @@ test_can_attach_when_distribution_is_already_started(Config) ->
     end).
 
 test_attaching_to_nonode_at_nohost(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Sanity-check: no distribution, so node is nonode@nohost
         ?assertEqual(#{started => no}, net_kernel:get_state()),
         ?assertEqual(nonode@nohost, node()),
@@ -327,7 +327,7 @@ test_attaching_to_nonode_at_nohost(Config) ->
     end).
 
 test_attach_detects_unreachable_nodes(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % When using shortnames, trying to attach using longnames should fail
         ok = start_distribution(shortnames),
         ?assertError(
@@ -354,7 +354,7 @@ test_attach_detects_unreachable_nodes(Config) ->
     end).
 
 test_attach_validates_args(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {missing, node}}, edb:attach(#{})),
         % eqwalizer:ignore - testing bad input handling
@@ -374,7 +374,7 @@ test_attach_validates_args(Config) ->
     end).
 
 test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{
             enable_debugging_mode => false
         }),
@@ -391,7 +391,7 @@ test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
 %% REVERSE ATTACH TEST CASES
 %%--------------------------------------------------------------------
 test_raises_error_until_reverse_attached(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Initially, we are not attached to any node, so error on operations
         ?assertError(not_attached, edb:attached_node()),
         ?assertError(not_attached, edb:processes([])),
@@ -418,7 +418,7 @@ test_raises_error_until_reverse_attached(Config) ->
     end).
 
 test_reverse_attaching_picks_the_right_node(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
@@ -439,7 +439,7 @@ test_reverse_attaching_picks_the_right_node(Config) ->
     end).
 
 test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
@@ -464,7 +464,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
     end).
 
 test_can_reverse_attach_to_node_with_no_dist(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
@@ -488,7 +488,7 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
     end).
 
 test_injectable_code_can_be_composed(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
@@ -519,7 +519,7 @@ test_injectable_code_can_be_composed(Config) ->
     end).
 
 test_reverse_attaching_blocks_further_attachs(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % Start a reverse-attach that will never succeed
         {ok, _} = edb:reverse_attach(#{name_domain => shortnames}),
 
@@ -533,7 +533,7 @@ test_reverse_attaching_blocks_further_attachs(Config) ->
     end).
 
 test_reverse_attach_fails_after_timeout(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{notification_ref := Ref, erl_code_to_inject := _}} = edb:reverse_attach(#{
             name_domain => shortnames,
             timeout => 500
@@ -546,7 +546,7 @@ test_reverse_attach_fails_after_timeout(Config) ->
     end).
 
 test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
@@ -566,7 +566,7 @@ test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
     end).
 
 test_reverse_attach_detects_domain_mismatch(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % When using shortnames, trying to reverse-attach using longnames should fail
         ok = start_distribution(shortnames),
         ?assertError(
@@ -587,7 +587,7 @@ test_reverse_attach_detects_domain_mismatch(Config) ->
     end).
 
 test_reverse_attach_validates_args(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         % eqwalizer:ignore - testing bad input handling
         ?assertError({badarg, {missing, name_domain}}, edb:reverse_attach(#{})),
         % eqwalizer:ignore - testing bad input handling
@@ -610,7 +610,7 @@ test_reverse_attach_validates_args(Config) ->
 %%--------------------------------------------------------------------
 
 test_querying_on_a_vanished_node_detaches(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ok = edb_test_support:start_event_collector(),
@@ -631,7 +631,7 @@ test_querying_on_a_vanished_node_detaches(Config) ->
     end).
 
 test_terminating_detaches(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         % Sanity check: no errors while attached
@@ -650,7 +650,7 @@ test_terminating_detaches(Config) ->
     end).
 
 test_terminating_on_a_vanished_node_detaches(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         edb:attach(#{node => Node, cookie => Cookie}),
 
@@ -667,7 +667,7 @@ test_terminating_on_a_vanished_node_detaches(Config) ->
     end).
 
 test_detaching_unsubscribes(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
         edb:attach(#{node => Node, cookie => Cookie}),
         ok = edb_test_support:start_event_collector(),
@@ -684,7 +684,7 @@ test_detaching_unsubscribes(Config) ->
     end).
 
 test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         ok = edb:attach(#{node => Node, cookie => Cookie}),
@@ -720,7 +720,7 @@ test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
     end).
 
 test_reattaching_to_same_node_doesnt_detach(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         ok = edb:attach(#{node => Node, cookie => Cookie}),
@@ -754,7 +754,7 @@ test_reattaching_to_same_node_doesnt_detach(Config) ->
     end).
 
 test_reattaching_to_different_node_detaches_from_old_node(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         Cookie = 'some_cookie',
         {ok, #{node := Node1}} = edb_test_support:start_peer_node(Config, #{
             node => {prefix, "debuggee_1"},
@@ -786,7 +786,7 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
     end).
 
 test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
-    on_debugger_node(Config, fun() ->
+    edb_test_support:on_debugger_node(Config, fun() ->
         {ok, #{node := Node1, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{
             node => {prefix, "debuggee_1"}
         }),
@@ -819,27 +819,6 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
--spec start_debugger_node(Config) -> Config when
-    Config :: ct_suite:ct_config().
-start_debugger_node(Config0) ->
-    {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config0, #{
-        copy_code_path => true
-    }),
-    Config1 = [{debugger_peer_key(), Peer} | Config0],
-    {ok, _} = on_debugger_node(Config1, fun() ->
-        application:ensure_all_started(edb_core)
-    end),
-    Config1.
-
--spec on_debugger_node(Config, fun(() -> Result)) -> Result when
-    Config :: ct_suite:ct_config().
-on_debugger_node(Config, Fun) ->
-    Peer = ?config(debugger_peer_key(), Config),
-    peer:call(Peer, erlang, apply, [Fun, []]).
-
--spec debugger_peer_key() -> debugger_peer.
-debugger_peer_key() -> debugger_peer.
-
 -spec start_distribution() -> ok.
 start_distribution() ->
     start_distribution(shortnames).
