@@ -559,7 +559,7 @@ start_debugger_node(Config0) ->
     Config :: ct_suite:ct_config().
 on_debugger_node(Config, Fun) ->
     Peer = ?config(debugger_peer_key(), Config),
-    peer:call(Peer, erlang, apply, [Fun, []]).
+    peer:call(Peer, erlang, apply, [Fun, []], infinity).
 
 -spec debugger_peer_key() -> debugger_peer.
 debugger_peer_key() -> debugger_peer.
