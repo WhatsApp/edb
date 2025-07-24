@@ -850,24 +850,25 @@ stack_frames_impl(Pid, State0) ->
             {reply, not_paused, State0};
         RawFrames ->
             RelevantFrames = edb_server_stack_frames:without_bottom_terminator_frame(RawFrames),
-            Result = [format_frame(RawFrame) || RawFrame <- RelevantFrames],
+            Result = [format_frame(RawFrame, State0) || RawFrame <- RelevantFrames],
             {reply, {ok, Result}, State0}
     end.
 
--spec format_frame(RawFrame :: erl_debugger:stack_frame()) -> edb:stack_frame().
-format_frame({FrameNo, 'unknown function', _}) ->
+-spec format_frame(RawFrame :: erl_debugger:stack_frame(), state()) -> edb:stack_frame().
+format_frame({FrameNo, 'unknown function', _}, _) ->
     #{
         id => FrameNo,
         mfa => unknown,
         source => undefined,
         line => undefined
     };
-format_frame({FrameNo, #{function := MFA = {M, _, _}, line := Line}, _}) ->
+format_frame({FrameNo, #{function := {M, F, A}, line := Line}, _}, State) ->
+    OriginalModule = from_vm_module(M, State),
     #{
         id => FrameNo,
-        mfa => MFA,
+        mfa => {OriginalModule, F, A},
         % TODO(T204197553) take md5 sum into account once it is available in the raw frame
-        source => edb_server_code:module_source(M),
+        source => edb_server_code:module_source(OriginalModule),
         line => Line
     }.
 
