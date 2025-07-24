@@ -222,10 +222,10 @@ init_per_suite(Config) ->
     erts_debug:set_internal_state(debugger_support, true),
     erts_debug:set_internal_state(available_internal_state, false),
 
-    {ok, _} = application:ensure_all_started(edb_core),
+    Config1 = wa_test_init:ensure_all_started(Config, edb_core),
     ok = edb:attach(#{node => node()}),
-    compile_dummy_apps(Config),
-    Config.
+    compile_dummy_apps(Config1),
+    Config1.
 
 end_per_suite(_Config) ->
     ok.
