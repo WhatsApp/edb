@@ -142,10 +142,10 @@ reapply_breakpoints(Module) ->
 
 -spec to_vm_module(module(), state()) -> edb_server_break:vm_module().
 to_vm_module(Module, _State) ->
-    Module.
+    {vm_module, Module}.
 
 -spec from_vm_module(edb_server_break:vm_module(), state()) -> module().
-from_vm_module(Module, _State) ->
+from_vm_module({vm_module, Module}, _State) ->
     Module.
 
 %%--------------------------------------------------------------------
@@ -222,8 +222,8 @@ terminate(Reason, State0) ->
     erl_debugger:unregister(self(), State0#state.debugger_session),
     BPs = get_breakpoints(State0),
     State1 = maps:fold(
-        fun(Module, _ModuleBPS, StateN) ->
-            {reply, _, StateN_plus_1} = clear_breakpoints_impl(Module, StateN),
+        fun(VmModule, _ModuleBPS, StateN) ->
+            {reply, _, StateN_plus_1} = clear_breakpoints_impl(from_vm_module(VmModule, State0), StateN),
             StateN_plus_1
         end,
         State0,
@@ -863,7 +863,7 @@ format_frame({FrameNo, 'unknown function', _}, _) ->
         line => undefined
     };
 format_frame({FrameNo, #{function := {M, F, A}, line := Line}, _}, State) ->
-    OriginalModule = from_vm_module(M, State),
+    OriginalModule = from_vm_module({vm_module, M}, State),
     #{
         id => FrameNo,
         mfa => {OriginalModule, F, A},
@@ -1044,8 +1044,8 @@ process_status(Pid, State) ->
             case edb_server_break:get_explicit_hit(Pid, BP) of
                 no_breakpoint_hit ->
                     paused;
-                {ok, BpInfo} ->
-                    {breakpoint, BpInfo}
+                {ok, #{module := VmModule, line := Line}} ->
+                    {breakpoint, #{module => from_vm_module(VmModule, State), line => Line}}
             end
     end.
 

@@ -45,7 +45,7 @@
 %% --------------------------------------------------------------------
 
 -type line() :: edb:line().
--type vm_module() :: module().
+-type vm_module() :: {vm_module, module()}.
 
 -export_type([breakpoints/0, vm_module/0]).
 -record(breakpoints, {
@@ -99,13 +99,13 @@ create() ->
 %% Explicit breakpoints manipulation
 %% --------------------------------------------------------------------
 -spec add_explicit(vm_module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
-add_explicit(Module, Line, Breakpoints0) ->
+add_explicit({vm_module, Module} = VmModule, Line, Breakpoints0) ->
     case code:ensure_loaded(Module) of
         {module, Module} ->
-            case add_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
+            case add_vm_breakpoint(VmModule, Line, explicit, Breakpoints0) of
                 {ok, Breakpoints1} ->
                     #breakpoints{explicits = Explicits1} = Breakpoints1,
-                    Explicits2 = edb_server_maps:add(Module, Line, [], Explicits1),
+                    Explicits2 = edb_server_maps:add(VmModule, Line, [], Explicits1),
                     Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
                     {ok, Breakpoints2};
                 {error, Reason} ->
@@ -329,7 +329,7 @@ when
     FrameAddrs :: call_stack_addrs(),
     Frames :: [erl_debugger:stack_frame()],
     Types :: [on_any_required | on_any | on_exc_handler],
-    Error :: {cannot_breakpoint, vm_module()}.
+    Error :: {cannot_breakpoint, module()}.
 add_steps_on_stack_frames(
     Pid, [TopFrame | MoreFrames], FrameAddrs = [_ | MoreFrameAddrs], [Type | MoreTypes], Breakpoints0
 ) ->
@@ -386,7 +386,7 @@ add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints0) ->
 
             {Breakpoints1, SomeBreakpointSet} = maps:fold(
                 fun(Line1, _, Acc0 = {AccBreakpoints0, _}) ->
-                    case add_step(Pid, Patterns, Module, Line1, AccBreakpoints0) of
+                    case add_step(Pid, Patterns, {vm_module, Module}, Line1, AccBreakpoints0) of
                         no_breakpoint_set ->
                             Acc0;
                         {ok, AccBreakpoints1} ->
@@ -435,7 +435,7 @@ get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_
         {error, no_debug_info} ->
             {error, {cannot_breakpoint, M}};
         {ok, #{calls := Calls0}} ->
-            Calls1 = lists:filtermap(fun(Target) -> try_resolve_mfa(M, Target) end, Calls0),
+            Calls1 = lists:filtermap(fun(Target) -> try_resolve_mfa({vm_module, M}, Target) end, Calls0),
             case Calls1 of
                 [] -> {error, {call_target, not_found}};
                 _ -> {ok, Calls1}
@@ -449,7 +449,7 @@ get_targets_for_step_in(_TopFrame) ->
     Target :: edb_server_code:call_target().
 try_resolve_mfa(_, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
     {true, MFA};
-try_resolve_mfa(M, {F, A}) when is_atom(F) ->
+try_resolve_mfa({vm_module, M}, {F, A}) when is_atom(F) ->
     {true, {M, F, A}};
 try_resolve_mfa(_, _) ->
     false.
@@ -639,7 +639,7 @@ when
     Reason :: vm_breakpoint_reason(),
     Breakpoints0 :: breakpoints(),
     Breakpoints1 :: breakpoints().
-add_vm_breakpoint(Module, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
+add_vm_breakpoint({vm_module, Module}, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
     {error, {unsupported, Module}};
 add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
@@ -697,7 +697,7 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
 -spec vm_set_breakpoint(Module, Line) -> ok | {error, edb:add_breakpoint_error()} when
     Module :: vm_module(),
     Line :: line().
-vm_set_breakpoint(Module, Line) ->
+vm_set_breakpoint({vm_module, Module}, Line) ->
     case erl_debugger:instrumentations() of
         #{line_breakpoint := true} ->
             case erl_debugger:breakpoint(Module, Line, true) of
@@ -713,7 +713,7 @@ vm_set_breakpoint(Module, Line) ->
 -spec vm_unset_breakpoint(Module, Line) -> removed | vanished when
     Module :: vm_module(),
     Line :: line().
-vm_unset_breakpoint(Module, Line) ->
+vm_unset_breakpoint({vm_module, Module}, Line) ->
     case erl_debugger:breakpoint(Module, Line, false) of
         ok ->
             %% Breakpoint has been successfully removed from the VM
