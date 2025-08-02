@@ -84,8 +84,8 @@ new(Options) when node() /= 'nonode@nohost' ->
             node()
         ]
     ),
-
-    SingleLine = iolist_to_binary(re:replace(CallGatekeeperCode, "\\n", " ", [global])),
+    CallGatekeeperCodeNoCR = re:replace(CallGatekeeperCode, "\\r", "", [global]),
+    SingleLine = iolist_to_binary(re:replace(CallGatekeeperCodeNoCR, "\\n", " ", [global])),
     {ok, Id, SingleLine}.
 
 %% -------------------------------------------------------------------
