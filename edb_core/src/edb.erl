@@ -795,13 +795,23 @@ maybe_start_epmd() ->
             case erl_epmd:names("localhost") of
                 {error, address} ->
                     % not running, let's start it ourselves
-                    EpmdPath = filename:join([code:root_dir(), "bin", "epmd"]),
+                    EpmdPath = epmd_path(),
                     Cmd = lists:flatten(io_lib:format("~s -daemon", [EpmdPath])),
                     [] = os:cmd(Cmd),
                     ok;
                 _ ->
                     ok
             end
+    end.
+
+-spec epmd_path() -> file:filename().
+epmd_path() ->
+    case os:type() of
+        {win32, nt} ->
+            ErtsVersion = erlang:system_info(version),
+            filename:join([code:root_dir(), "erts-" ++ ErtsVersion, "bin", "epmd.exe"]);
+        _ ->
+            filename:join([code:root_dir(), "bin", "epmd"])
     end.
 
 -spec debugger_node(NameDomain) -> node() when
