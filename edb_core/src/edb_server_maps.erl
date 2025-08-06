@@ -22,7 +22,7 @@
 -moduledoc false.
 
 %% Public API
--export([add/3, add/4, add/5]).
+-export([add/3, add/4, add/5, add/6]).
 
 -spec add(Key, Value, Map) -> Map when
     Map :: #{Key => Value}.
@@ -46,5 +46,15 @@ add(Key1, Key2, Key3, Value, Map) ->
         Key1,
         fun(Map1) -> add(Key2, Key3, Value, Map1) end,
         #{Key2 => #{Key3 => Value}},
+        Map
+    ).
+
+-spec add(Key1, Key2, Key3, Key4, Value, Map) -> Map when
+    Map :: #{Key1 => #{Key2 => #{Key3 => #{Key4 => Value}}}}.
+add(Key1, Key2, Key3, Key4, Value, Map) ->
+    maps:update_with(
+        Key1,
+        fun(Map1) -> add(Key2, Key3, Key4, Value, Map1) end,
+        #{Key2 => #{Key3 => #{Key4 => Value}}},
         Map
     ).
