@@ -23,7 +23,10 @@
 -export([get_explicits/1, get_explicits/2]).
 -export([clear_explicit/3, clear_explicits/2]).
 -export([get_explicits_hit/1, get_explicit_hit/2]).
--export([reapply_breakpoints/2]).
+-export([reapply_breakpoints/2, reapply_breakpoints/3]).
+
+% Breakpoint queries
+-export([has_breakpoints/2]).
 
 % Stepping
 -export([prepare_for_stepping/3]).
@@ -707,6 +710,27 @@ reapply_breakpoints(Module, Breakpoints0) ->
     AllLines = maps:keys(maps:get(Module, VmBreakpoints, #{})),
     reapply_breakpoints_with_rollback(Module, AllLines, []).
 
+-spec reapply_breakpoints(SourceModule, TargetModule, breakpoints()) ->
+    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
+when
+    SourceModule :: vm_module(),
+    TargetModule :: vm_module().
+reapply_breakpoints(SourceModule, TargetModule, Breakpoints0) ->
+    #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
+    AllLines = maps:keys(maps:get(SourceModule, VmBreakpoints, #{})),
+    case reapply_breakpoints_with_rollback(TargetModule, AllLines, []) of
+        ok ->
+            Breakpoints1 = transfer_module_references(SourceModule, TargetModule, Breakpoints0),
+            {ok, Breakpoints1};
+        Error ->
+            Error
+    end.
+
+-spec has_breakpoints(vm_module(), breakpoints()) -> boolean().
+has_breakpoints(Module, Breakpoints0) ->
+    #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
+    maps:is_key(Module, VmBreakpoints).
+
 -spec reapply_breakpoints_with_rollback(vm_module(), [line()], [line()]) ->
     ok | {error, edb:add_breakpoint_error()}.
 reapply_breakpoints_with_rollback(_Module, [], _Applied) ->
@@ -725,6 +749,51 @@ reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
             ),
             Error
     end.
+
+-spec transfer_module_references(SourceModule, TargetModule, Breakpoints) -> Breakpoints when
+    SourceModule :: vm_module(),
+    TargetModule :: vm_module(),
+    Breakpoints :: breakpoints().
+transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
+    #breakpoints{
+        explicits = Explicits0,
+        steps = Steps0,
+        vm_breakpoints = VmBreakpoints0
+    } = Breakpoints0,
+
+    Explicits1 =
+        case Explicits0 of
+            #{SourceModule := Explicits} ->
+                Explicits0#{TargetModule => Explicits};
+            #{} ->
+                Explicits0
+        end,
+
+    Steps1 =
+        #{
+            Pid =>
+                case PidSteps of
+                    #{SourceModule := LinePatterns} ->
+                        PidSteps#{TargetModule => LinePatterns};
+                    #{} ->
+                        PidSteps
+                end
+         || Pid := PidSteps <- Steps0
+        },
+
+    VmBreakpoints1 =
+        case VmBreakpoints0 of
+            #{SourceModule := LineReasons} ->
+                VmBreakpoints0#{TargetModule => LineReasons};
+            #{} ->
+                VmBreakpoints0
+        end,
+
+    Breakpoints0#breakpoints{
+        explicits = Explicits1,
+        steps = Steps1,
+        vm_breakpoints = VmBreakpoints1
+    }.
 
 %% --------------------------------------------------------------------
 %% Helpers -- call-stacks and call-stack patterns
