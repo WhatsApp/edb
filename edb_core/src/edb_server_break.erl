@@ -62,7 +62,7 @@
     %% Internal breakpoints set by the server to step through, grouped by pid.
     %% For each such breakpoint, there are only certain call-stacks under which
     %% we want to suspend the process.
-    steps :: #{pid() => #{{vm_module(), line()} => #{call_stack_pattern() => []}}},
+    steps :: #{pid() => #{vm_module() => #{line() => #{call_stack_pattern() => []}}}},
 
     %% Explicit breakpoints that have been hit
     explicits_hit :: #{pid() => {vm_module(), line()}},
@@ -71,7 +71,7 @@
     resume_actions :: #{pid() => fun(() -> ok)},
 
     %% Sets of reasons why VM breakpoints were set on each locations
-    vm_breakpoints :: #{{vm_module(), line()} => #{vm_breakpoint_reason() => []}}
+    vm_breakpoints :: #{vm_module() => #{line() => #{vm_breakpoint_reason() => []}}}
 }).
 
 -type vm_breakpoint_reason() ::
@@ -400,7 +400,7 @@ add_step(Pid, Patterns, Module, Line, Breakpoints0) ->
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
             Steps2 = lists:foldl(
-                fun(Pattern, StepsN) -> edb_server_maps:add(Pid, {Module, Line}, Pattern, [], StepsN) end,
+                fun(Pattern, StepsN) -> edb_server_maps:add(Pid, Module, Line, Pattern, [], StepsN) end,
                 Steps1,
                 Patterns
             ),
@@ -479,7 +479,7 @@ should_be_suspended(Module, Line, Pid, Breakpoints) ->
             {true, explicit};
         _ ->
             case Steps of
-                #{Pid := #{{Module, Line} := Patterns}} ->
+                #{Pid := #{Module := #{Line := Patterns}}} ->
                     % We need stack-frames, and these require the process to be suspended
                     case edb_server_process:try_suspend_process(Pid) of
                         true ->
@@ -536,15 +536,16 @@ clear_steps(Pid, Breakpoints) ->
     %% Implementation note. At the time of first writing this, maps:take introduces spurious
     %% dynamic() types that are worked around by the sequence of maps:get and maps:remove.
     PidSteps = maps:get(Pid, Steps, #{}),
+    ModuleLines = [{Module, Line} || Module := LinePatterns <- PidSteps, Line := _ <- LinePatterns],
     Steps1 = maps:remove(Pid, Steps),
     Breakpoints1 = Breakpoints#breakpoints{steps = Steps1},
 
-    Breakpoints2 = maps:fold(
-        fun({Module, Line}, _Patterns, Accu) ->
+    Breakpoints2 = lists:foldl(
+        fun({Module, Line}, Accu) ->
             try_clear_step_in_vm(Pid, Module, Line, Accu)
         end,
         Breakpoints1,
-        PidSteps
+        ModuleLines
     ),
 
     {ok, Breakpoints2}.
@@ -619,7 +620,7 @@ add_vm_breakpoint({vm_module, Module}, _, _, _) when map_get(Module, ?unbreakpoi
 add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
-    VmBreakpoints1 = edb_server_maps:add({Module, Line}, Reason, [], VmBreakpoints0),
+    VmBreakpoints1 = edb_server_maps:add(Module, Line, Reason, [], VmBreakpoints0),
     Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
 
     %% Set the VM breakpoint.
@@ -644,7 +645,7 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
 
     case VmBreakpoints0 of
-        #{{Module, Line} := #{Reason := []} = Reasons0} when map_size(Reasons0) =:= 1 ->
+        #{Module := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) =:= 1 ->
             %% We have exactly one breakpoint reason on this line (and it's the one we're trying to remove)
             %% Unset the breakpoint and remove this location from the state
             VmBreakpoints1 = maps:remove({Module, Line}, VmBreakpoints0),
@@ -652,11 +653,11 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
 
             DeletionResult = vm_unset_breakpoint(Module, Line),
             {ok, DeletionResult, Breakpoints1};
-        #{{Module, Line} := #{Reason := []} = Reasons0} when map_size(Reasons0) > 1 ->
+        #{Module := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) > 1 ->
             %% We have more than one VM breakpoint on this line (and one of them is the one we're trying to remove)
             %% Remove the reason and leave the VM breakpoint in place
             Reasons1 = maps:remove(Reason, Reasons0),
-            VmBreakpoints1 = VmBreakpoints0#{{Module, Line} => Reasons1},
+            VmBreakpoints1 = VmBreakpoints0#{Module => #{Line => Reasons1}},
             Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
             {ok, removed, Breakpoints1};
         _ ->
@@ -703,10 +704,7 @@ vm_unset_breakpoint({vm_module, Module}, Line) ->
 -spec reapply_breakpoints(vm_module(), breakpoints()) -> ok | {error, edb:add_breakpoint_error()}.
 reapply_breakpoints(Module, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
-    AllLines = [
-        Line
-     || {M, Line} := _ <- VmBreakpoints, M =:= Module
-    ],
+    AllLines = maps:keys(maps:get(Module, VmBreakpoints, #{})),
     reapply_breakpoints_with_rollback(Module, AllLines, []).
 
 -spec reapply_breakpoints_with_rollback(vm_module(), [line()], [line()]) ->
