@@ -24,6 +24,9 @@
 % Creation
 -export([create/0]).
 
+% Module conversions
+-export([to_vm_module/2, from_vm_module/2]).
+
 % Explicit brekapoints manipulation
 -export([add_explicit/3, add_explicits/3]).
 -export([get_explicits/1, get_explicits/2]).
@@ -97,6 +100,18 @@ create() ->
         resume_actions = #{},
         vm_breakpoints = #{}
     }.
+
+%%--------------------------------------------------------------------
+%% Module conversions
+%%--------------------------------------------------------------------
+
+-spec to_vm_module(module(), breakpoints()) -> vm_module().
+to_vm_module(Module, _Breakpoints) ->
+    {vm_module, Module}.
+
+-spec from_vm_module(vm_module(), breakpoints()) -> module().
+from_vm_module({vm_module, Module}, _Breakpoints) ->
+    Module.
 
 %% --------------------------------------------------------------------
 %% Explicit breakpoints manipulation

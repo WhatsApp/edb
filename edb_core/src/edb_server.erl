@@ -141,12 +141,14 @@ reapply_breakpoints(Module) ->
 %%--------------------------------------------------------------------
 
 -spec to_vm_module(module(), state()) -> edb_server_break:vm_module().
-to_vm_module(Module, _State) ->
-    {vm_module, Module}.
+to_vm_module(Module, State) ->
+    #state{breakpoints = Breakpoints} = State,
+    edb_server_break:to_vm_module(Module, Breakpoints).
 
 -spec from_vm_module(edb_server_break:vm_module(), state()) -> module().
-from_vm_module({vm_module, Module}, _State) ->
-    Module.
+from_vm_module(VmModule, State) ->
+    #state{breakpoints = Breakpoints} = State,
+    edb_server_break:from_vm_module(VmModule, Breakpoints).
 
 %%--------------------------------------------------------------------
 %% Requests
