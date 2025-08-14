@@ -24,18 +24,12 @@
 % Creation
 -export([create/0]).
 
-% Module conversions
--export([to_vm_module/2, from_vm_module/2]).
-
 % Explicit brekapoints manipulation
 -export([add_explicit/3, add_explicits/3]).
 -export([get_explicits/1, get_explicits/2]).
 -export([clear_explicit/3, clear_explicits/2]).
 -export([get_explicits_hit/1, get_explicit_hit/2]).
--export([reapply_breakpoints/2, reapply_breakpoints/3]).
-
-% Breakpoint queries
--export([has_breakpoints/2]).
+-export([reapply_breakpoints/2]).
 
 % Stepping
 -export([prepare_for_stepping/3]).
@@ -46,12 +40,26 @@
 -export([register_breakpoint_event/5]).
 -export([resume_processes/2]).
 
+% Module substitutes
+-export([add_module_substitute/4]).
+-export([to_vm_module/2, from_vm_module/2]).
+-export([get_vm_module_source/2]).
+
 %% --------------------------------------------------------------------
 %% Types
 %% --------------------------------------------------------------------
 
 -type line() :: edb:line().
 -type vm_module() :: {vm_module, module()}.
+-type substitute_info() :: #{
+    substitute => vm_module(),
+    added_frames => [mfa()],
+    original_sources => file:filename() | undefined
+}.
+-type further_substitute_info() :: #{
+    substitute => vm_module(),
+    added_frames => [mfa()]
+}.
 
 -export_type([breakpoints/0, vm_module/0]).
 -record(breakpoints, {
@@ -78,7 +86,14 @@
     resume_actions :: #{pid() => fun(() -> ok)},
 
     %% Sets of reasons why VM breakpoints were set on each locations
-    vm_breakpoints :: #{vm_module() => #{line() => #{vm_breakpoint_reason() => []}}}
+    vm_breakpoints :: #{vm_module() => #{line() => #{vm_breakpoint_reason() => []}}},
+
+    substituted_modules :: #{module() => substitute_info()},
+
+    further_substituted_modules :: #{vm_module() => further_substitute_info()},
+
+    % The inverse of `substituted_modules` and `further_substituted_modules`
+    substituted_modules_reverse :: #{vm_module() => module() | vm_module()}
 }).
 
 -type vm_breakpoint_reason() ::
@@ -98,20 +113,11 @@ create() ->
         steps = #{},
         explicits_hit = #{},
         resume_actions = #{},
-        vm_breakpoints = #{}
+        vm_breakpoints = #{},
+        substituted_modules = #{},
+        further_substituted_modules = #{},
+        substituted_modules_reverse = #{}
     }.
-
-%%--------------------------------------------------------------------
-%% Module conversions
-%%--------------------------------------------------------------------
-
--spec to_vm_module(module(), breakpoints()) -> vm_module().
-to_vm_module(Module, _Breakpoints) ->
-    {vm_module, Module}.
-
--spec from_vm_module(vm_module(), breakpoints()) -> module().
-from_vm_module({vm_module, Module}, _Breakpoints) ->
-    Module.
 
 %% --------------------------------------------------------------------
 %% Explicit breakpoints manipulation
@@ -324,12 +330,13 @@ add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
                 {error, {badkey, {Fun, Arity}}} ->
                     {error, {call_target, {function_not_found, TargetMFA}}};
                 {ok, _} ->
+                    ExtraFrames = maybe_substituted_module_extra_frames(Mod, Breakpoints0),
                     BasePatterns = [
                         % Base pattern for non-tail-calls
-                        [CurrentMFA | tl(Addrs)],
+                        ExtraFrames ++ [CurrentMFA | tl(Addrs)],
 
                         % Base pattern for tail-calls
-                        tl(Addrs)
+                        ExtraFrames ++ tl(Addrs)
                     ],
                     case add_steps_on_function(Pid, TargetMFA, BasePatterns, Breakpoints0) of
                         no_breakpoint_set ->
@@ -338,6 +345,26 @@ add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
                             Result
                     end
             end
+    end.
+
+-spec maybe_substituted_module_extra_frames(module(), breakpoints()) -> [mfa()].
+maybe_substituted_module_extra_frames(Mod, Breakpoints) ->
+    #breakpoints{substituted_modules = SubstitutedModules} = Breakpoints,
+    case SubstitutedModules of
+        #{Mod := #{added_frames := Frames, substitute := SubstituteMod}} ->
+            get_further_frames_to_add(SubstituteMod, Breakpoints, [Frames]);
+        #{} ->
+            get_further_frames_to_add({vm_module, Mod}, Breakpoints, [])
+    end.
+
+-spec get_further_frames_to_add(vm_module(), breakpoints(), [[mfa()]]) -> [mfa()].
+get_further_frames_to_add(SubstituteMod, Breakpoints, Acc) ->
+    #breakpoints{further_substituted_modules = FurtherSubstitutes} = Breakpoints,
+    case FurtherSubstitutes of
+        #{SubstituteMod := #{added_frames := Frames, substitute := FurtherSubstituteMod}} ->
+            get_further_frames_to_add(FurtherSubstituteMod, Breakpoints, [Frames | Acc]);
+        #{} ->
+            lists:flatten(Acc)
     end.
 
 -spec add_steps_on_stack_frames(Pid, Frames, FrameAddrs, Types, breakpoints()) ->
@@ -396,15 +423,16 @@ when
     BasePatterns :: [call_stack_pattern()].
 add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints0) ->
     {Module, Fun, Arity} = MFA,
-    case erl_debugger:breakpoints(Module, Fun, Arity) of
+    {vm_module, VmModule} = to_vm_module(Module, Breakpoints0),
+    case erl_debugger:breakpoints(VmModule, Fun, Arity) of
         {error, {badkey, _}} ->
             no_breakpoint_set;
         {ok, BreakableLines} ->
-            Patterns = [[MFA | BasePattern] || BasePattern <- BasePatterns],
+            Patterns = [[{VmModule, Fun, Arity} | BasePattern] || BasePattern <- BasePatterns],
 
             {Breakpoints1, SomeBreakpointSet} = maps:fold(
                 fun(Line1, _, Acc0 = {AccBreakpoints0, _}) ->
-                    case add_step(Pid, Patterns, {vm_module, Module}, Line1, AccBreakpoints0) of
+                    case add_step(Pid, Patterns, {vm_module, VmModule}, Line1, AccBreakpoints0) of
                         no_breakpoint_set ->
                             Acc0;
                         {ok, AccBreakpoints1} ->
@@ -427,11 +455,17 @@ add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints0) ->
     Module :: vm_module(),
     Line :: line().
 add_step(Pid, Patterns, Module, Line, Breakpoints0) ->
+    %% TODO(T233850146): Corner case - Sometimes we want to add a stepping breakpoint to the old (non-substitute)
+    %% version of a module. In this case, the semantics of Erlang will call fun() in the old version of
+    %% the module, and the breakpoint should be set in the old version, so we need to add a way to
+    %% do this in the VM.
     case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
             Steps2 = lists:foldl(
-                fun(Pattern, StepsN) -> edb_server_maps:add(Pid, Module, Line, Pattern, [], StepsN) end,
+                fun(Pattern, StepsN) ->
+                    edb_server_maps:add(Pid, Module, Line, Pattern, [], StepsN)
+                end,
                 Steps1,
                 Patterns
             ),
@@ -790,10 +824,11 @@ reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
             Error
     end.
 
--spec transfer_module_references(SourceModule, TargetModule, Breakpoints) -> Breakpoints when
+-spec transfer_module_references(SourceModule, TargetModule, Breakpoints0) -> Breakpoints1 when
     SourceModule :: vm_module(),
     TargetModule :: vm_module(),
-    Breakpoints :: breakpoints().
+    Breakpoints0 :: breakpoints(),
+    Breakpoints1 :: breakpoints().
 transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
     #breakpoints{
         explicits = Explicits0,
@@ -834,6 +869,148 @@ transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
         steps = Steps1,
         vm_breakpoints = VmBreakpoints1
     }.
+
+%%--------------------------------------------------------------------
+%% Module substitutes
+%%--------------------------------------------------------------------
+
+-spec to_vm_module(Module, Breakpoints) -> vm_module() when
+    Module :: module(),
+    Breakpoints :: breakpoints().
+to_vm_module(Module, Breakpoints) ->
+    resolve_module_substitute(Module, Breakpoints).
+
+-spec from_vm_module(VmModule, Breakpoints) -> module() when
+    VmModule :: vm_module(),
+    Breakpoints :: breakpoints().
+from_vm_module(VmModule, Breakpoints) ->
+    resolve_module_substitute_reverse(VmModule, Breakpoints).
+
+-spec add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
+    {ok, Breakpoints1} | {error, edb_server:add_substitute_error()}
+when
+    Module :: module(),
+    Substitute :: module(),
+    AddedFrames :: [mfa()],
+    Breakpoints0 :: breakpoints(),
+    Breakpoints1 :: breakpoints().
+add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
+    #breakpoints{
+        substituted_modules = SubstitutedModules0,
+        further_substituted_modules = FurtherSubstitutes0,
+        substituted_modules_reverse = SubstitutedModulesReverse0
+    } = Breakpoints0,
+    case has_breakpoints(to_vm_module(Substitute, Breakpoints0), Breakpoints0) of
+        true ->
+            {error, already_has_breakpoints};
+        false ->
+            case maps:is_key(Module, SubstitutedModules0) of
+                true ->
+                    {error, already_substituted};
+                false ->
+                    case maps:is_key({vm_module, Substitute}, SubstitutedModulesReverse0) of
+                        true ->
+                            {error, is_already_a_substitute};
+                        false ->
+                            case FurtherSubstitutes0 of
+                                #{{vm_module, Module} := _} ->
+                                    {error, already_substituted};
+                                #{} ->
+                                    {ok, Breakpoints1} = reapply_breakpoints(
+                                        {vm_module, Module},
+                                        {vm_module, Substitute},
+                                        Breakpoints0
+                                    ),
+
+                                    {ok,
+                                        case SubstitutedModulesReverse0 of
+                                            #{{vm_module, Module} := _} ->
+                                                FurtherSubstitutes1 = FurtherSubstitutes0#{
+                                                    {vm_module, Module} => #{
+                                                        substitute => {vm_module, Substitute},
+                                                        added_frames => AddedFrames
+                                                    }
+                                                },
+                                                SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
+                                                    {vm_module, Substitute} => {vm_module, Module}
+                                                },
+                                                Breakpoints1#breakpoints{
+                                                    further_substituted_modules = FurtherSubstitutes1,
+                                                    substituted_modules_reverse = SubstitutedModulesReverse1
+                                                };
+                                            #{} ->
+                                                SubstitutedModules1 = SubstitutedModules0#{
+                                                    Module => #{
+                                                        substitute => {vm_module, Substitute},
+                                                        added_frames => AddedFrames,
+                                                        original_sources => edb_server_code:module_source(Module)
+                                                    }
+                                                },
+                                                SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
+                                                    {vm_module, Substitute} => Module
+                                                },
+                                                Breakpoints1#breakpoints{
+                                                    substituted_modules = SubstitutedModules1,
+                                                    substituted_modules_reverse = SubstitutedModulesReverse1
+                                                }
+                                        end}
+                            end
+                    end
+            end
+    end.
+
+-spec resolve_module_substitute(Module, Breakpoints) -> vm_module() when
+    Module :: module() | vm_module(),
+    Breakpoints :: breakpoints().
+resolve_module_substitute(Module, #breakpoints{substituted_modules = SubstitutedModules} = Breakpoints) when
+    is_atom(Module)
+->
+    case SubstitutedModules of
+        #{Module := #{substitute := Substitute}} ->
+            resolve_module_substitute(Substitute, Breakpoints);
+        _ ->
+            {vm_module, Module}
+    end;
+resolve_module_substitute(
+    Subst = {vm_module, _}, #breakpoints{further_substituted_modules = FurtherSubstitutedModules} = Breakpoints
+) ->
+    case FurtherSubstitutedModules of
+        #{Subst := #{substitute := FurtherSubstitute}} ->
+            resolve_module_substitute(FurtherSubstitute, Breakpoints);
+        _ ->
+            Subst
+    end.
+
+-spec resolve_module_substitute_reverse(Substitute, Breakpoints) -> module() when
+    Substitute :: vm_module(),
+    Breakpoints :: breakpoints().
+resolve_module_substitute_reverse({vm_module, SubMod} = Substitute, Breakpoints) ->
+    #breakpoints{substituted_modules_reverse = SubstitutedModulesReverse} = Breakpoints,
+    case SubstitutedModulesReverse of
+        #{Substitute := {vm_module, _} = PrevSubstitute} ->
+            resolve_module_substitute_reverse(PrevSubstitute, Breakpoints);
+        #{Substitute := OrigModule} when is_atom(OrigModule) ->
+            OrigModule;
+        #{} ->
+            SubMod
+    end.
+
+%% --------------------------------------------------------------------
+%% Module source
+%% --------------------------------------------------------------------
+
+-spec get_vm_module_source(VmModule, Breakpoints) -> file:filename() | undefined when
+    VmModule :: vm_module(),
+    Breakpoints :: breakpoints().
+get_vm_module_source(VmModule, Breakpoints) ->
+    #breakpoints{substituted_modules = SubstitutedModules} = Breakpoints,
+    OriginalModule = from_vm_module(VmModule, Breakpoints),
+    case SubstitutedModules of
+        #{OriginalModule := #{original_sources := Source}} ->
+            Source;
+        #{} ->
+            edb_server_code:module_source(OriginalModule)
+    end.
 
 %% --------------------------------------------------------------------
 %% Helpers -- call-stacks and call-stack patterns

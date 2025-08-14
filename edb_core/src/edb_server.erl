@@ -24,8 +24,8 @@
 %% External exports
 -export([start/0, stop/0, find/0]).
 
-%% Reapply breakpoints
--export([reapply_breakpoints/1]).
+%% Reloading module support
+-export([reapply_breakpoints/1, add_module_substitute/3]).
 
 %% gen_server call wrappers that will throw on invariant violations
 -export([call/2, call/3]).
@@ -50,6 +50,9 @@
 
 -export_type([start_error/0]).
 -type start_error() :: unsupported | failed_to_register.
+
+-export_type([add_substitute_error/0]).
+-type add_substitute_error() :: already_has_breakpoints | already_substituted | is_already_a_substitute.
 
 -record(state, {
     debugger_session :: erl_debugger:session(),
@@ -151,6 +154,30 @@ from_vm_module(VmModule, State) ->
     edb_server_break:from_vm_module(VmModule, Breakpoints).
 
 %%--------------------------------------------------------------------
+%% Module substitutes
+%%--------------------------------------------------------------------
+
+-doc """
+Add a module substitute from `Module` to `Substitute`.
+When users try to set a breakpoint on `Module`, it will be set on `Substitute` instead.
+This handles transitive substitutes as well, so if `Substitute` is substituted by another module,
+then setting a breakpoint on `Module` will set it on that module.
+If `Module` had breakpoints set, they will be transferred to `Substitute`.
+`AddedFrames` is a list of frames that is expected in stack trace when functions in
+`Substitute` are called. When transitivity occurs (A -> B -> C), the added frames
+from each substitution are accumulated, so the final stack trace will include
+frames from both A -> B and B -> C substitutions.
+
+Returns {error, already_has_breakpoints} if `Substitute` already has breakpoints set.
+Returns {error, already_substituted} if `Module` is already substituted by another module.
+Returns {error, is_already_a_substitute} if `Substitute` is already a substitute of another module.
+""".
+-spec add_module_substitute(Module :: module(), Substitute :: module(), AddedFrames :: [mfa()]) ->
+    ok | {error, add_substitute_error()}.
+add_module_substitute(Module, Substitute, AddedFrames) ->
+    call(node(), {add_module_substitute, Module, Substitute, AddedFrames}).
+
+%%--------------------------------------------------------------------
 %% Requests
 %%--------------------------------------------------------------------
 
@@ -166,6 +193,7 @@ from_vm_module(VmModule, State) ->
     | {set_breakpoints, module(), [line()]}
     | {reapply_breakpoints, module()}
     | get_breakpoints_hit
+    | {add_module_substitute, module(), module(), [mfa()]}
     | pause
     | continue
     | is_paused
@@ -322,6 +350,8 @@ dispatch_call(get_breakpoints_hit, _From, State) ->
     get_breakpoints_hit_impl(State);
 dispatch_call({reapply_breakpoints, Module}, _From, State) ->
     reapply_breakpoints_impl(Module, State);
+dispatch_call({add_module_substitute, Module, Substitute, AddedFrames}, _From, State0) ->
+    add_module_substitute_impl(Module, Substitute, AddedFrames, State0);
 dispatch_call(pause, _From, State0) ->
     pause_impl(State0);
 dispatch_call(continue, _From, State0) ->
@@ -571,6 +601,18 @@ reapply_breakpoints_impl(Module, State0) ->
     VmModule = to_vm_module(Module, State0),
     Result = edb_server_break:reapply_breakpoints(VmModule, Breakpoints0),
     {reply, Result, State0}.
+
+-spec add_module_substitute_impl(Module :: module(), Substitute :: module(), AddedFrames :: [mfa()], State0 :: state()) ->
+    {reply, ok | {error, add_substitute_error()}, State1 :: state()}.
+add_module_substitute_impl(Module, Substitute, AddedFrames, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    case edb_server_break:add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            State1 = State0#state{breakpoints = Breakpoints1},
+            {reply, ok, State1};
+        Error ->
+            {reply, Error, State0}
+    end.
 
 -spec pause_impl(State0 :: state()) -> {reply, ok, State1 :: state()}.
 pause_impl(State0) ->
@@ -851,12 +893,13 @@ stack_frames_impl(Pid, State0) ->
         not_paused ->
             {reply, not_paused, State0};
         RawFrames ->
+            #state{breakpoints = Breakpoints0} = State0,
             RelevantFrames = edb_server_stack_frames:without_bottom_terminator_frame(RawFrames),
-            Result = [format_frame(RawFrame, State0) || RawFrame <- RelevantFrames],
+            Result = [format_frame(RawFrame, Breakpoints0) || RawFrame <- RelevantFrames],
             {reply, {ok, Result}, State0}
     end.
 
--spec format_frame(RawFrame :: erl_debugger:stack_frame(), state()) -> edb:stack_frame().
+-spec format_frame(RawFrame :: erl_debugger:stack_frame(), edb_server_break:breakpoints()) -> edb:stack_frame().
 format_frame({FrameNo, 'unknown function', _}, _) ->
     #{
         id => FrameNo,
@@ -864,13 +907,14 @@ format_frame({FrameNo, 'unknown function', _}, _) ->
         source => undefined,
         line => undefined
     };
-format_frame({FrameNo, #{function := {M, F, A}, line := Line}, _}, State) ->
-    OriginalModule = from_vm_module({vm_module, M}, State),
+format_frame({FrameNo, #{function := {M, F, A}, line := Line}, _}, Breakpoints) ->
+    VmModule = {vm_module, M},
+    OriginalModule = edb_server_break:from_vm_module(VmModule, Breakpoints),
     #{
         id => FrameNo,
         mfa => {OriginalModule, F, A},
         % TODO(T204197553) take md5 sum into account once it is available in the raw frame
-        source => edb_server_code:module_source(OriginalModule),
+        source => edb_server_break:get_vm_module_source(VmModule, Breakpoints),
         line => Line
     }.
 
