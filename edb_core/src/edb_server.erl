@@ -25,7 +25,7 @@
 -export([start/0, stop/0, find/0]).
 
 %% Reloading module support
--export([reapply_breakpoints/1, add_module_substitute/3]).
+-export([reapply_breakpoints/1, add_module_substitute/3, remove_module_substitute/1]).
 
 %% gen_server call wrappers that will throw on invariant violations
 -export([call/2, call/3]).
@@ -53,6 +53,9 @@
 
 -export_type([add_substitute_error/0]).
 -type add_substitute_error() :: already_has_breakpoints | already_substituted | is_already_a_substitute.
+
+-export_type([remove_substitute_error/0]).
+-type remove_substitute_error() :: not_a_substitute | has_dependent_substitute.
 
 -record(state, {
     debugger_session :: erl_debugger:session(),
@@ -177,6 +180,19 @@ Returns {error, is_already_a_substitute} if `Substitute` is already a substitute
 add_module_substitute(Module, Substitute, AddedFrames) ->
     call(node(), {add_module_substitute, Module, Substitute, AddedFrames}).
 
+-doc """
+Remove a module substitute.
+All breakpoints on the substituted module will be transferred to the original module.
+
+Returns {error, not_a_substitute} if the module has not been added as a substitute
+using add_module_substitute/2.
+Returns {error, has_dependent_substitute} if the module is part of a chain where
+another substitute depends on it.
+""".
+-spec remove_module_substitute(SubstituteModule :: module()) -> ok | {error, remove_substitute_error()}.
+remove_module_substitute(SubstituteModule) ->
+    call(node(), {remove_module_substitute, SubstituteModule}).
+
 %%--------------------------------------------------------------------
 %% Requests
 %%--------------------------------------------------------------------
@@ -194,6 +210,7 @@ add_module_substitute(Module, Substitute, AddedFrames) ->
     | {reapply_breakpoints, module()}
     | get_breakpoints_hit
     | {add_module_substitute, module(), module(), [mfa()]}
+    | {remove_module_substitute, module()}
     | pause
     | continue
     | is_paused
@@ -352,6 +369,8 @@ dispatch_call({reapply_breakpoints, Module}, _From, State) ->
     reapply_breakpoints_impl(Module, State);
 dispatch_call({add_module_substitute, Module, Substitute, AddedFrames}, _From, State0) ->
     add_module_substitute_impl(Module, Substitute, AddedFrames, State0);
+dispatch_call({remove_module_substitute, X}, _From, State0) ->
+    remove_module_substitute_impl(X, State0);
 dispatch_call(pause, _From, State0) ->
     pause_impl(State0);
 dispatch_call(continue, _From, State0) ->
@@ -607,6 +626,18 @@ reapply_breakpoints_impl(Module, State0) ->
 add_module_substitute_impl(Module, Substitute, AddedFrames, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     case edb_server_break:add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            State1 = State0#state{breakpoints = Breakpoints1},
+            {reply, ok, State1};
+        Error ->
+            {reply, Error, State0}
+    end.
+
+-spec remove_module_substitute_impl(SubstituteModule :: module(), State0 :: state()) ->
+    {reply, ok | {error, remove_substitute_error()}, State1 :: state()}.
+remove_module_substitute_impl(SubstituteModule, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    case edb_server_break:remove_module_substitute(SubstituteModule, Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {reply, ok, State1};
