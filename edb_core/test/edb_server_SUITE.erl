@@ -39,7 +39,12 @@
     test_original_module_is_reported_in_stack_frames/1,
     test_error_if_substitute_already_has_breakpoints_set/1,
     test_error_if_module_already_has_a_substitute/1,
-    test_error_if_substitute_is_already_a_substitute/1
+    test_error_if_substitute_is_already_a_substitute/1,
+    test_remove_module_substitute_transfers_breakpoints_back_to_original_module/1,
+    test_stepping_breakpoints_work_after_removing_substitute/1,
+    test_remove_module_substitute_handles_transitive_substitutes/1,
+    test_error_if_try_removing_non_existent_substitute/1,
+    test_error_if_try_removing_intermediate_substitute/1
 ]).
 
 %% erlfmt:ignore
@@ -59,7 +64,12 @@ all() ->
         test_original_module_is_reported_in_stack_frames,
         test_error_if_substitute_already_has_breakpoints_set,
         test_error_if_module_already_has_a_substitute,
-        test_error_if_substitute_is_already_a_substitute
+        test_error_if_substitute_is_already_a_substitute,
+        test_remove_module_substitute_transfers_breakpoints_back_to_original_module,
+        test_stepping_breakpoints_work_after_removing_substitute,
+        test_remove_module_substitute_handles_transitive_substitutes,
+        test_error_if_try_removing_non_existent_substitute,
+        test_error_if_try_removing_intermediate_substitute
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -838,6 +848,348 @@ test_error_if_substitute_is_already_a_substitute(Config) ->
         Error = peer:call(Peer, edb_server, add_module_substitute, [test_module_original2, test_module_substitute, []]),
         ?assertMatch({error, is_already_a_substitute}, Error),
         ok
+    end),
+    ok.
+
+test_remove_module_substitute_transfers_breakpoints_back_to_original_module(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test modules
+        {ok, #{
+            node := Node, modules := #{test_module := _, test_module_substitute := _}, peer := Peer, cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}, {source, SubstituteModuleSource}]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Set up module substitute
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Set breakpoints on line 4 (which will be set on the substitute module)
+        ok = edb:add_breakpoint(test_module, 4),
+
+        % Sanity-check: Verify breakpoint is set on the substitute module
+        Breakpoints1 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{line => 4, module => test_module}
+            ],
+            Breakpoints1
+        ),
+
+        % Remove the module substitute
+        ok = peer:call(Peer, edb_server, remove_module_substitute, [test_module_substitute]),
+
+        % Verify breakpoint is transferred back to the original module
+        Breakpoints2 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{line => 4, module => test_module}
+            ],
+            Breakpoints2
+        ),
+
+        % Call the original module's test_function to verify that breakpoints get hit
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_module, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Breakpoint on line 4 is hit
+        Breakpoints3Map = edb:get_breakpoints_hit(),
+        Breakpoints3 = maps:values(Breakpoints3Map),
+        ?assertEqual(
+            [#{line => 4, module => test_module}], Breakpoints3
+        ),
+
+        ok
+    end),
+    ok.
+
+test_stepping_breakpoints_work_after_removing_substitute(Config) ->
+    ModuleSource1 =
+        "-module(test_module).                                                                  %L01\n"
+        "-export([test_function/0]).                                                            %L02\n"
+        "test_function() ->                                                                     %L03\n"
+        "    ok = edb_server:add_module_substitute(other_module, other_module_sub, []),         %L04\n"
+        "    A = other_module_sub:test_function(),                                              %L05\n"
+        "    ok = edb_server:remove_module_substitute(other_module_sub),                        %L06\n"
+        "    B = other_module:test_function(),                                                  %L07\n"
+        "    B.                                                                                 %L08\n",
+
+    ModuleSource2 =
+        "-module(other_module).                 %L01\n"
+        "-export([test_function/0]).            %L02\n"
+        "test_function() ->                     %L03\n"
+        "    A = ok,                            %L04\n"
+        "    C = A,                             %L05\n"
+        "    C.                                 %L06\n",
+
+    ModuleSource3 =
+        "-module(other_module_sub).             %L01\n"
+        "-export([test_function/0]).            %L02\n"
+        "test_function() ->                     %L03\n"
+        "    A = ok,                            %L04\n"
+        "    C = A,                             %L05\n"
+        "    C.                                 %L06\n",
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{
+            node := Node,
+            modules := #{test_module := _, other_module := _, other_module_sub := _},
+            peer := Peer,
+            cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, ModuleSource1}, {source, ModuleSource2}, {source, ModuleSource3}]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Set breakpoint at test_module:4 and other_module:5
+        ok = edb:add_breakpoint(test_module, 5),
+
+        % Compile the substitute module
+        {ok, other_module_sub, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, ModuleSource3}, #{load_it => true, flags => [beam_debug_info]}
+        ]),
+
+        % Call the test_function to verify that the breakpoint gets hit with substitute
+        _TestPid1 = erlang:spawn(fun() ->
+            peer:call(Peer, test_module, test_function, [])
+        end),
+
+        {ok, paused} = edb:wait(),
+
+        ProcessMap = edb:processes([current_bp]),
+        [PausedPid | []] = [
+            Pid
+         || Pid := #{current_bp := {line, 5}} <- ProcessMap
+        ],
+
+        % Step into other_module:test_function() (which should use substitute)
+        ok = edb:step_in(PausedPid),
+
+        {ok, [#{line := Line, mfa := MFA} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({4, {other_module, test_function, 0}}, {Line, MFA}),
+
+        % Step over to other_module:5
+        ok = edb:step_over(PausedPid),
+
+        {ok, [#{line := Line2, mfa := MFA2} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({5, {other_module, test_function, 0}}, {Line2, MFA2}),
+
+        % Step out and continue to finish this test process
+        ok = edb:step_out(PausedPid),
+
+        ok = edb:step_over(PausedPid),
+        {ok, paused} = edb:wait(),
+
+        {ok, [#{line := Line8, mfa := MFA8} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({7, {test_module, test_function, 0}}, {Line8, MFA8}),
+
+        % Step into other_module:test_function() (should now use original module)
+        ok = edb:step_in(PausedPid),
+
+        {ok, [#{line := Line3, mfa := MFA3} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({4, {other_module, test_function, 0}}, {Line3, MFA3}),
+
+        % Step over to other_module:5
+        ok = edb:step_over(PausedPid),
+
+        {ok, [#{line := Line4, mfa := MFA4} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({5, {other_module, test_function, 0}}, {Line4, MFA4}),
+
+        % Step out to verify we return to test_module correctly
+        ok = edb:step_out(PausedPid),
+        {ok, paused} = edb:wait(),
+
+        {ok, [#{line := Line5, mfa := MFA5} | _]} = edb:stack_frames(PausedPid),
+        ?assertEqual({8, {test_module, test_function, 0}}, {Line5, MFA5}),
+        ok
+    end),
+
+    ok.
+
+test_remove_module_substitute_handles_transitive_substitutes(Config) ->
+    % Create three modules: original, intermediate, and final
+    OriginalSource = create_test_source(test_module_original),
+    IntermediateSource = create_test_source(test_module_intermediate),
+    FinalSource = create_test_source(test_module_final),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with all three modules
+        {ok, #{
+            node := Node,
+            modules := #{
+                test_module_original := _,
+                test_module_intermediate := _,
+                test_module_final := _
+            },
+            peer := Peer,
+            cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [
+                    {source, OriginalSource},
+                    {source, IntermediateSource},
+                    {source, FinalSource}
+                ]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module_original, test_module_intermediate, []]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module_intermediate, test_module_final, []]),
+
+        % Set breakpoint on original module (which will be set on the final module)
+        ok = edb:add_breakpoint(test_module_original, 4),
+
+        % Sanity-check: Verify breakpoint is set on the final module
+        Breakpoints1 = edb:get_breakpoints(test_module_original),
+        ?assertEqual(
+            [
+                #{line => 4, module => test_module_original}
+            ],
+            Breakpoints1
+        ),
+
+        % Remove the final module substitute
+        ok = peer:call(Peer, edb_server, remove_module_substitute, [test_module_final]),
+
+        % Verify breakpoint is still in the intermediate module
+        Breakpoints2 = edb:get_breakpoints(test_module_original),
+        ?assertEqual(
+            [
+                #{line => 4, module => test_module_original}
+            ],
+            Breakpoints2
+        ),
+
+        % Call the intermediate module's test_function to verify that breakpoint gets hit
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_module_intermediate, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Breakpoint on line 4 is hit
+        BreakpointsHitMap = edb:get_breakpoints_hit(),
+        BreakpointsHit = maps:values(BreakpointsHitMap),
+        ?assertEqual(
+            [#{line => 4, module => test_module_original}], BreakpointsHit
+        ),
+
+        edb:continue(),
+
+        % Remove the intermediate module substitute
+        ok = peer:call(Peer, edb_server, remove_module_substitute, [test_module_intermediate]),
+
+        % Verify breakpoint is transferred back to the original module
+        % and the chain of substitutes is broken
+        Breakpoints3 = edb:get_breakpoints(test_module_original),
+        ?assertEqual(
+            [
+                #{line => 4, module => test_module_original}
+            ],
+            Breakpoints3
+        ),
+
+        % Call the original module's test_function to verify that breakpoint gets hit
+        _TestPid2 = erlang:spawn(fun() ->
+            peer:call(Peer, test_module_original, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Breakpoint on line 4 is hit
+        BreakpointsHitMap2 = edb:get_breakpoints_hit(),
+        BreakpointsHit2 = maps:values(BreakpointsHitMap2),
+        ?assertEqual(
+            [#{line => 4, module => test_module_original}], BreakpointsHit2
+        ),
+
+        ok
+    end),
+    ok.
+
+test_error_if_try_removing_non_existent_substitute(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{
+            node := Node, modules := #{test_module := _, test_module_substitute := _}, peer := Peer, cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}, {source, SubstituteModuleSource}]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+        Error = peer:call(Peer, edb_server, remove_module_substitute, [test_module]),
+        ?assertMatch({error, not_a_substitute}, Error),
+        ok
+    end),
+    ok.
+
+test_error_if_try_removing_intermediate_substitute(Config) ->
+    % Create three modules: original, intermediate, and final
+    OriginalSource = create_test_source(test_module_original),
+    IntermediateSource = create_test_source(test_module_intermediate),
+    FinalSource = create_test_source(test_module_final),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with all three modules
+        {ok, #{
+            node := Node,
+            modules := #{
+                test_module_original := _,
+                test_module_intermediate := _,
+                test_module_final := _
+            },
+            peer := Peer,
+            cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [
+                    {source, OriginalSource},
+                    {source, IntermediateSource},
+                    {source, FinalSource}
+                ]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module_original, test_module_intermediate, []]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module_intermediate, test_module_final, []]),
+
+        % Remove the intermediate module substitute
+        Error = peer:call(Peer, edb_server, remove_module_substitute, [test_module_intermediate]),
+        ?assertMatch({error, has_dependent_substitute}, Error)
     end),
     ok.
 
