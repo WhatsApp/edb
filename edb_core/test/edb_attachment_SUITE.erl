@@ -78,7 +78,9 @@
     test_reattaching_to_non_existent_node_doesnt_detach/1,
     test_reattaching_to_same_node_doesnt_detach/1,
     test_reattaching_to_different_node_detaches_from_old_node/1,
-    test_reverse_attaching_to_a_node_detaches_from_old_node/1
+    test_reverse_attaching_to_a_node_detaches_from_old_node/1,
+
+    test_subscribing_before_attaching_works/1
 ]).
 
 %% erlfmt:ignore
@@ -111,7 +113,9 @@ groups() ->
 
             test_attach_validates_args,
 
-            test_fails_to_attach_if_debuggee_not_in_debugging_mode
+            test_fails_to_attach_if_debuggee_not_in_debugging_mode,
+
+            test_subscribing_before_attaching_works
         ]},
 
         {test_reverse_attach, [
@@ -383,6 +387,32 @@ test_fails_to_attach_if_debuggee_not_in_debugging_mode(Config) ->
             {error, {bootstrap_failed, {no_debugger_support, not_enabled}}},
             edb:attach(#{node => Node, cookie => Cookie})
         ),
+
+        ok
+    end).
+
+test_subscribing_before_attaching_works(Config) ->
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Subscribe to events before attaching
+        {ok, Subscription} = edb:subscribe(),
+
+        {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
+
+        % Attach to the node - this should sync the local subscription with the server
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        ?assertEqual(Node, edb:attached_node()),
+
+        % Send a sync event to test that the subscription works after attachment
+        {ok, SyncRef} = edb:send_sync_event(Subscription),
+
+        % Verify we receive the event from the server
+        receive
+            {edb_event, Subscription, {sync, SyncRef}} ->
+                ok
+        after 1000 ->
+            error(sync_event_not_received)
+        end,
 
         ok
     end).
