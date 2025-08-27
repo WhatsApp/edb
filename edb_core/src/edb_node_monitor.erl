@@ -255,7 +255,7 @@ handle_event({call, From}, {remove_event_subscription, Subscription}, State, Dat
 handle_event(info, {nodedown, Node, #{node_type := _, nodedown_reason := Reason}}, State, Data) ->
     nodedown_impl(Node, Reason, State, Data);
 handle_event(info, {nodeup, Node, _}, State0 = #{state := attachment_in_progress, type := attach, node := Node}, Data0) ->
-    State1 = on_node_connected(State0),
+    State1 = on_node_connected(State0, Data0),
     {next_state, State1, Data0};
 handle_event(state_timeout, waiting_for_node, State0 = #{state := attachment_in_progress, type := attach}, Data0) ->
     State1 = #{state => not_attached},
@@ -293,7 +293,7 @@ try_attach_impl(Node, State0, Data0) ->
                     schedule_try_attach_after(50, Node),
                     keep_state_and_data;
                 _ ->
-                    State1 = on_node_connected(State0),
+                    State1 = on_node_connected(State0, Data0),
                     {next_state, State1, Data0}
             end;
         _ ->
@@ -338,7 +338,7 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
                             node => Node,
                             caller => From
                         },
-                    State3 = on_node_connected(State2),
+                    State3 = on_node_connected(State2, Data1),
                     {next_state, State3, Data1}
             end
     end.
@@ -377,8 +377,10 @@ reverse_attach_notification_impl(
     State0 = #{state := attachment_in_progress, type := reverse_attach, gatekeeper := GatekeeperId},
     Data0
 ) ->
+    #{event_subscribers := Subs} = Data0,
     #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
-    case bootstrap_edb(Node, pause) of
+    Subscribers = edb_events:subscribers(Subs),
+    case bootstrap_edb(Node, Subscribers, pause) of
         {error, BootstrapFailure} ->
             State1 = #{state => not_attached},
             CallerPid ! {NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}},
@@ -432,16 +434,17 @@ detach_impl_1(State0, Data0) ->
 subscribe_to_events_impl(Pid, From, State0, Data0) ->
     % We let edb_server create a subscription; and we will save it too, so we can reuse
     % it later for "disconnected" events created from here
-    case call_edb_server({subscribe_to_events, Pid}, State0, Data0) of
-        {not_attached, State1, Data1} ->
-            {next_state, State1, Data1, {reply, From, not_attached}};
-        {{reply, {ok, Subscription}}, State1, Data1} ->
-            Subs0 = maps:get(event_subscribers, Data1),
-            MonitorRef = erlang:monitor(process, Pid),
-            {ok, Subs1} = edb_events:subscribe(Subscription, Pid, MonitorRef, Subs0),
-            Data2 = Data1#{event_subscribers := Subs1},
-            {next_state, State1, Data2, {reply, From, {ok, Subscription}}}
-    end.
+    {Reply, State1, Data1} = call_edb_server({subscribe_to_events, Pid}, State0, Data0),
+    Subs0 = maps:get(event_subscribers, Data1),
+    MonitorRef = erlang:monitor(process, Pid),
+    case Reply of
+        not_attached ->
+            {ok, {Subscription, Subs1}} = edb_events:subscribe(Pid, MonitorRef, Subs0);
+        {reply, {ok, Subscription}} ->
+            {ok, Subs1} = edb_events:subscribe(Subscription, Pid, MonitorRef, Subs0)
+    end,
+    Data2 = Data1#{event_subscribers := Subs1},
+    {next_state, State1, Data2, {reply, From, {ok, Subscription}}}.
 
 -spec remove_event_subscription_impl(Subscription, From, state(), data()) -> reply(ok | not_attached) when
     Subscription :: edb_events:subscription(),
@@ -490,16 +493,17 @@ nodedown_impl(Node, Reason, State0, Data0) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
--spec bootstrap_edb(Node, PauseAction) -> ok | {error, edb:bootstrap_failure()} when
+-spec bootstrap_edb(Node, Subscribers, PauseAction) -> ok | {error, edb:bootstrap_failure()} when
     Node :: node(),
+    Subscribers :: #{edb_events:subscription() => pid()},
     PauseAction :: pause | keep_running.
-bootstrap_edb(Node, PauseAction) ->
+bootstrap_edb(Node, Subscribers, PauseAction) ->
     {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
     % elp:ignore W0014 - Debugging tool, expected.
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
             % elp:ignore W0014 - Debugging tool, expected.
-            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), PauseAction]);
+            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), Subscribers, PauseAction]);
         {error, badfile} ->
             {error, {module_injection_failed, edb_bootstrap, incompatible_beam}}
     end.
@@ -517,10 +521,12 @@ schedule_try_attach_after(Delay, Node) ->
     end),
     ok.
 
--spec on_node_connected(state()) -> state().
-on_node_connected(State0 = #{state := attachment_in_progress, type := attach, node := Node, caller := Caller}) ->
+-spec on_node_connected(state(), data()) -> state().
+on_node_connected(State0 = #{state := attachment_in_progress, type := attach, node := Node, caller := Caller}, Data0) ->
+    #{event_subscribers := Subs} = Data0,
+    Subscribers = edb_events:subscribers(Subs),
     State2 =
-        try bootstrap_edb(Node, keep_running) of
+        try bootstrap_edb(Node, Subscribers, keep_running) of
             {error, BootstrapFailure} ->
                 State1 = #{state => not_attached},
                 gen_statem:reply(Caller, {error, {bootstrap_failed, BootstrapFailure}}),

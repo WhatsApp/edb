@@ -25,7 +25,7 @@
 -export([no_subscribers/0]).
 -export([subscribe/3, subscribe/4]).
 -export([unsubscribe/2, process_down/2]).
--export([subscriber_pids/1, subscriptions/1]).
+-export([subscriber_pids/1, subscribers/1, subscriptions/1]).
 -export([send_to/3, broadcast/2]).
 
 -export_type([event/0]).
@@ -109,6 +109,10 @@ process_down(MonitorRef, Subscribers0 = #{monitors := Mon0}) ->
 -spec subscriber_pids(subscribers()) -> [pid()].
 subscriber_pids(#{subscriptions := Subscriptions}) ->
     [Pid || _Subscription := {Pid, _MonitorRef} <- Subscriptions].
+
+-spec subscribers(subscribers()) -> #{subscription() => pid()}.
+subscribers(#{subscriptions := Subscriptions}) ->
+    #{Subscription => Pid || Subscription := {Pid, _MonitorRef} <- Subscriptions}.
 
 -spec subscriptions(subscribers()) -> [subscription()].
 subscriptions(#{subscriptions := Subscriptions}) ->

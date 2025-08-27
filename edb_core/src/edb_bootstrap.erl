@@ -22,7 +22,7 @@
 -moduledoc false.
 -compile(warn_missing_spec_all).
 
--export([bootstrap_debuggee/2]).
+-export([bootstrap_debuggee/3]).
 
 -record('__edb_bootstrap_failure__', {
     reason :: edb:bootstrap_failure()
@@ -33,11 +33,12 @@
 -define(MODULES_USED_FOR_META_DEBUGGING, []). % @oss-only
 %% erlfmt:ignore-end
 
--spec bootstrap_debuggee(Debugger, PauseAction) -> ok | {error, Reason} when
+-spec bootstrap_debuggee(Debugger, Subscribers, PauseAction) -> ok | {error, Reason} when
     Debugger :: node(),
+    Subscribers :: #{edb_events:subscription() => pid()},
     PauseAction :: pause | keep_running,
     Reason :: edb:bootstrap_failure().
-bootstrap_debuggee(Debugger, PauseAction) ->
+bootstrap_debuggee(Debugger, Subscribers, PauseAction) ->
     case is_edb_server_running() of
         true ->
             ok;
@@ -46,6 +47,7 @@ bootstrap_debuggee(Debugger, PauseAction) ->
                 check_vm_support(),
                 inject_edb_modules(Debugger),
                 start_edb_server(),
+                subscribe_to_events(Subscribers),
                 case PauseAction of
                     keep_running ->
                         ok;
@@ -128,6 +130,14 @@ start_edb_server() ->
         {error, unsupported} ->
             bootstrap_failure({no_debugger_support, not_enabled})
     end.
+
+%% --------------------------------------------------------------------
+%% Subscribe to events
+%% --------------------------------------------------------------------
+-spec subscribe_to_events(Subscribers) -> ok when
+    Subscribers :: #{edb_events:subscription() => pid()}.
+subscribe_to_events(Subscribers) ->
+    edb_server:call(node(), {subscribe_to_events, Subscribers}).
 
 %% --------------------------------------------------------------------
 %% Error handling
