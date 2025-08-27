@@ -198,7 +198,7 @@ remove_module_substitute(SubstituteModule) ->
 %%--------------------------------------------------------------------
 
 -type call_request() ::
-    {subscribe_to_events, pid()}
+    {subscribe_to_events, pid() | #{edb_events:subscription() => pid()}}
     | {remove_event_subscription, edb:event_subscription()}
     | {send_sync_event, edb:event_subscription()}
     | {add_breakpoint, module(), line()}
@@ -345,8 +345,8 @@ handle_call(Request, From, State) ->
     Request :: call_request(),
     From :: gen_server:from(),
     Result :: {reply, Reply :: term(), NewState :: state()} | {noreply, NewState :: state()}.
-dispatch_call({subscribe_to_events, Pid}, _From, State0) ->
-    subscribe_to_events_impl(Pid, State0);
+dispatch_call({subscribe_to_events, PidOrSubscribers}, _From, State0) ->
+    subscribe_to_events_impl(PidOrSubscribers, State0);
 dispatch_call({remove_event_subscription, Subscription}, _From, State0) ->
     remove_event_subscription_impl(Subscription, State0);
 dispatch_call({send_sync_event, Subscription}, _From, State0) ->
@@ -474,16 +474,27 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
 %% handle_call implementations
 %%--------------------------------------------------------------------
 
--spec subscribe_to_events_impl(Pid, State0) -> {reply, {ok, Subscription}, State1} when
-    Pid :: pid(),
+-spec subscribe_to_events_impl(PidOrSubscribers, State0) -> {reply, ok | {ok, Subscription}, State1} when
+    PidOrSubscribers :: pid() | #{edb_events:subscription() => pid()},
     State0 :: state(),
     Subscription :: edb_events:subscription(),
     State1 :: state().
-subscribe_to_events_impl(Pid, State0 = #state{event_subscribers = Subs0}) ->
+subscribe_to_events_impl(Pid, State0 = #state{event_subscribers = Subs0}) when is_pid(Pid) ->
     MonitorRef = erlang:monitor(process, Pid),
     {ok, {Subscription, Subs1}} = edb_events:subscribe(Pid, MonitorRef, Subs0),
     State1 = State0#state{event_subscribers = Subs1},
-    {reply, {ok, Subscription}, State1}.
+    {reply, {ok, Subscription}, State1};
+subscribe_to_events_impl(Subscribers, State0 = #state{event_subscribers = Subs0}) when is_map(Subscribers) ->
+    SubscribersWithRefs = [{Sub, Pid, erlang:monitor(process, Pid)} || Sub := Pid <- Subscribers],
+    {ok, Subs1} = lists:foldl(
+        fun({Sub, Pid, Ref}, {ok, SubsN}) ->
+            edb_events:subscribe(Sub, Pid, Ref, SubsN)
+        end,
+        {ok, Subs0},
+        SubscribersWithRefs
+    ),
+    State1 = State0#state{event_subscribers = Subs1},
+    {reply, ok, State1}.
 
 -spec remove_event_subscription_impl(Subscription, State0) -> {reply, ok, State1} when
     Subscription :: edb_events:subscription(),
