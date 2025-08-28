@@ -285,7 +285,7 @@ Options:
 """.
 -spec reverse_attach(Opts) -> {ok, Info} | {error, Reason} when
     Opts :: #{name_domain := longnames | shortnames, timeout => timeout()},
-    Info :: #{erl_code_to_inject := binary(), notification_ref := reference()},
+    Info :: #{erl_code_to_inject := binary(), reverse_attach_ref := reference()},
     Reason :: attachment_in_progress.
 reverse_attach(AttachOpts0) ->
     {NameDomain, AttachOpts1} = take_arg(name_domain, AttachOpts0, #{parse => fun parse_name_domain/1}),
@@ -303,12 +303,12 @@ reverse_attach(AttachOpts0) ->
     end,
 
     {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(),
-    NotificationRef = erlang:make_ref(),
-    case edb_node_monitor:expect_reverse_attach(GatekeeperId, NotificationRef, ReverseAttachTimeout) of
+    ReverseAttachRef = erlang:make_ref(),
+    case edb_node_monitor:expect_reverse_attach(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout) of
         ok ->
             {ok, #{
                 erl_code_to_inject => ReverseAttachCode,
-                notification_ref => NotificationRef
+                reverse_attach_ref => ReverseAttachRef
             }};
         Error = {error, _} ->
             Error

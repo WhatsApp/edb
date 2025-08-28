@@ -115,7 +115,7 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
     AttachTimeoutInSecs = maps:get(timeout, Config, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
 
     {ok, Subscription} = edb:subscribe(),
-    #{erl_code_to_inject := CodeToInject, notification_ref := NotificationRef} =
+    #{erl_code_to_inject := CodeToInject, reverse_attach_ref := ReverseAttachRef} =
         case edb:reverse_attach(#{name_domain => NameDomain, timeout => AttachTimeoutInSecs * 1000}) of
             {ok, ReverseAttachResult} -> ReverseAttachResult;
             {error, attachment_in_progress} -> throw(attachment_in_progress)
@@ -134,7 +134,7 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
         actions => [{reverse_request, RunInTerminalRequest}],
         new_state => State0#{
             state => launching,
-            notification_ref => NotificationRef,
+            reverse_attach_ref => ReverseAttachRef,
             cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
             subscription => Subscription
         },

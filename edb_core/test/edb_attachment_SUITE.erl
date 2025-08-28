@@ -427,7 +427,7 @@ test_raises_error_until_reverse_attached(Config) ->
         ?assertError(not_attached, edb:processes([])),
 
         % We are now waiting for a new node to attach
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -453,7 +453,7 @@ test_raises_error_until_reverse_attached(Config) ->
 test_reverse_attaching_picks_the_right_node(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -477,7 +477,7 @@ test_reverse_attaching_picks_the_right_node(Config) ->
 test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -505,7 +505,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
 test_can_reverse_attach_to_node_with_no_dist(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -532,7 +532,7 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
 test_injectable_code_can_be_composed(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
         % We are waiting for a node to attach
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -579,7 +579,7 @@ test_reverse_attaching_blocks_further_attachs(Config) ->
 
 test_reverse_attach_fails_after_timeout(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
-        {ok, #{notification_ref := Ref, erl_code_to_inject := _}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := _}} = edb:reverse_attach(#{
             name_domain => shortnames,
             timeout => 500
         }),
@@ -595,7 +595,7 @@ test_reverse_attach_fails_after_timeout(Config) ->
 
 test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
     edb_test_support:on_debugger_node(Config, fun() ->
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 
@@ -851,7 +851,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
         {ok, SyncRef} = edb_test_support:event_collector_send_sync(),
 
         % Reverse-attach to a different node
-        {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
 

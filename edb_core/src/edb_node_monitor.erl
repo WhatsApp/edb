@@ -55,7 +55,7 @@
         state := attachment_in_progress,
         type := reverse_attach,
         gatekeeper := edb_gatekeeper:id(),
-        notification_ref => reference()
+        reverse_attach_ref => reference()
     }
     | #{
         state := up,
@@ -126,13 +126,13 @@ attached_node() ->
             error(not_attached)
     end.
 
--spec expect_reverse_attach(Id, NotificationRef, Timeout) -> ok | {error, Reason} when
+-spec expect_reverse_attach(Id, ReverseAttachRef, Timeout) -> ok | {error, Reason} when
     Id :: edb_gatekeeper:id(),
-    NotificationRef :: reference(),
+    ReverseAttachRef :: reference(),
     Timeout :: timeout(),
     Reason :: attachment_in_progress.
-expect_reverse_attach(Id, NotificationRef, Timeout) ->
-    call({expect_reverse_attach, Id, NotificationRef, Timeout}).
+expect_reverse_attach(Id, ReverseAttachRef, Timeout) ->
+    call({expect_reverse_attach, Id, ReverseAttachRef, Timeout}).
 
 -spec reverse_attach_notification(Id, Node) -> ok | {error, edb:bootstrap_failure()} when
     Id :: edb_gatekeeper:id(),
@@ -241,8 +241,8 @@ handle_event(cast, {try_attach, Node}, State0, Data0) ->
     try_attach_impl(Node, State0, Data0);
 handle_event({call, From}, {attach, Node, AttachTimeout}, State, Data) ->
     attach_impl(Node, AttachTimeout, From, State, Data);
-handle_event({call, From}, {expect_reverse_attach, GatekeeperId, NotificationRef, ReverseAttachTimeout}, State, Data) ->
-    expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, State, Data);
+handle_event({call, From}, {expect_reverse_attach, GatekeeperId, ReverseAttachRef, ReverseAttachTimeout}, State, Data) ->
+    expect_reverse_attach_impl(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, From, State, Data);
 handle_event(cast, {reverse_attach_notification, GatekeeperId, Node}, State, Data) ->
     reverse_attach_notification_impl(GatekeeperId, Node, State, Data);
 handle_event({call, From}, detach, State, Data) ->
@@ -268,11 +268,11 @@ handle_event(info, {'DOWN', MonitorRef, process, _Pid, _Info}, _, Data0) ->
 handle_event(
     state_timeout,
     waiting_for_reverse_attach,
-    _State0 = #{state := attachment_in_progress, type := reverse_attach, notification_ref := NotificationRef},
+    _State0 = #{state := attachment_in_progress, type := reverse_attach, reverse_attach_ref := ReverseAttachRef},
     Data0
 ) ->
     Subs = maps:get(event_subscribers, Data0),
-    ok = edb_events:broadcast({reverse_attach, NotificationRef, timeout}, Subs),
+    ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, timeout}, Subs),
     State1 = #{state => not_attached},
     {next_state, State1, Data0};
 handle_event(info, _, _State, _Data) ->
@@ -342,23 +342,23 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
             end
     end.
 
--spec expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, state(), data()) ->
+-spec expect_reverse_attach_impl(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, From, state(), data()) ->
     reply(ok | {error, Reason})
 when
     GatekeeperId :: edb_gatekeeper:id(),
-    NotificationRef :: reference(),
+    ReverseAttachRef :: reference(),
     ReverseAttachTimeout :: timeout(),
     From :: gen_statem:from(),
     Reason :: attachment_in_progress.
 expect_reverse_attach_impl(_, _, _, From, #{state := attachment_in_progress}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
-expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, State0, Data0) ->
+expect_reverse_attach_impl(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, From, State0, Data0) ->
     {_, _, Data1} = detach_impl_1(State0, Data0),
     State1 = #{
         state => attachment_in_progress,
         type => reverse_attach,
         gatekeeper => GatekeeperId,
-        notification_ref => NotificationRef
+        reverse_attach_ref => ReverseAttachRef
     },
     {next_state, State1, Data1, [
         {reply, From, ok},
@@ -375,19 +375,19 @@ reverse_attach_notification_impl(
     Data0
 ) ->
     #{event_subscribers := Subs} = Data0,
-    #{notification_ref := NotificationRef} = State0,
+    #{reverse_attach_ref := ReverseAttachRef} = State0,
     Subscribers = edb_events:subscribers(Subs),
     case bootstrap_edb(Node, Subscribers, pause) of
         {error, BootstrapFailure} ->
             State1 = #{state => not_attached},
             ok = edb_events:broadcast(
-                {reverse_attach, NotificationRef, {error, Node, {bootstrap_failed, BootstrapFailure}}}, Subs
+                {reverse_attach, ReverseAttachRef, {error, Node, {bootstrap_failed, BootstrapFailure}}}, Subs
             ),
             {next_state, State1, Data0};
         ok ->
             State1 = #{state => up, node => Node},
             persistent_term:put({?MODULE, attached_node}, Node),
-            ok = edb_events:broadcast({reverse_attach, NotificationRef, {attached, Node}}, Subs),
+            ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, {attached, Node}}, Subs),
             {next_state, State1, Data0}
     end;
 reverse_attach_notification_impl(_, _, _, _) ->

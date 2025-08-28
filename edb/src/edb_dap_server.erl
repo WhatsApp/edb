@@ -75,7 +75,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         state := launching,
         client_info := client_info(),
         shell_process_id => number(),
-        notification_ref := reference(),
+        reverse_attach_ref := reference(),
         cwd := binary(),
         subscription := edb:event_subscription()
     }

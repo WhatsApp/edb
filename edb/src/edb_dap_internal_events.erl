@@ -47,7 +47,7 @@ Handle events coming from the debugger.
     EdbEvent :: edb:event(),
     State :: edb_dap_server:state(),
     Reaction :: reaction().
-handle_edb_event({reverse_attach, Ref, Result}, #{notification_ref := Ref} = State) ->
+handle_edb_event({reverse_attach, Ref, Result}, #{reverse_attach_ref := Ref} = State) ->
     reverse_attach_impl(Result, State);
 handle_edb_event({paused, PausedEvent}, State) ->
     paused_impl(State, PausedEvent);
@@ -115,7 +115,7 @@ paused_impl(#{state := S}, Event) ->
     State :: edb_dap_server:state(),
     Reaction :: reaction().
 reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
-    State1 = maps:without([notification_ref, shell_process_id], State0),
+    State1 = maps:without([reverse_attach_ref, shell_process_id], State0),
 
     % elp:ignore W0014 -- debugger relies on dist
     ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
