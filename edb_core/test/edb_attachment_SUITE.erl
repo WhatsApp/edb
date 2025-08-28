@@ -896,7 +896,7 @@ wait_reverse_attach_event(Subscription, Ref) ->
     receive
         {edb_event, Subscription, {reverse_attach, Ref, {attached, _Node}}} ->
             ok;
-        {edb_event, Subscription, {reverse_attach, Ref, timeout}} ->
+        {edb_event, Subscription, {reverse_attach_timeout, Ref}} ->
             timeout;
         {edb_event, Subscription, {reverse_attach, Ref, {error, Node, {bootstrap_failed, Reason}}}} ->
             {error, Node, {bootstrap_failed, Reason}};

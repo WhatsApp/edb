@@ -49,6 +49,8 @@ Handle events coming from the debugger.
     Reaction :: reaction().
 handle_edb_event({reverse_attach, Ref, Result}, #{reverse_attach_ref := Ref} = State) ->
     reverse_attach_impl(Result, State);
+handle_edb_event({reverse_attach_timeout, _Ref}, State) ->
+    reverse_attach_timeout_impl(State);
 handle_edb_event({paused, PausedEvent}, State) ->
     paused_impl(State, PausedEvent);
 handle_edb_event({nodedown, Node, Reason}, State) ->
@@ -130,12 +132,6 @@ reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
             node => Node
         }
     };
-reverse_attach_impl(timeout, #{state := launching}) ->
-    #{
-        new_state => #{state => terminating},
-        actions => [{event, edb_dap_event:terminated()}],
-        error => {user_error, ?ERROR_TIMED_OUT, ~"Timed out waiting for node to be up"}
-    };
 reverse_attach_impl({error, Node, {bootstrap_failed, BootstrapFailure}}, #{state := launching}) ->
     #{
         new_state => #{state => terminating},
@@ -146,4 +142,15 @@ reverse_attach_impl({error, Node, {bootstrap_failed, BootstrapFailure}}, #{state
     };
 reverse_attach_impl(Event, #{state := S}) ->
     ?LOG_WARNING("Unexpected reverse_attach event: ~p when ~p", [Event, S]),
+    #{}.
+
+-spec reverse_attach_timeout_impl(edb_dap_server:state()) -> reaction().
+reverse_attach_timeout_impl(#{state := launching}) ->
+    #{
+        new_state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}],
+        error => {user_error, ?ERROR_TIMED_OUT, ~"Timed out waiting for node to be up"}
+    };
+reverse_attach_timeout_impl(#{state := S}) ->
+    ?LOG_WARNING("Unexpected reverse_attach_timeout event when ~p", [S]),
     #{}.
