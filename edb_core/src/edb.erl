@@ -177,7 +177,8 @@ A breakpoint may not be added for various reasons:
     | {terminated, Reason :: term()}
     | unsubscribed
     | {nodedown, node(), Reason :: term()}
-    | {reverse_attach, reference(), reverse_attachment_event()}.
+    | {reverse_attach, reference(), reverse_attachment_event()}
+    | {reverse_attach_timeout, reference()}.
 -type resumed_event() ::
     {continue, all}
     | {excluded, #{pid() => []}}
@@ -188,7 +189,6 @@ A breakpoint may not be added for various reasons:
     | {step, pid()}.
 -type reverse_attachment_event() ::
     {attached, node()}
-    | timeout
     | {error, node(), {bootstrap_failed, bootstrap_failure()}}.
 
 %% -------------------------------------------------------------------
@@ -265,9 +265,9 @@ immediately paused.
 Subscribers will receive a single event of the form `{edb_event, Subscription, Event}` where `Event` is:
 
 - `{reverse_attach, Ref, {attached, Node}}`: The reverse attachment succeeded, the node is now paused.
-- `{reverse_attach, Ref, timeout}`: The reverse attachment timed out; it will now never happen.
 - `{reverse_attach, Ref, {error, Node, {bootstrap_failed, BootstrapFailure}}}`: We tried to bootstrap
   edb on the node but failed.
+- `{reverse_attach_timeout, Ref}`: The reverse attachment timed out; it will now never happen.
 
 The events include a `Ref` that should match the reference that was returned by this call.
 

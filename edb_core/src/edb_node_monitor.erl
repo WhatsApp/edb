@@ -272,7 +272,7 @@ handle_event(
     Data0
 ) ->
     Subs = maps:get(event_subscribers, Data0),
-    ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, timeout}, Subs),
+    ok = edb_events:broadcast({reverse_attach_timeout, ReverseAttachRef}, Subs),
     State1 = #{state => not_attached},
     {next_state, State1, Data0};
 handle_event(info, _, _State, _Data) ->
