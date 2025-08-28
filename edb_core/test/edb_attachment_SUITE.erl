@@ -431,11 +431,14 @@ test_raises_error_until_reverse_attached(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % Launch new node, injecting special code to reverse-attach
         {ok, #{node := Node}} = edb_test_support:start_peer_node(Config, #{extra_args => ["-eval", InjectedCode]}),
 
         % We eventually attach, and no longer error
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
         ?assertEqual(Node, edb:attached_node()),
         ?assertMatch(#{}, edb:processes([])),
 
@@ -454,6 +457,9 @@ test_reverse_attaching_picks_the_right_node(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % Launch two nodes, only of the them contains the injected code
         {ok, #{node := NodeWithInjectedCode}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode]
@@ -463,7 +469,7 @@ test_reverse_attaching_picks_the_right_node(Config) ->
         ?assertNotEqual(NodeWithInjectedCode, TheOtherNode),
 
         % We eventually attach to the node with injected code
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
         ?assertEqual(NodeWithInjectedCode, edb:attached_node()),
         ok
     end).
@@ -475,6 +481,9 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % Launch new node using -sname undefined, injecting special code to reverse-attach
         {ok, #{peer := Peer, node := undefined}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode],
@@ -482,7 +491,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
         }),
 
         % We eventually attach, and no longer error
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
 
         ?assertMatch(#{}, edb:processes([])),
 
@@ -500,13 +509,16 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % Launch new peer with no distribution, special code to inject
         {ok, #{peer := Peer}} = edb_test_support:start_peer_no_dist(Config, #{
             extra_args => ["-eval", InjectedCode]
         }),
 
         % We eventually attach, and no longer error
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
 
         ?assertMatch(#{}, edb:processes([])),
 
@@ -524,6 +536,9 @@ test_injectable_code_can_be_composed(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % We create more complex code
         ComplexInjectedCode = list_to_binary(
             io_lib:format("~s, register(foo, self()), timer:sleep(infinity)", [InjectedCode])
@@ -535,7 +550,7 @@ test_injectable_code_can_be_composed(Config) ->
         }),
 
         % We eventually attach
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
         ?assertEqual(Node, edb:attached_node()),
 
         % The rest of the code was also executed
@@ -569,8 +584,11 @@ test_reverse_attach_fails_after_timeout(Config) ->
             timeout => 500
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % No node is started, so waiting fails after 0.5s
-        timeout = wait_reverse_attach_notification(Ref),
+        timeout = wait_reverse_attach_event(Subscription, Ref),
 
         ok
     end).
@@ -581,15 +599,18 @@ test_reverse_attach_fails_if_debuggee_not_in_debugging_mode(Config) ->
             name_domain => shortnames
         }),
 
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         % start a node with debugging mode off
-        {ok, #{}} = edb_test_support:start_peer_node(Config, #{
+        {ok, #{node := Node}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode],
             enable_debugging_mode => false
         }),
 
         ?assertEqual(
-            {error, {bootstrap_failed, {no_debugger_support, not_enabled}}},
-            wait_reverse_attach_notification(Ref)
+            {error, Node, {bootstrap_failed, {no_debugger_support, not_enabled}}},
+            wait_reverse_attach_event(Subscription, Ref)
         ),
 
         ok
@@ -833,10 +854,14 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
         {ok, #{notification_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
             name_domain => shortnames
         }),
+
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
         {ok, #{node := Node2}} = edb_test_support:start_peer_node(Config, #{
             extra_args => ["-eval", InjectedCode]
         }),
-        ok = wait_reverse_attach_notification(Ref),
+        ok = wait_reverse_attach_event(Subscription, Ref),
         ?assertEqual(edb:attached_node(), Node2),
 
         ?assertEqual(
@@ -865,13 +890,17 @@ start_distribution(NameDomain) ->
 stop_distribution() ->
     ok = net_kernel:stop().
 
--spec wait_reverse_attach_notification(NotificationRef :: reference()) ->
-    ok | timeout | {error, {bootstrap_failed, edb:bootstrap_failure()}}.
-wait_reverse_attach_notification(NotificationRef) ->
+-spec wait_reverse_attach_event(Subscription :: edb:event_subscription(), Ref :: reference()) ->
+    ok | timeout | {error, node(), {bootstrap_failed, edb:bootstrap_failure()}}.
+wait_reverse_attach_event(Subscription, Ref) ->
     receive
-        {NotificationRef, ok} -> ok;
-        {NotificationRef, timeout} -> timeout;
-        {NotificationRef, {error, {bootstrap_failed, Reason}}} -> {error, {bootstrap_failed, Reason}};
-        {NotificationRef, Unexpected} -> error({unexpected_notification, Unexpected})
-    after 2_000 -> error(timeout_waiting_for_notification)
+        {edb_event, Subscription, {reverse_attach, Ref, {attached, _Node}}} ->
+            ok;
+        {edb_event, Subscription, {reverse_attach, Ref, timeout}} ->
+            timeout;
+        {edb_event, Subscription, {reverse_attach, Ref, {error, Node, {bootstrap_failed, Reason}}}} ->
+            {error, Node, {bootstrap_failed, Reason}};
+        {edb_event, Subscription, {reverse_attach, Ref, Unexpected}} ->
+            error({unexpected_reverse_attach, Unexpected})
+    after 2_000 -> error(timeout_waiting_for_reverse_attach_event)
     end.

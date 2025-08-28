@@ -23,7 +23,6 @@ Handle events coming from the debugger.
 """.
 -compile(warn_missing_spec_all).
 
--export([handle_reverse_attach_result/2]).
 -export([handle_edb_event/2]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -40,52 +39,16 @@ Handle events coming from the debugger.
 }.
 -export_type([reaction/0]).
 
--type reverse_attach_result() :: ok | timeout | {error, {bootstrap_failed, edb:bootstrap_failure()}}.
--export_type([reverse_attach_result/0]).
-
 %%%---------------------------------------------------------------------------------
 %%% Public API
 %%%---------------------------------------------------------------------------------
-
--spec handle_reverse_attach_result(Result, State) -> Reaction when
-    Result :: reverse_attach_result(),
-    State :: edb_dap_server:state(),
-    Reaction :: reaction().
-handle_reverse_attach_result(ok, State0 = #{state := launching}) ->
-    State1 = maps:without([notification_ref, shell_process_id], State0),
-
-    Node = edb:attached_node(),
-    % elp:ignore W0014 -- debugger relies on dist
-    ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
-
-    AttachType0 = maps:with([shell_process_id], State0),
-    AttachType1 = AttachType0#{request => launch, process_id => ProcessId},
-    #{
-        actions => [{event, edb_dap_event:initialized()}],
-        new_state => State1#{
-            state => configuring,
-            type => AttachType1,
-            node => Node
-        }
-    };
-handle_reverse_attach_result(timeout, #{state := launching}) ->
-    #{
-        new_state => #{state => terminating},
-        actions => [{event, edb_dap_event:terminated()}],
-        error => {user_error, ?ERROR_TIMED_OUT, ~"Timed out waiting for node to be up"}
-    };
-handle_reverse_attach_result({error, {bootstrap_failed, BootstrapFailure}}, #{state := launching}) ->
-    #{
-        new_state => #{state => terminating},
-        actions => [{event, edb_dap_event:terminated()}],
-        error =>
-            {user_error, ?ERROR_NOT_SUPPORTED, io_lib:format("EDB bootstrap failed on node: ~p", [BootstrapFailure])}
-    }.
 
 -spec handle_edb_event(EdbEvent, State) -> Reaction when
     EdbEvent :: edb:event(),
     State :: edb_dap_server:state(),
     Reaction :: reaction().
+handle_edb_event({reverse_attach, Ref, Result}, #{notification_ref := Ref} = State) ->
+    reverse_attach_impl(Result, State);
 handle_edb_event({paused, PausedEvent}, State) ->
     paused_impl(State, PausedEvent);
 handle_edb_event({nodedown, Node, Reason}, State) ->
@@ -145,4 +108,42 @@ paused_impl(#{state := attached}, pause) ->
     #{actions => [{event, StoppedEvent}]};
 paused_impl(#{state := S}, Event) ->
     ?LOG_WARNING("Skipping paused event: ~p when ~p", [Event, S]),
+    #{}.
+
+-spec reverse_attach_impl(Result, State) -> Reaction when
+    Result :: edb:reverse_attachment_event(),
+    State :: edb_dap_server:state(),
+    Reaction :: reaction().
+reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
+    State1 = maps:without([notification_ref, shell_process_id], State0),
+
+    % elp:ignore W0014 -- debugger relies on dist
+    ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
+
+    AttachType0 = maps:with([shell_process_id], State0),
+    AttachType1 = AttachType0#{request => launch, process_id => ProcessId},
+    #{
+        actions => [{event, edb_dap_event:initialized()}],
+        new_state => State1#{
+            state => configuring,
+            type => AttachType1,
+            node => Node
+        }
+    };
+reverse_attach_impl(timeout, #{state := launching}) ->
+    #{
+        new_state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}],
+        error => {user_error, ?ERROR_TIMED_OUT, ~"Timed out waiting for node to be up"}
+    };
+reverse_attach_impl({error, Node, {bootstrap_failed, BootstrapFailure}}, #{state := launching}) ->
+    #{
+        new_state => #{state => terminating},
+        actions => [{event, edb_dap_event:terminated()}],
+        error =>
+            {user_error, ?ERROR_NOT_SUPPORTED,
+                io_lib:format("EDB bootstrap failed on node ~p: ~p", [Node, BootstrapFailure])}
+    };
+reverse_attach_impl(Event, #{state := S}) ->
+    ?LOG_WARNING("Unexpected reverse_attach event: ~p when ~p", [Event, S]),
     #{}.

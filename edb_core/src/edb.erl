@@ -171,7 +171,7 @@ A breakpoint may not be added for various reasons:
     | {killed, Reason :: term()}.
 
 -export_type([event_envelope/1, event_subscription/0]).
--export_type([event/0, resumed_event/0, paused_event/0]).
+-export_type([event/0, resumed_event/0, paused_event/0, reverse_attachment_event/0]).
 -type event_envelope(Event) :: {edb_event, event_subscription(), Event}.
 -type event_subscription() :: edb_events:subscription().
 -type event() ::
@@ -180,7 +180,8 @@ A breakpoint may not be added for various reasons:
     | {sync, reference()}
     | {terminated, Reason :: term()}
     | unsubscribed
-    | {nodedown, node(), Reason :: term()}.
+    | {nodedown, node(), Reason :: term()}
+    | {reverse_attach, reference(), reverse_attachment_event()}.
 -type resumed_event() ::
     {continue, all}
     | {excluded, #{pid() => []}}
@@ -189,6 +190,10 @@ A breakpoint may not be added for various reasons:
     {breakpoint, pid(), mfa(), {line, line()}}
     | pause
     | {step, pid()}.
+-type reverse_attachment_event() ::
+    {attached, node()}
+    | timeout
+    | {error, node(), {bootstrap_failed, bootstrap_failure()}}.
 
 %% -------------------------------------------------------------------
 %% External exports
@@ -255,19 +260,20 @@ attach(AttachOpts0) ->
 Prepare for attachment by a node that doesn't exist yet.
 
 The caller is expected to start a new node, and ensure it executes the
-code returned by this call. The caller can then expect to receive a message tagged
-with the reference in `notification_ref`, containing the result of the reverse attachment.
+code returned by this call. The caller must have subscribed to events using `subscribe/0`
+to receive notifications about the reverse attachment process.
 
 When the node executes the injected code, it will be forced to become attached, and
 immediately paused.
 
-As long as `timeout` is not `infinity`, the caller is guaranteed to eventually receive
-a message of the form:
+Subscribers will receive a single event of the form `{edb_event, Subscription, Event}` where `Event` is:
 
-- `{NotificationRef, ok}`: The reverse attachment succeeded, the node is now paused.
-- `{NotificationRef, timeout}`: The reverse attachment timed out; it will now never happen.
-- `{NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}}`: We tried to bootstrap
-edb on the node but failed
+- `{reverse_attach, Ref, {attached, Node}}`: The reverse attachment succeeded, the node is now paused.
+- `{reverse_attach, Ref, timeout}`: The reverse attachment timed out; it will now never happen.
+- `{reverse_attach, Ref, {error, Node, {bootstrap_failed, BootstrapFailure}}}`: We tried to bootstrap
+  edb on the node but failed.
+
+The events include a `Ref` that should match the reference that was returned by this call.
 
 This call may start distribution and set the node name.
 
