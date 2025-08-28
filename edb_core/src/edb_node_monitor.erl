@@ -437,12 +437,15 @@ subscribe_to_events_impl(Pid, From, State0, Data0) ->
     {Reply, State1, Data1} = call_edb_server({subscribe_to_events, Pid}, State0, Data0),
     Subs0 = maps:get(event_subscribers, Data1),
     MonitorRef = erlang:monitor(process, Pid),
-    case Reply of
-        not_attached ->
-            {ok, {Subscription, Subs1}} = edb_events:subscribe(Pid, MonitorRef, Subs0);
-        {reply, {ok, Subscription}} ->
-            {ok, Subs1} = edb_events:subscribe(Subscription, Pid, MonitorRef, Subs0)
-    end,
+    {Subscription, Subs1} =
+        case Reply of
+            not_attached ->
+                {ok, {NewSubscription, NewSubscribers}} = edb_events:subscribe(Pid, MonitorRef, Subs0),
+                {NewSubscription, NewSubscribers};
+            {reply, {ok, ExistingSubscription}} ->
+                {ok, NewSubscribers} = edb_events:subscribe(ExistingSubscription, Pid, MonitorRef, Subs0),
+                {ExistingSubscription, NewSubscribers}
+        end,
     Data2 = Data1#{event_subscribers := Subs1},
     {next_state, State1, Data2, {reply, From, {ok, Subscription}}}.
 
