@@ -55,8 +55,7 @@
         state := attachment_in_progress,
         type := reverse_attach,
         gatekeeper := edb_gatekeeper:id(),
-        notification_ref => reference(),
-        caller_pid := pid()
+        notification_ref => reference()
     }
     | #{
         state := up,
@@ -269,11 +268,11 @@ handle_event(info, {'DOWN', MonitorRef, process, _Pid, _Info}, _, Data0) ->
 handle_event(
     state_timeout,
     waiting_for_reverse_attach,
-    State0 = #{state := attachment_in_progress, type := reverse_attach},
+    _State0 = #{state := attachment_in_progress, type := reverse_attach, notification_ref := NotificationRef},
     Data0
 ) ->
-    #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
-    CallerPid ! {NotificationRef, timeout},
+    Subs = maps:get(event_subscribers, Data0),
+    ok = edb_events:broadcast({reverse_attach, NotificationRef, timeout}, Subs),
     State1 = #{state => not_attached},
     {next_state, State1, Data0};
 handle_event(info, _, _State, _Data) ->
@@ -355,13 +354,11 @@ expect_reverse_attach_impl(_, _, _, From, #{state := attachment_in_progress}, _)
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
 expect_reverse_attach_impl(GatekeeperId, NotificationRef, ReverseAttachTimeout, From, State0, Data0) ->
     {_, _, Data1} = detach_impl_1(State0, Data0),
-    {CallerPid, _Tag} = From,
     State1 = #{
         state => attachment_in_progress,
         type => reverse_attach,
         gatekeeper => GatekeeperId,
-        notification_ref => NotificationRef,
-        caller_pid => CallerPid
+        notification_ref => NotificationRef
     },
     {next_state, State1, Data1, [
         {reply, From, ok},
@@ -378,17 +375,19 @@ reverse_attach_notification_impl(
     Data0
 ) ->
     #{event_subscribers := Subs} = Data0,
-    #{notification_ref := NotificationRef, caller_pid := CallerPid} = State0,
+    #{notification_ref := NotificationRef} = State0,
     Subscribers = edb_events:subscribers(Subs),
     case bootstrap_edb(Node, Subscribers, pause) of
         {error, BootstrapFailure} ->
             State1 = #{state => not_attached},
-            CallerPid ! {NotificationRef, {error, {bootstrap_failed, BootstrapFailure}}},
+            ok = edb_events:broadcast(
+                {reverse_attach, NotificationRef, {error, Node, {bootstrap_failed, BootstrapFailure}}}, Subs
+            ),
             {next_state, State1, Data0};
         ok ->
             State1 = #{state => up, node => Node},
             persistent_term:put({?MODULE, attached_node}, Node),
-            CallerPid ! {NotificationRef, ok},
+            ok = edb_events:broadcast({reverse_attach, NotificationRef, {attached, Node}}, Subs),
             {next_state, State1, Data0}
     end;
 reverse_attach_notification_impl(_, _, _, _) ->

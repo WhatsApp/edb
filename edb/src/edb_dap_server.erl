@@ -76,7 +76,8 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         client_info := client_info(),
         shell_process_id => number(),
         notification_ref := reference(),
-        cwd := binary()
+        cwd := binary(),
+        subscription := edb:event_subscription()
     }
     | #{
         % We are attached to the debuggee node, have paused it
@@ -87,7 +88,8 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         type := attach_type(),
         client_info := client_info(),
         node := node(),
-        cwd := binary()
+        cwd := binary(),
+        subscription := edb:event_subscription()
     }
     | #{
         % We are attached to the debuggee node, and debugging is in progress
@@ -207,16 +209,7 @@ handle_cast(terminate, State) ->
     {stop, normal, State}.
 
 -spec handle_info(Event, state()) -> {noreply, state()} when
-    Event :: {reference(), edb_dap_internal_events:reverse_attach_result()} | edb:event_envelope(edb:event()).
-handle_info(
-    {NotificationRef, ReverseAttachResult}, State0 = #{state := launching, notification_ref := NotificationRef}
-) ->
-    ?LOG_DEBUG("Handle reverse attach result: ~p", [ReverseAttachResult]),
-    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(
-        fun edb_dap_internal_events:handle_reverse_attach_result/2, ReverseAttachResult, State0
-    ),
-    State1 = react(Reaction, State0),
-    {noreply, State1};
+    Event :: edb:event_envelope(edb:event()).
 handle_info(Event = {edb_event, _, _}, State) ->
     handle_edb_event(Event, State);
 handle_info(Unexpected, State) ->

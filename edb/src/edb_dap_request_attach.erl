@@ -77,6 +77,7 @@ handle(State0 = #{state := initialized}, Args) ->
             Node = maps:get(node, Config),
             % elp:ignore W0014 -- debugger relies on dist
             ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
+            {ok, Subscription} = edb:subscribe(),
             State1 = State0#{
                 state => configuring,
                 type => #{
@@ -84,7 +85,8 @@ handle(State0 = #{state := initialized}, Args) ->
                     process_id => ProcessId
                 },
                 node => Node,
-                cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix)
+                cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
+                subscription => Subscription
             },
             #{
                 new_state => State1,
