@@ -101,7 +101,11 @@ decode_frames(Data) ->
 
 -spec decode_frames(binary(), [frame()]) -> {[frame()], binary()}.
 decode_frames(Data, Messages) ->
-    case binary:split(Data, <<"\r\n\r\n">>) of
+    Separator = case os:type() of
+        {win32, _} -> [<<"\r\n\r\n">>, <<"\n\n">>];
+        _ -> <<"\r\n\r\n">>
+    end,
+    case binary:split(Data, Separator) of
         [<<"Content-Length: ", BinLength/binary>>, Rest] when is_binary(Rest) ->
             Length = binary_to_integer(BinLength),
             case byte_size(Rest) < Length of
