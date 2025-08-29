@@ -120,6 +120,14 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
     {ok, [#{arguments := Actual}]} =
         edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
 
+    OLD_ERL_AFLAGS = list_to_binary(
+        % elp:ignore WA014 (no_os_get_env) test parametrisation
+        case os:getenv("ERL_AFLAGS", "") of
+            "" -> "";
+            Flags -> " " ++ Flags
+        end
+    ),
+
     ?assertMatch(
         #{
             kind := ~"external",
@@ -131,7 +139,7 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
                 'ERL_ZFLAGS' := null,
 
                 % ERL_AFLAGS is PATCHED
-                'ERL_AFLAGS' := ~"+D",
+                'ERL_AFLAGS' := <<"+D", OLD_ERL_AFLAGS/binary>>,
 
                 % Added by DAP server
                 'EDB_DAP_DEBUGGEE_INIT' := _
