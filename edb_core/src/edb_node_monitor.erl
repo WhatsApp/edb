@@ -257,17 +257,12 @@ handle_event({call, From}, {attach, Node, AttachTimeout}, State, Data) ->
     attach_impl(Node, AttachTimeout, From, State, Data);
 handle_event(
     {call, From},
-    {expect_reverse_attach, #{
-        gatekeeper_id := GatekeeperId,
-        reverse_attach_ref := ReverseAttachRef,
-        timeout := ReverseAttachTimeout,
-        multi_node_enabled := MultiNodeEnabled
-    }},
+    {expect_reverse_attach, ExpectReverseAttachArgs},
     State,
     Data
 ) ->
     expect_reverse_attach_impl(
-        GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, MultiNodeEnabled, From, State, Data
+        ExpectReverseAttachArgs, From, State, Data
     );
 handle_event(cast, {reverse_attach_notification, GatekeeperId, Node}, State, Data) ->
     reverse_attach_notification_impl(GatekeeperId, Node, State, Data);
@@ -369,19 +364,26 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
     end.
 
 -spec expect_reverse_attach_impl(
-    GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, MultiNodeEnabled, From, state(), data()
+    ExpectReverseAttachArgs, From, state(), data()
 ) ->
     reply(ok | {error, Reason})
 when
-    GatekeeperId :: edb_gatekeeper:id(),
-    ReverseAttachRef :: reference(),
-    ReverseAttachTimeout :: timeout(),
-    MultiNodeEnabled :: boolean(),
+    ExpectReverseAttachArgs :: expect_reverse_attach_args(),
     From :: gen_statem:from(),
     Reason :: attachment_in_progress.
-expect_reverse_attach_impl(_, _, _, _, From, #{state := attachment_in_progress}, _) ->
+expect_reverse_attach_impl(_, From, #{state := attachment_in_progress}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
-expect_reverse_attach_impl(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, MultiNodeEnabled, From, State0, Data0) ->
+expect_reverse_attach_impl(
+    #{
+        gatekeeper_id := GatekeeperId,
+        reverse_attach_ref := ReverseAttachRef,
+        timeout := ReverseAttachTimeout,
+        multi_node_enabled := MultiNodeEnabled
+    },
+    From,
+    State0,
+    Data0
+) ->
     {_, _, Data1} = detach_impl_1(State0, Data0),
     State1 = #{
         state => attachment_in_progress,
