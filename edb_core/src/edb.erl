@@ -304,7 +304,9 @@ reverse_attach(AttachOpts0) ->
 
     {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(),
     ReverseAttachRef = erlang:make_ref(),
-    case edb_node_monitor:expect_reverse_attach(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout) of
+    case
+        edb_node_monitor:expect_reverse_attach(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, ReverseAttachCode)
+    of
         ok ->
             {ok, #{
                 erl_code_to_inject => ReverseAttachCode,

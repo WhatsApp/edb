@@ -22,7 +22,7 @@
 -moduledoc false.
 -compile(warn_missing_spec_all).
 
--export([bootstrap_debuggee/3]).
+-export([bootstrap_debuggee/4]).
 
 -record('__edb_bootstrap_failure__', {
     reason :: edb:bootstrap_failure()
@@ -33,12 +33,15 @@
 -define(MODULES_USED_FOR_META_DEBUGGING, []). % @oss-only
 %% erlfmt:ignore-end
 
--spec bootstrap_debuggee(Debugger, Subscribers, PauseAction) -> ok | {error, Reason} when
+-spec bootstrap_debuggee(Debugger, Subscribers, ReverseAttachCode, PauseAction) ->
+    ok | {error, Reason}
+when
     Debugger :: node(),
     Subscribers :: #{edb_events:subscription() => pid()},
+    ReverseAttachCode :: none | binary(),
     PauseAction :: pause | keep_running,
     Reason :: edb:bootstrap_failure().
-bootstrap_debuggee(Debugger, Subscribers, PauseAction) ->
+bootstrap_debuggee(Debugger, Subscribers, ReverseAttachCode, PauseAction) ->
     case is_edb_server_running() of
         true ->
             ok;
@@ -54,7 +57,8 @@ bootstrap_debuggee(Debugger, Subscribers, PauseAction) ->
                     pause ->
                         ok = edb_server:call(node(), {exclude_processes, [{proc, self()}]}),
                         ok = edb_server:call(node(), pause)
-                end
+                end,
+                prepare_environment_for_debugging_children_nodes(ReverseAttachCode)
             catch
                 throw:Failure = #'__edb_bootstrap_failure__'{} ->
                     {error, bootstrap_failure_reason(Failure)}
@@ -138,6 +142,39 @@ start_edb_server() ->
     Subscribers :: #{edb_events:subscription() => pid()}.
 subscribe_to_events(Subscribers) ->
     edb_server:call(node(), {subscribe_to_events, Subscribers}).
+
+%% --------------------------------------------------------------------
+%% Environment preparation for debugging children nodes
+%% --------------------------------------------------------------------
+-spec prepare_environment_for_debugging_children_nodes(ReverseAttachCode) -> ok when
+    ReverseAttachCode :: none | binary().
+prepare_environment_for_debugging_children_nodes(none) ->
+    ok;
+prepare_environment_for_debugging_children_nodes(ReverseAttachCode) ->
+    ReverseAttachCodeEscaped = escape_special_chars_for_erl_flags(ReverseAttachCode),
+    NewFlags = lists:flatten(io_lib:format("-eval ~s", [ReverseAttachCodeEscaped])),
+    CombinedFlags =
+        % @fb-only
+        case os:getenv("ERL_AFLAGS") of
+            false ->
+                NewFlags;
+            Value ->
+                % Only add NewFlags if ReverseAttachCode is not already present
+                case string:find(Value, ReverseAttachCodeEscaped) of
+                    nomatch -> NewFlags ++ " " ++ Value;
+                    _ -> Value
+                end
+        end,
+    true = os:putenv("ERL_AFLAGS", CombinedFlags),
+    ok.
+
+-spec escape_special_chars_for_erl_flags(CodeToInject :: binary()) -> iodata().
+escape_special_chars_for_erl_flags(CodeToInject) ->
+    % In ERL_FLAGS/ERL_AFLAGS, words are split by whitespace, subject to extra rules:
+    %   - Things between single/double quotes are considered a single word (without the quotes)
+    %   - The character that comes after a `\` is added verbatim to the current word.
+    % So we use `\` to escape whitespace and quotes
+    re:replace(CodeToInject, ~"[\s'\"]", ~"\\\\&", [global]).
 
 %% --------------------------------------------------------------------
 %% Error handling
