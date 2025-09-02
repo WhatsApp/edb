@@ -26,7 +26,7 @@
 %% Public API
 -export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
--export([expect_reverse_attach/3, reverse_attach_notification/2]).
+-export([expect_reverse_attach/4, reverse_attach_notification/2]).
 
 -export([subscribe/0, unsubscribe/1]).
 -export([safe_sname_hostname/0]).
@@ -56,6 +56,7 @@
         type := reverse_attach,
         gatekeeper := edb_gatekeeper:id(),
         reverse_attach_ref => reference(),
+        multi_node_reverse_attach_code => none | binary(),
         multi_node_enabled := boolean()
     }
     | #{
@@ -97,6 +98,7 @@
     gatekeeper_id := edb_gatekeeper:id(),
     reverse_attach_ref := reference(),
     timeout := timeout(),
+    reverse_attach_code := none | binary(),
     multi_node_enabled := boolean()
 }.
 
@@ -136,15 +138,20 @@ attached_node() ->
             error(not_attached)
     end.
 
--spec expect_reverse_attach(Id, ReverseAttachRef, Timeout) -> ok | {error, Reason} when
+-spec expect_reverse_attach(Id, ReverseAttachRef, Timeout, ReverseAttachCode) -> ok | {error, Reason} when
     Id :: edb_gatekeeper:id(),
     ReverseAttachRef :: reference(),
     Timeout :: timeout(),
+    ReverseAttachCode :: none | binary(),
     Reason :: attachment_in_progress.
-expect_reverse_attach(Id, ReverseAttachRef, Timeout) ->
+expect_reverse_attach(Id, ReverseAttachRef, Timeout, ReverseAttachCode) ->
     call(
         {expect_reverse_attach, #{
-            gatekeeper_id => Id, reverse_attach_ref => ReverseAttachRef, timeout => Timeout, multi_node_enabled => false
+            gatekeeper_id => Id,
+            reverse_attach_ref => ReverseAttachRef,
+            timeout => Timeout,
+            reverse_attach_code => ReverseAttachCode,
+            multi_node_enabled => false
         }}
     ).
 
@@ -378,6 +385,7 @@ expect_reverse_attach_impl(
         gatekeeper_id := GatekeeperId,
         reverse_attach_ref := ReverseAttachRef,
         timeout := ReverseAttachTimeout,
+        reverse_attach_code := ReverseAttachCode,
         multi_node_enabled := MultiNodeEnabled
     },
     From,
@@ -385,11 +393,17 @@ expect_reverse_attach_impl(
     Data0
 ) ->
     {_, _, Data1} = detach_impl_1(State0, Data0),
+    ReverseAttachCodeToUse =
+        case MultiNodeEnabled of
+            true -> ReverseAttachCode;
+            false -> none
+        end,
     State1 = #{
         state => attachment_in_progress,
         type => reverse_attach,
         gatekeeper => GatekeeperId,
         reverse_attach_ref => ReverseAttachRef,
+        multi_node_reverse_attach_code => ReverseAttachCodeToUse,
         multi_node_enabled => MultiNodeEnabled
     },
     {next_state, State1, Data1, [
@@ -410,9 +424,13 @@ reverse_attach_notification_impl(
     },
     Data0 = #{event_subscribers := Subs}
 ) ->
-    #{reverse_attach_ref := ReverseAttachRef, multi_node_enabled := MultiNodeEnabled} = State0,
+    #{
+        reverse_attach_ref := ReverseAttachRef,
+        multi_node_reverse_attach_code := ReverseAttachCode,
+        multi_node_enabled := MultiNodeEnabled
+    } = State0,
     Subscribers = edb_events:subscribers(Subs),
-    case bootstrap_edb(Node, Subscribers, pause) of
+    case bootstrap_edb(Node, Subscribers, ReverseAttachCode, pause) of
         {error, BootstrapFailure} ->
             State1 = #{state => not_attached},
             ok = edb_events:broadcast(
@@ -546,17 +564,22 @@ nodedown_impl(Node, Reason, State0, Data0) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
--spec bootstrap_edb(Node, Subscribers, PauseAction) -> ok | {error, edb:bootstrap_failure()} when
+-spec bootstrap_edb(Node, Subscribers, ReverseAttachCode, PauseAction) ->
+    ok | {error, edb:bootstrap_failure()}
+when
     Node :: node(),
     Subscribers :: #{edb_events:subscription() => pid()},
+    ReverseAttachCode :: none | binary(),
     PauseAction :: pause | keep_running.
-bootstrap_edb(Node, Subscribers, PauseAction) ->
+bootstrap_edb(Node, Subscribers, ReverseAttachCode, PauseAction) ->
     {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
     % elp:ignore W0014 - Debugging tool, expected.
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
             % elp:ignore W0014 - Debugging tool, expected.
-            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), Subscribers, PauseAction]);
+            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [
+                node(), Subscribers, ReverseAttachCode, PauseAction
+            ]);
         {error, badfile} ->
             {error, {module_injection_failed, edb_bootstrap, incompatible_beam}}
     end.
@@ -579,7 +602,7 @@ on_node_connected(State0 = #{state := attachment_in_progress, type := attach, no
     #{event_subscribers := Subs} = Data0,
     Subscribers = edb_events:subscribers(Subs),
     State2 =
-        try bootstrap_edb(Node, Subscribers, keep_running) of
+        try bootstrap_edb(Node, Subscribers, none, keep_running) of
             {error, BootstrapFailure} ->
                 State1 = #{state => not_attached},
                 gen_statem:reply(Caller, {error, {bootstrap_failed, BootstrapFailure}}),
