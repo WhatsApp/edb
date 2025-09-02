@@ -27,7 +27,7 @@
 -behavior(gen_server).
 
 %% Public API
--export([new/0]).
+-export([new/0, new/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -38,7 +38,7 @@
 -export_type([id/0]).
 -opaque id() :: integer().
 
--type state() :: id().
+-type state() :: #{id := id(), multi_node_enabled := boolean()}.
 
 %% -------------------------------------------------------------------
 %% Public API
@@ -46,14 +46,20 @@
 -spec new() -> {ok, Id, CallGatekeeperCode} when
     Id :: id(),
     CallGatekeeperCode :: binary().
-new() when node() /= 'nonode@nohost' ->
+-spec new(Options) -> {ok, Id, CallGatekeeperCode} when
+    Options :: #{multi_node_enabled => boolean()},
+    Id :: id(),
+    CallGatekeeperCode :: binary().
+new() ->
+    new(#{}).
+new(Options) when node() /= 'nonode@nohost' ->
     Id = erlang:unique_integer([positive]),
     GatekeeperName = binary_to_atom(list_to_binary(io_lib:format("edb-~p", [Id]))),
 
     {ok, _Pid} = gen_server:start(
         {local, GatekeeperName},
         ?MODULE,
-        Id,
+        Options#{id => Id},
         []
     ),
 
@@ -86,19 +92,27 @@ new() when node() /= 'nonode@nohost' ->
 %% gen_server callbacks
 %% -------------------------------------------------------------------
 
--spec init(Id) -> {ok, state()} when Id :: id().
-init(Id) ->
-    State0 = Id,
+-spec init(#{id := Id, multi_node_enabled => MultiNodeEnabled}) -> {ok, state()} when
+    Id :: id(),
+    MultiNodeEnabled :: boolean().
+init(Options = #{id := Id}) ->
+    MultiNodeEnabled = maps:get(multi_node_enabled, Options, false),
+    State0 = #{id => Id, multi_node_enabled => MultiNodeEnabled},
     {ok, State0}.
 
--spec handle_call([], From, state()) -> {stop, normal, state()} when
+-spec handle_call([], From, state()) -> {noreply, state()} | {stop, normal, state()} when
     From :: gen_server:from().
-handle_call([], From, State = Id) ->
+handle_call([], From, State = #{id := Id, multi_node_enabled := MultiNodeEnabled}) ->
     {ClientPid, _ReplayTag} = From,
     DebuggeeNode = node(ClientPid),
     ok = edb_node_monitor:reverse_attach_notification(Id, DebuggeeNode),
     gen_server:reply(From, ok),
-    {stop, normal, State}.
+    case MultiNodeEnabled of
+        true ->
+            {noreply, State};
+        false ->
+            {stop, normal, State}
+    end.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(_, State) ->
