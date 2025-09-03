@@ -93,6 +93,9 @@ send_event(Event) ->
 
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
+    %% Ensure stdin/stdout are in binary mode, so there is no mangling of `\r` on windows, etc
+    io:setopts([binary]),
+
     %% Open stdin/out as a port, requires node to be started with -noinput
     %% We do this to avoid the overhead of the normal Erlang stdout/in stack
     %% which is very significant for raw binary data, mostly because it's prepared
