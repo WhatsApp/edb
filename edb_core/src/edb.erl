@@ -275,16 +275,33 @@ Subscribers will receive a single event of the form `{edb_event, Subscription, E
 
 The events include a `Ref` that should match the reference that was returned by this call.
 
+When the `enable_multi_node` options is set to `true`, additional nodes may attempt to reverse attach after the
+initial reverse-attach event. In that case, those nodes will be paused and subscribers will receive a new
+ `{reverse_attach, Ref, {node_attached, AdditionalNode}}` event. In that case, `edb` will remain attached
+ to the initial node.
+
+By default, it is the caller's responsibility to ensure that additional nodes execute the code returned by this
+function, so that these nodes try to reverse-attach as well. As a convenience, the `instrument_erl_aflags_on_attach` can
+be set to `true` and the `ERL_AFLAGS` variable of the first node attached will be instrumented to contain a suitable
+`-eval` instruction.
+
 This call may start distribution and set the node name.
 
 Options:
 
 - `name_domain`: whether we expect to be attached by a node using longnames or shortnames;
-- `timeout`: how long to wait for the node to be up; defaults to infinity.
+- `timeout`: how long to wait for the node to be up; defaults to infinity;
+- `multi_node_enabled`: whether to allow multiple nodes to attach; defaults to `false`;
+- `instrument_erl_aflags_on_attach`: the ERL_AFLAGS will be updated with an `-eval` flag on the first attachment; defaults to `false`.
 
 """.
 -spec reverse_attach(Opts) -> {ok, Info} | {error, Reason} when
-    Opts :: #{name_domain := longnames | shortnames, timeout => timeout()},
+    Opts :: #{
+        name_domain := longnames | shortnames,
+        timeout => timeout(),
+        multi_node_enabled => boolean(),
+        instrument_erl_aflags_on_attach => boolean()
+    },
     Info :: #{erl_code_to_inject := binary(), reverse_attach_ref := reference()},
     Reason :: attachment_in_progress.
 reverse_attach(AttachOpts0) ->
@@ -293,8 +310,16 @@ reverse_attach(AttachOpts0) ->
         default => infinity,
         parse => fun parse_timeout/1
     }),
+    {MultiNodeEnabled, AttachOpts3} = take_arg(multi_node_enabled, AttachOpts2, #{
+        default => false,
+        parse => fun parse_boolean/1
+    }),
+    {InstrumentErlAflagsOnAttach, AttachOpts4} = take_arg(instrument_erl_aflags_on_attach, AttachOpts3, #{
+        default => false,
+        parse => fun parse_boolean/1
+    }),
 
-    ok = no_more_args(AttachOpts2),
+    ok = no_more_args(AttachOpts4),
 
     case net_kernel:get_state() of
         #{started := no} -> ok = start_distribution(NameDomain);
@@ -302,10 +327,26 @@ reverse_attach(AttachOpts0) ->
         #{started := _, name_domain := _} -> error({invalid_name_domain, NameDomain})
     end,
 
-    {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(),
+    {ok, GatekeeperId, ReverseAttachCode} = edb_gatekeeper:new(#{multi_node_enabled => MultiNodeEnabled}),
+    ReverseAttachCodeInFlags =
+        case {MultiNodeEnabled, InstrumentErlAflagsOnAttach} of
+            {true, true} ->
+                ReverseAttachCode;
+            {false, true} ->
+                error({badarg, {instrument_erl_aflags_on_attach, requires, multi_node_enabled}});
+            _ ->
+                none
+        end,
+
     ReverseAttachRef = erlang:make_ref(),
     case
-        edb_node_monitor:expect_reverse_attach(GatekeeperId, ReverseAttachRef, ReverseAttachTimeout, ReverseAttachCode)
+        edb_node_monitor:expect_reverse_attach(
+            GatekeeperId, ReverseAttachRef, #{
+                timeout => ReverseAttachTimeout,
+                reverse_attach_code => ReverseAttachCodeInFlags,
+                multi_node_enabled => MultiNodeEnabled
+            }
+        )
     of
         ok ->
             {ok, #{
@@ -868,6 +909,10 @@ parse_timeout(Timeout) -> parse_non_neg_integer(Timeout).
 -spec parse_name_domain(term()) -> longnames | shortnames.
 parse_name_domain(longnames) -> longnames;
 parse_name_domain(shortnames) -> shortnames.
+
+-spec parse_boolean(term()) -> boolean().
+parse_boolean(true) -> true;
+parse_boolean(false) -> false.
 
 -spec parse_pair(L, R) -> fun((term()) -> {A, B}) when
     L :: fun((term()) -> A), R :: fun((term()) -> B).
