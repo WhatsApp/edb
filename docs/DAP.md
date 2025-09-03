@@ -30,7 +30,7 @@ A typical attach request looks like this:
 
 ```json
 {
-  "type": "edb",
+  "type": "erlang-edb",
   "request": "attach",
   "name": "Attach to mynode",
   "config": {
@@ -59,7 +59,7 @@ A typical launch request looks like this:
 
 ```json
 {
-  "type": "edb",
+  "type": "erlang-edb",
   "request": "launch",
   "name": "Launch Erlang Application",
   "runInTerminal": {
