@@ -26,7 +26,7 @@
 %% Public API
 -export([start_link/0]).
 -export([attach/2, detach/0, attached_node/0]).
--export([expect_reverse_attach/4, reverse_attach_notification/2]).
+-export([expect_reverse_attach/3, reverse_attach_notification/2]).
 
 -export([subscribe/0, unsubscribe/1]).
 -export([safe_sname_hostname/0]).
@@ -138,20 +138,22 @@ attached_node() ->
             error(not_attached)
     end.
 
--spec expect_reverse_attach(Id, ReverseAttachRef, Timeout, ReverseAttachCode) -> ok | {error, Reason} when
+-spec expect_reverse_attach(Id, ReverseAttachRef, Opts) ->
+    ok | {error, Reason}
+when
     Id :: edb_gatekeeper:id(),
     ReverseAttachRef :: reference(),
-    Timeout :: timeout(),
-    ReverseAttachCode :: none | binary(),
+    Opts :: #{
+        timeout := timeout(),
+        reverse_attach_code := none | binary(),
+        multi_node_enabled := boolean()
+    },
     Reason :: attachment_in_progress.
-expect_reverse_attach(Id, ReverseAttachRef, Timeout, ReverseAttachCode) ->
+expect_reverse_attach(Id, ReverseAttachRef, Opts) ->
     call(
-        {expect_reverse_attach, #{
+        {expect_reverse_attach, Opts#{
             gatekeeper_id => Id,
-            reverse_attach_ref => ReverseAttachRef,
-            timeout => Timeout,
-            reverse_attach_code => ReverseAttachCode,
-            multi_node_enabled => false
+            reverse_attach_ref => ReverseAttachRef
         }}
     ).
 
@@ -393,17 +395,12 @@ expect_reverse_attach_impl(
     Data0
 ) ->
     {_, _, Data1} = detach_impl_1(State0, Data0),
-    ReverseAttachCodeToUse =
-        case MultiNodeEnabled of
-            true -> ReverseAttachCode;
-            false -> none
-        end,
     State1 = #{
         state => attachment_in_progress,
         type => reverse_attach,
         gatekeeper => GatekeeperId,
         reverse_attach_ref => ReverseAttachRef,
-        multi_node_reverse_attach_code => ReverseAttachCodeToUse,
+        multi_node_reverse_attach_code => ReverseAttachCode,
         multi_node_enabled => MultiNodeEnabled
     },
     {next_state, State1, Data1, [
