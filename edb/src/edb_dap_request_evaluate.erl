@@ -199,7 +199,7 @@ format_compile_error({Loc, Module, Descriptor}) ->
 format_location(none) ->
     "";
 format_location(Line) when is_integer(Line) ->
-    io_lib:format("~b", [Line]);
+    integer_to_list(Line);
 format_location({Line, Col}) when is_integer(Line), is_integer(Col) ->
     io_lib:format("~b:~b", [Line, Col]).
 
