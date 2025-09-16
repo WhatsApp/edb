@@ -88,6 +88,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         type := attach_type(),
         client_info := client_info(),
         node := node(),
+        reverse_attach_ref := reference() | undefined,
         cwd := binary(),
         subscription := edb:event_subscription()
     }
@@ -97,6 +98,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         type := attach_type(),
         client_info := client_info(),
         node := node(),
+        reverse_attach_ref := reference() | undefined,
         cwd := binary(),
         subscription := edb:event_subscription()
     }

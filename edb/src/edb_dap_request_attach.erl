@@ -85,6 +85,7 @@ handle(State0 = #{state := initialized}, Args) ->
                     process_id => ProcessId
                 },
                 node => Node,
+                reverse_attach_ref => undefined,
                 cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
                 subscription => Subscription
             },
