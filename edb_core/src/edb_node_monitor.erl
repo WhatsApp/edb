@@ -61,13 +61,12 @@
     }
     | #{
         state := up,
-        node := node(),
+        gatekeeper := none | edb_gatekeeper:id(),
+        nodes := #{node() => []},
+        down_nodes := #{node() => []},
         reverse_attach_ref => reference(),
-        multi_node_enabled := boolean()
-    }
-    | #{
-        state := down,
-        node := node()
+        multi_node_enabled := boolean(),
+        multi_node_reverse_attach_code => none | binary()
     }.
 
 -type data() :: #{
@@ -229,9 +228,14 @@ safe_sname_hostname() ->
 -spec call(call_request()) -> dynamic().
 call(Request) ->
     case gen_statem:call(?MODULE, Request, infinity) of
-        badarg -> error(badarg);
-        not_attached -> error(not_attached);
-        Result -> Result
+        badarg ->
+            error(badarg);
+        not_attached ->
+            error(not_attached);
+        {error, cannot_attach_to_new_node_when_multi_node_enabled} ->
+            error(cannot_attach_to_new_node_when_multi_node_enabled);
+        Result ->
+            Result
     end.
 
 -type cast_request() ::
@@ -336,6 +340,7 @@ try_attach_impl(Node, State0, Data0) ->
     Reason ::
         attachment_in_progress
         | nodedown
+        | cannot_attach_to_new_node_when_multi_node_enabled
         | {bootstrap_failed, edb:bootstrap_failure()}.
 attach_impl(_, _, From, #{state := attachment_in_progress}, _) ->
     {keep_state_and_data, {reply, From, {error, attachment_in_progress}}};
@@ -354,10 +359,21 @@ attach_impl(Node, AttachTimeout, From, State0, Data0) ->
             schedule_try_attach(Node),
             {next_state, State1, Data0, {state_timeout, AttachTimeout, waiting_for_node}};
         _ ->
+            NodeInFocus = persistent_term:get({?MODULE, attached_node}, []),
             case State0 of
-                #{state := up, node := Node} ->
-                    % Attaching to the same node is a no-op
-                    {keep_state_and_data, {reply, From, ok}};
+                #{state := up, nodes := #{Node := _}} ->
+                    case Node =:= NodeInFocus of
+                        true ->
+                            % Attaching to the same node is a no-op
+                            {keep_state_and_data, {reply, From, ok}};
+                        false ->
+                            true = persistent_term:erase({?MODULE, attached_node}),
+                            ok = persistent_term:put({?MODULE, attached_node}, Node),
+                            gen_statem:reply(From, ok),
+                            {keep_state_and_data, {reply, From, ok}}
+                    end;
+                #{state := up, multi_node_enabled := true} ->
+                    {keep_state_and_data, {reply, From, {error, cannot_attach_to_new_node_when_multi_node_enabled}}};
                 _ ->
                     {_, _, Data1} = detach_impl_1(State0, Data0),
                     State2 =
@@ -437,25 +453,41 @@ reverse_attach_notification_impl(
         ok ->
             State1 = #{
                 state => up,
-                node => Node,
+                gatekeeper => GatekeeperId,
+                nodes => #{Node => []},
+                down_nodes => #{},
                 reverse_attach_ref => ReverseAttachRef,
-                multi_node_enabled => MultiNodeEnabled
+                multi_node_enabled => MultiNodeEnabled,
+                multi_node_reverse_attach_code => ReverseAttachCode
             },
             persistent_term:put({?MODULE, attached_node}, Node),
             ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, {attached, Node}}, Subs),
             {next_state, State1, Data0}
     end;
 reverse_attach_notification_impl(
-    _GatekeeperId,
+    GatekeeperId,
     Node,
-    State0 = #{state := up, multi_node_enabled := true},
+    State0 = #{state := up, multi_node_enabled := true, gatekeeper := GatekeeperId, nodes := Nodes0},
     Data0
 ) ->
-    #{reverse_attach_ref := ReverseAttachRef} = State0,
+    #{
+        reverse_attach_ref := ReverseAttachRef,
+        multi_node_reverse_attach_code := ReverseAttachCode
+    } = State0,
     #{event_subscribers := Subs} = Data0,
-    % Main node is already up, broadcast reverse_attach event for additional node
-    ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, {attached, Node}}, Subs),
-    keep_state_and_data;
+    Subscribers = edb_events:subscribers(Subs),
+    case bootstrap_edb(Node, Subscribers, ReverseAttachCode, pause) of
+        {error, BootstrapFailure} ->
+            ok = edb_events:broadcast(
+                {reverse_attach, ReverseAttachRef, {error, Node, {bootstrap_failed, BootstrapFailure}}}, Subs
+            ),
+            {next_state, State0, Data0};
+        ok ->
+            Nodes1 = Nodes0#{Node => []},
+            ok = edb_events:broadcast({reverse_attach, ReverseAttachRef, {attached, Node}}, Subs),
+            State1 = State0#{nodes => Nodes1},
+            {next_state, State1, Data0}
+    end;
 reverse_attach_notification_impl(_, _, _, _) ->
     keep_state_and_data.
 
@@ -481,13 +513,6 @@ detach_impl_1(State0, Data0) ->
             State2 = #{state => not_attached},
             persistent_term:erase({?MODULE, attached_node}),
             {ok, State2, Data1};
-        #{state := down, node := Node} ->
-            % Previous node may have gone down, if we have any subscribers is because
-            % we failed to detect it in time, so let's notify now
-            ok = edb_events:broadcast({nodedown, Node, unknown}, Subs),
-            State1 = #{state => not_attached},
-            Data1 = Data0#{event_subscribers := edb_events:no_subscribers()},
-            {not_attached, State1, Data1};
         #{state := not_attached} ->
             {not_attached, State0, Data0}
     end.
@@ -547,11 +572,13 @@ remove_event_subscription_impl_1(Subscription, State0, Data0) ->
     Reason :: term().
 nodedown_impl(Node, Reason, State0, Data0) ->
     case State0 of
-        #{state := Attachment, node := Node} when Attachment =:= up; Attachment =:= down ->
-            Subs = maps:get(event_subscribers, Data0),
-            ok = edb_events:broadcast({nodedown, Node, Reason}, Subs),
-            State1 = #{state => not_attached},
-            persistent_term:erase({?MODULE, attached_node}),
+        #{state := up, nodes := #{Node := _}} ->
+            State1 = handle_node_disconnection(Node, Reason, Data0, State0),
+            {next_state, State1, Data0};
+        #{state := up, down_nodes := #{Node := _} = DownNodes0} ->
+            % We broadcast the nodedown event before, but only now we got the notification
+            DownNodes1 = maps:remove(Node, DownNodes0),
+            State1 = State0#{down_nodes := DownNodes1},
             {next_state, State1, Data0};
         _ ->
             keep_state_and_data
@@ -605,7 +632,13 @@ on_node_connected(State0 = #{state := attachment_in_progress, type := attach, no
                 gen_statem:reply(Caller, {error, {bootstrap_failed, BootstrapFailure}}),
                 State1;
             ok ->
-                State1 = #{state => up, node => Node, multi_node_enabled => false},
+                State1 = #{
+                    state => up,
+                    gatekeeper => none,
+                    nodes => #{Node => []},
+                    down_nodes => #{},
+                    multi_node_enabled => false
+                },
                 persistent_term:put({?MODULE, attached_node}, Node),
                 gen_statem:reply(Caller, ok),
                 State1
@@ -621,7 +654,8 @@ on_node_connected(State0 = #{state := attachment_in_progress, type := attach, no
     Result :: {{reply, dynamic()} | not_attached, state(), data()}.
 call_edb_server(Request, State0, Data0) ->
     case State0 of
-        #{state := up, node := Node} ->
+        #{state := up} ->
+            Node = persistent_term:get({?MODULE, attached_node}, []),
             try
                 {{reply, edb_server:call(Node, Request)}, State0, Data0}
             catch
@@ -632,10 +666,34 @@ call_edb_server(Request, State0, Data0) ->
                     persistent_term:erase({?MODULE, attached_node}),
                     {not_attached, State1, Data1};
                 exit:{{nodedown, Node}, {gen_server, call, Args}} when is_list(Args) ->
-                    State1 = #{state => down, node => Node},
-                    persistent_term:erase({?MODULE, attached_node}),
+                    State1 = handle_node_disconnection(Node, unknown, Data0, State0),
                     {not_attached, State1, Data0}
             end;
         _ ->
             {not_attached, State0, Data0}
+    end.
+
+-spec handle_node_disconnection(Node, Reason, data(), State0) -> State1 when
+    Node :: node(),
+    Reason :: term(),
+    State0 :: state(),
+    State1 :: state().
+handle_node_disconnection(Node, Reason, Data0, State0 = #{state := up}) ->
+    #{event_subscribers := Subs} = Data0,
+    ok = edb_events:broadcast({nodedown, Node, Reason}, Subs),
+
+    #{nodes := #{Node := _} = Nodes0, down_nodes := DownNodes0} = State0,
+    Nodes1 = maps:remove(Node, Nodes0),
+    DownNodes1 = DownNodes0#{Node => []},
+
+    IsNodeInFocus = Node == persistent_term:get({?MODULE, attached_node}, []),
+    case IsNodeInFocus of
+        true ->
+            persistent_term:erase({?MODULE, attached_node}),
+            case maps:size(Nodes1) of
+                0 -> #{state => not_attached};
+                _ -> State0#{nodes := Nodes1, down_nodes := DownNodes1}
+            end;
+        false ->
+            State0#{nodes := Nodes1, down_nodes := DownNodes1}
     end.
