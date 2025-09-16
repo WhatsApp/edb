@@ -64,16 +64,19 @@ This is the command that you tipically want your IDE (VS Code, Emacs) to trigger
 
 ## Configure a rebar3 project
 
-Before we can debug a [rebar3](https://rebar3.org/) project with EDB, we need to ensure that we build the code using the `beam_debug_info` option.
+Before we can debug a [rebar3](https://rebar3.org/) project with EDB, we need to ensure that we build the code using the `beam_debug_info` or
+`beam_debug_stack` option. The former adds debyg symbol information needed to be able display variable names on a paused process; the latter
+is similar but in addition preserves the values of variables that are no longer live, which is more useful for debugging, but increases the
+stack usage.
 
 Since we want to only use the debugger to debug test and we don't want to affect production, these changes can be limited to the `test` profile.
 
-Open the `rebar.config` file for the project and ensure the `beam_debug_info` option is included as part of `erl_opts`.
+Open the `rebar.config` file for the project and ensure one if these options is included as part of `erl_opts`.
 
 ```
 {profiles, [
     {test, [
-        {erl_opts, [beam_debug_info]}
+        {erl_opts, [beam_debug_stack]}
     ]}
 ]}.
 ```

@@ -96,7 +96,7 @@ stepper(#{state := attached}, ThreadId, StepType) ->
             edb_dap_request:not_paused(Pid);
         {error, {cannot_breakpoint, ModuleName}} ->
             edb_dap_request:unsupported(
-                io_lib:format("Module ~s not compiled with beam_debug_info", [ModuleName])
+                io_lib:format("Module ~s not compiled with beam_debug_info/beam_debug_stack", [ModuleName])
             );
         {error, {call_target, CallTargetError}} ->
             edb_dap_request_step_in:react_to_call_target_error(CallTargetError)
