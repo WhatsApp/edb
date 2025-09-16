@@ -24,7 +24,7 @@ The (new!) Erlang debugger
 
 %% External exports
 -export([attach/1, reverse_attach/1, detach/0, terminate/0]).
--export([attached_node/0]).
+-export([attached_node/0, nodes/0]).
 
 -export([subscribe/0, unsubscribe/1, send_sync_event/1]).
 
@@ -387,6 +387,17 @@ Will raise a `not_attached` error if not attached.
 -spec attached_node() -> node().
 attached_node() ->
     edb_node_monitor:attached_node().
+
+-doc """
+Returns all known debuggee nodes.
+
+This includes nodes from:
+    - Successful calls to `edb:attach()`
+    - Completed reverse-attachments via `edb:reverse_attach()`
+""".
+-spec nodes() -> #{node() => []}.
+nodes() ->
+    edb_node_monitor:nodes().
 
 -doc """
 Subscribe caller process to receive debugging events from the attached node.

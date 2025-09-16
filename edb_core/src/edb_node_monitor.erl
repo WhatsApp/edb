@@ -25,7 +25,7 @@
 
 %% Public API
 -export([start_link/0]).
--export([attach/2, detach/0, attached_node/0]).
+-export([attach/2, detach/0, attached_node/0, nodes/0]).
 -export([expect_reverse_attach/3, reverse_attach_notification/2]).
 
 -export([subscribe/0, unsubscribe/1]).
@@ -137,6 +137,10 @@ attached_node() ->
             error(not_attached)
     end.
 
+-spec nodes() -> #{node() => []}.
+nodes() ->
+    call(nodes).
+
 -spec expect_reverse_attach(Id, ReverseAttachRef, Opts) ->
     ok | {error, Reason}
 when
@@ -221,6 +225,7 @@ safe_sname_hostname() ->
     {attach, node(), timeout()}
     | {expect_reverse_attach, expect_reverse_attach_args()}
     | {reverse_attach_notification, edb_gatekeeper:id(), node()}
+    | nodes
     | detach
     | {subscribe_to_events, pid()}
     | {remove_event_subscription, edb:event_subscription()}.
@@ -279,6 +284,8 @@ handle_event(
     );
 handle_event(cast, {reverse_attach_notification, GatekeeperId, Node}, State, Data) ->
     reverse_attach_notification_impl(GatekeeperId, Node, State, Data);
+handle_event({call, From}, nodes, State, Data) ->
+    nodes_impl(From, State, Data);
 handle_event({call, From}, detach, State, Data) ->
     detach_impl(From, State, Data);
 handle_event({call, From}, {subscribe_to_events, Pid}, State, Data) ->
@@ -490,6 +497,16 @@ reverse_attach_notification_impl(
     end;
 reverse_attach_notification_impl(_, _, _, _) ->
     keep_state_and_data.
+
+-spec nodes_impl(From, state(), data()) -> reply(#{node() => []}) when
+    From :: gen_statem:from().
+nodes_impl(From, State0, _Data0) ->
+    Nodes =
+        case State0 of
+            #{state := up, nodes := NodesMap} -> NodesMap;
+            _ -> #{}
+        end,
+    {keep_state_and_data, {reply, From, Nodes}}.
 
 -spec detach_impl(From, state(), data()) -> reply(ok | not_attached) when
     From :: gen_statem:from().

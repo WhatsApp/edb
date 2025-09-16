@@ -68,7 +68,9 @@
     test_reverse_attach_validates_args/1,
     test_reverse_attach_additional_node_sends_event/1,
     test_reverse_attach_without_instrument_erl_aflags_on_attach/1,
-    test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false/1
+    test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false/1,
+    test_reverse_attach_second_node_goes_down/1,
+    test_reverse_attach_original_node_goes_down_second_remains/1
 ]).
 
 %% Detach test-cases
@@ -141,7 +143,9 @@ groups() ->
             test_reverse_attach_fails_if_debuggee_not_in_debugging_mode,
             test_reverse_attach_additional_node_sends_event,
             test_reverse_attach_without_instrument_erl_aflags_on_attach,
-            test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false
+            test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false,
+            test_reverse_attach_second_node_goes_down,
+            test_reverse_attach_original_node_goes_down_second_remains
         ]},
 
         {test_detach, [
@@ -172,6 +176,7 @@ test_raises_error_until_attached(Config) ->
         % Initially, we are not attached to any node, so error on operations
         ?assertError(not_attached, edb:attached_node()),
         ?assertError(not_attached, edb:processes([])),
+        ?assertEqual(#{}, edb:nodes()),
 
         {ok, #{peer := Peer, node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
@@ -186,11 +191,13 @@ test_raises_error_until_attached(Config) ->
         ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
         ?assertMatch(Node, edb:attached_node()),
         ?assertMatch(#{}, edb:processes([])),
+        ?assertEqual(#{Node => []}, edb:nodes()),
 
         % After detaching, we error again
         ok = edb:detach(),
         ?assertError(not_attached, edb:attached_node()),
         ?assertError(not_attached, edb:processes([])),
+        ?assertEqual(#{}, edb:nodes()),
 
         ok
     end).
@@ -885,6 +892,111 @@ test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false(Config) ->
         ok
     end).
 
+test_reverse_attach_second_node_goes_down(Config) ->
+    % This test verifies what happens when a second node goes down in multi-node setup
+    TestSource = create_test_source_that_spawns_node(),
+    edb_test_support:on_debugger_node(Config, fun() ->
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames,
+            multi_node_enabled => true,
+            instrument_erl_aflags_on_attach => true
+        }),
+
+        {ok, Subscription} = edb:subscribe(),
+
+        % Start first peer and wait for it to attach
+        {ok, #{peer := Peer1, node := Node1, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
+            Config, #{
+                extra_args => ["-eval", InjectedCode],
+                modules => [{source, TestSource}],
+                copy_code_path => true
+            }
+        ),
+        {ok, Node1} = wait_reverse_attach_event(Subscription, Ref),
+        ?assertEqual(#{Node1 => []}, edb:nodes()),
+
+        ok = edb:add_breakpoint(test_mod, 10),
+        ok = edb:add_breakpoint(test_mod, 11),
+
+        % Spawn test to create second node
+        Receiver = self(),
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
+        end),
+
+        {ok, resumed} = edb:continue(),
+        {ok, paused} = edb:wait(),
+
+        SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
+
+        % Wait for second node to attach
+        {ok, SecondNode} = wait_reverse_attach_event(Subscription, Ref),
+        ?assertEqual(#{Node1 => [], SecondNode => []}, edb:nodes()),
+
+        {ok, resumed} = edb:continue(),
+        {ok, paused} = edb:wait(),
+        ?assertEqual(#{Node1 => [], SecondNode => []}, edb:nodes()),
+
+        {ok, resumed} = edb:continue(),
+
+        ok
+    end).
+
+test_reverse_attach_original_node_goes_down_second_remains(Config) ->
+    % This test verifies what happens when the original node goes down but second remains
+    TestSource = create_test_source_that_spawns_node(),
+    edb_test_support:on_debugger_node(Config, fun() ->
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames,
+            multi_node_enabled => true,
+            instrument_erl_aflags_on_attach => true
+        }),
+
+        {ok, Subscription} = edb:subscribe(),
+
+        % Start first peer and wait for it to attach
+        {ok, #{peer := Peer1, node := Node1, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
+            Config, #{
+                extra_args => ["-eval", InjectedCode],
+                modules => [{source, TestSource}],
+                copy_code_path => true
+            }
+        ),
+        {ok, Node1} = wait_reverse_attach_event(Subscription, Ref),
+        ?assertEqual(#{Node1 => []}, edb:nodes()),
+
+        ok = edb:add_breakpoint(test_mod, 10),
+
+        Receiver = self(),
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
+        end),
+
+        {ok, resumed} = edb:continue(),
+        {ok, paused} = edb:wait(),
+
+        SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
+
+        % Wait for second node to attach
+        {ok, SecondNode} = wait_reverse_attach_event(Subscription, Ref),
+        ?assertEqual(#{Node1 => [], SecondNode => []}, edb:nodes()),
+
+        ok = edb_test_support:stop_peer(Peer1),
+        ?assertEqual(#{SecondNode => []}, edb:nodes()),
+
+        ok
+    end).
+
 %%--------------------------------------------------------------------
 %% DETACH TEST CASES
 %%--------------------------------------------------------------------
@@ -1127,7 +1239,7 @@ create_test_source_that_spawns_node() ->
     "     {ok, #{node := Node2, peer := Peer2}} =        %L04\n"
     "        edb_test_support:start_peer_node(           %L05\n"
     "           Config,                                  %L06\n"
-    "           #{copy_code_path => true}  %L07\n"
+    "           #{copy_code_path => true}                %L07\n"
     "        ),                                          %L08\n"
     "      Receiver ! {node_created, Node2},             %L09\n"
     "      ok = edb_test_support:stop_peer(Peer2),       %L10\n"
