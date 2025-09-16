@@ -48,7 +48,9 @@
     test_attach_validates_args/1,
     test_attach_detects_unreachable_nodes/1,
 
-    test_fails_to_attach_if_debuggee_not_in_debugging_mode/1
+    test_fails_to_attach_if_debuggee_not_in_debugging_mode/1,
+
+    test_attach_changes_node_in_focus/1
 ]).
 
 %% Reverse-attach test-cases
@@ -118,7 +120,9 @@ groups() ->
 
             test_fails_to_attach_if_debuggee_not_in_debugging_mode,
 
-            test_subscribing_before_attaching_works
+            test_subscribing_before_attaching_works,
+
+            test_attach_changes_node_in_focus
         ]},
 
         {test_reverse_attach, [
@@ -423,6 +427,70 @@ test_subscribing_before_attaching_works(Config) ->
         ok
     end).
 
+test_attach_changes_node_in_focus(Config) ->
+    TestSource = create_test_source_that_spawns_node(),
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Perform reverse attach to the first node
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames, multi_node_enabled => true, instrument_erl_aflags_on_attach => true
+        }),
+
+        % Subscribe to debugger events to receive reverse attach results
+        {ok, Subscription} = edb:subscribe(),
+
+        % Start the first peer node and execute the injected code to trigger reverse attach
+        {ok, #{peer := Peer1, node := Node1, cookie := _Cookie, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
+            Config, #{
+                extra_args => ["-eval", InjectedCode],
+                modules => [{source, TestSource}],
+                copy_code_path => true
+            }
+        ),
+
+        % Wait for the reverse attach event from the first node
+        {ok, Node1} = wait_reverse_attach_event(Subscription, Ref),
+
+        ok = edb:add_breakpoint(test_mod, 10),
+
+        Receiver = self(),
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
+        end),
+
+        {ok, resumed} = edb:continue(),
+        {ok, paused} = edb:wait(),
+
+        SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
+
+        % Wait for the node_attached event for the second node
+        {ok, SecondNode} = wait_reverse_attach_event(Subscription, Ref),
+
+        ok = edb:attach(#{node => SecondNode}),
+
+        % Verify that the node in focus is the second node
+        ?assertEqual(SecondNode, edb:attached_node()),
+
+        ok = edb:attach(#{node => Node1}),
+
+        % Verify that the node in focus is back to the first node
+        ?assertEqual(Node1, edb:attached_node()),
+
+        {ok, #{peer := _Peer3, node := Node3, cookie := Cookie3}} = edb_test_support:start_peer_node(Config, #{}),
+
+        ?assertError(
+            cannot_attach_to_new_node_when_multi_node_enabled, edb:attach(#{node => Node3, cookie => Cookie3})
+        ),
+
+        {ok, resumed} = edb:continue(),
+
+        ok
+    end).
+
 %%--------------------------------------------------------------------
 %% REVERSE ATTACH TEST CASES
 %%--------------------------------------------------------------------
@@ -677,23 +745,30 @@ test_reverse_attach_additional_node_sends_event(Config) ->
         {ok, #{peer := Peer1, node := Node1, cookie := _Cookie, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
             Config, #{
                 extra_args => ["-eval", InjectedCode],
-                modules => [{source, TestSource}]
+                modules => [{source, TestSource}],
+                copy_code_path => true
             }
         ),
 
         % Wait for the reverse attach event from the first node
         {ok, Node1} = wait_reverse_attach_event(Subscription, Ref),
 
-        ok = edb:add_breakpoint(test_mod, 9),
+        ok = edb:add_breakpoint(test_mod, 10),
 
-        SecondNode = second_node@localhost,
-
+        Receiver = self(),
         _TestPid = erlang:spawn(fun() ->
-            peer:call(Peer1, test_mod, test_fun, [SecondNode, Config])
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
         end),
 
         {ok, resumed} = edb:continue(),
         {ok, paused} = edb:wait(),
+
+        SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
 
         % Wait for the node_attached event for the second node
         {ok, SecondNode} = wait_reverse_attach_event(Subscription, Ref),
@@ -719,7 +794,8 @@ test_reverse_attach_without_instrument_erl_aflags_on_attach(Config) ->
         {ok, #{peer := Peer1, node := Node1, cookie := _Cookie, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
             Config, #{
                 extra_args => ["-eval", InjectedCode],
-                modules => [{source, TestSource}]
+                modules => [{source, TestSource}],
+                copy_code_path => true
             }
         ),
 
@@ -732,16 +808,22 @@ test_reverse_attach_without_instrument_erl_aflags_on_attach(Config) ->
             "ERL_AFLAGS", io_lib:format("-eval ~s", [EscapedInjectedCode])
         ]),
 
-        ok = edb:add_breakpoint(test_mod, 9),
+        ok = edb:add_breakpoint(test_mod, 10),
 
-        SecondNode = second_node@localhost,
-
+        Receiver = self(),
         _TestPid = erlang:spawn(fun() ->
-            peer:call(Peer1, test_mod, test_fun, [SecondNode, Config])
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
         end),
 
         {ok, resumed} = edb:continue(),
         {ok, paused} = edb:wait(),
+
+        SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
 
         % Wait for the node_attached event for the second node
         {ok, SecondNode} = wait_reverse_attach_event(Subscription, Ref),
@@ -768,23 +850,30 @@ test_reverse_attach_fails_when_instrument_erl_aflags_on_attach_false(Config) ->
         {ok, #{peer := Peer1, node := Node1, cookie := _Cookie, modules := #{test_mod := _}}} = edb_test_support:start_peer_node(
             Config, #{
                 extra_args => ["-eval", InjectedCode],
-                modules => [{source, TestSource}]
+                modules => [{source, TestSource}],
+                copy_code_path => true
             }
         ),
 
         % Wait for the reverse attach event from the first node
         {ok, Node1} = wait_reverse_attach_event(Subscription, Ref),
 
-        ok = edb:add_breakpoint(test_mod, 9),
+        ok = edb:add_breakpoint(test_mod, 10),
 
-        SecondNode = second_node@localhost,
-
+        Receiver = self(),
         _TestPid = erlang:spawn(fun() ->
-            peer:call(Peer1, test_mod, test_fun, [SecondNode, Config])
+            peer:call(Peer1, test_mod, test_fun, [Receiver, Config])
         end),
 
         {ok, resumed} = edb:continue(),
         {ok, paused} = edb:wait(),
+
+        _SecondNode =
+            receive
+                {node_created, Node} -> Node
+            after 5000 ->
+                error(timeout_waiting_for_node)
+            end,
 
         % Since instrument_erl_aflags_on_attach is false and the caller doesn't ensure
         % the new node runs the injected code, the second node should fail to attach
@@ -1034,14 +1123,15 @@ stop_distribution() ->
 create_test_source_that_spawns_node() ->
     "-module(test_mod).                                  %L01\n"
     "-export([test_fun/2]).                              %L02\n"
-    "test_fun(Node, Config) ->                           %L03\n"
+    "test_fun(Receiver, Config) ->                       %L03\n"
     "     {ok, #{node := Node2, peer := Peer2}} =        %L04\n"
     "        edb_test_support:start_peer_node(           %L05\n"
     "           Config,                                  %L06\n"
-    "           #{copy_code_path => true, node => Node}  %L07\n"
+    "           #{copy_code_path => true}  %L07\n"
     "        ),                                          %L08\n"
-    "      ok = edb_test_support:stop_peer(Peer2),       %L09\n"
-    "     ok.                                            %L10\n".
+    "      Receiver ! {node_created, Node2},             %L09\n"
+    "      ok = edb_test_support:stop_peer(Peer2),       %L10\n"
+    "     ok.                                            %L11\n".
 
 -spec wait_reverse_attach_event(Subscription :: edb:event_subscription(), Ref :: reference()) ->
     {ok, node()} | timeout | {error, node(), {bootstrap_failed, edb:bootstrap_failure()}}.
