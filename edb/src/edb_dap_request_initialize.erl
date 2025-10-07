@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_initialize).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) initialize requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+initialize requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

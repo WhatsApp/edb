@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_step_out).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) stepOut requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+stepOut requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepOut
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

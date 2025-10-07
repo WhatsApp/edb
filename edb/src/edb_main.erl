@@ -15,6 +15,10 @@
 %%
 -module(edb_main).
 
+-moduledoc """
+The entry point for the Erlang Debugger (EDB) Escript.
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

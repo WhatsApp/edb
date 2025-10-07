@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_next).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) next requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+next requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_continue).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) continue requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+continue requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Continue
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
