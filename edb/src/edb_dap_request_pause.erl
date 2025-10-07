@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_pause).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) pause requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+pause requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

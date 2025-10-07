@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_set_breakpoints).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) setBreakpoints requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

@@ -16,6 +16,13 @@
 
 -module(edb_dap_reverse_request_run_in_terminal).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) runInTerminal reverse requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_RunInTerminal
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

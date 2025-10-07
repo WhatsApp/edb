@@ -16,6 +16,13 @@
 
 -module(edb_dap_reverse_request_start_debugging).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) startDebugging reverse requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+startDebugging reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_StartDebugging
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

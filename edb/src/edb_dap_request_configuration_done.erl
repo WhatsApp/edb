@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_configuration_done).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) configurationDone requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+configurationDone requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_ConfigurationDone
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).

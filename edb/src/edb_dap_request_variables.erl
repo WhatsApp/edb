@@ -16,6 +16,13 @@
 
 -module(edb_dap_request_variables).
 
+-moduledoc """
+Handles Debug Adapter Protocol (DAP) variables requests for the Erlang debugger.
+
+The module follows the Microsoft Debug Adapter Protocol specification for
+variables requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
+""".
+
 %% erlfmt:ignore
 % @fb-only
 -compile(warn_missing_spec_all).
