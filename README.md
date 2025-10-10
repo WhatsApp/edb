@@ -3,9 +3,12 @@
 The next-generation debugger for Erlang.
 
 ## Prerequisites
+`edb` requires OTP 28.0 or higher. If you are using OTP 28.0 or 28.1, you need
+to use the `otp-28.0` branch of `edb` instead.
 
-`edb` currently requires a modified version of Erlang/OTP which, for convenience,
-is checked in as a git submodule, until all require changes will make it upstream.
+The `main` branch of `edb` currently requires patches that have not yet been
+merged to Erlang/OTP.  For convenience, a patched version of Erlang/OTP is checked in
+as a git submodule.
 
 You can build and install the modified version of Erlang/OTP by doing:
 
