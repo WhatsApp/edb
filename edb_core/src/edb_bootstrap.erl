@@ -50,6 +50,7 @@ bootstrap_debuggee(Debugger, Subscribers, ReverseAttachCode, PauseAction) ->
                 check_vm_support(),
                 inject_edb_modules(Debugger),
                 start_edb_server(),
+                add_project_paths(),
                 subscribe_to_events(Subscribers),
                 case PauseAction of
                     keep_running ->
@@ -62,6 +63,21 @@ bootstrap_debuggee(Debugger, Subscribers, ReverseAttachCode, PauseAction) ->
             catch
                 throw:Failure = #'__edb_bootstrap_failure__'{} ->
                     {error, bootstrap_failure_reason(Failure)}
+            end
+    end.
+
+-spec add_project_paths() -> ok.
+add_project_paths() ->
+    Cwd = filename:absname(""),
+    case filelib:is_file("rebar.config") of
+        true ->
+            code:add_pathsa(filelib:wildcard(filename:join(Cwd, "_build/default/lib/*/ebin")));
+        false ->
+            case filelib:is_file("erlang.mk") of
+                true ->
+                    code:add_patha(filename:join(Cwd, "ebin"));
+                false ->
+                    code:add_patha(filename:join(Cwd, "ebin"))
             end
     end.
 
