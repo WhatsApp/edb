@@ -125,18 +125,18 @@ test_structured_variables(Config) ->
             modules => [
                 {source, [~"""
                     -module(foo).                                               %L01\n
-                    -export([go/2]).                                            %L02\n
-                    go(L, X) ->                                                 %L03\n
+                    -export([go/3]).                                            %L02\n
+                    go(L, X, B) ->                                              %L03\n
                         M = [4, [], {6, 7}],                                    %L04\n
                         F = fun(_A) -> length(L) == length(M) orelse ok end,    %L05\n
                         persistent_term:put(fun_repr, io_lib:format("~p", [F])),%L06\n
-                        {L ++ M, X, F}.                                         %L07\n
+                        {L ++ M, X, B, F}.                                      %L07\n
                 """]}
             ]
         }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
-        Client, Peer, {foo, go, [[1, 2, 3], #{life => 42}]}
+        Client, Peer, {foo, go, [[1, 2, 3], #{life => 42}, ~"abcdefghijklmnopqrstuvwxyz"]}
     ),
 
     Scopes = edb_dap_test_support:get_scopes(Client, TopFrameId),
@@ -147,13 +147,13 @@ test_structured_variables(Config) ->
                     name => ~"Locals",
                     expensive => false,
                     presentationHint => ~"locals",
-                    variablesReference => 5
+                    variablesReference => 6
                 },
             ~"Process" =>
                 #{
                     name => ~"Process",
                     expensive => false,
-                    variablesReference => 7
+                    variablesReference => 8
                 }
         },
         Scopes
@@ -166,29 +166,35 @@ test_structured_variables(Config) ->
 
     ?assertEqual(
         #{
+            ~"B" => #{
+                name => ~"B",
+                value => ~"<<\"abcdefghijklmnop\"...>>",
+                evaluateName => ~"B",
+                variablesReference => 1
+            },
             ~"F" => #{
                 name => ~"F",
                 value => format("~s", [FunRepr]),
                 evaluateName => ~"F",
-                variablesReference => 1
+                variablesReference => 2
             },
             ~"L" => #{
                 name => ~"L",
                 value => ~"[1,2,3]",
                 evaluateName => ~"L",
-                variablesReference => 2
+                variablesReference => 3
             },
             ~"M" => #{
                 name => ~"M",
                 value => ~"[4,[],{6,...}]",
                 evaluateName => ~"M",
-                variablesReference => 3
+                variablesReference => 4
             },
             ~"X" => #{
                 name => ~"X",
                 value => ~"#{life => 42}",
                 evaluateName => ~"X",
-                variablesReference => 4
+                variablesReference => 5
             }
         },
         LocalVars
@@ -204,7 +210,7 @@ test_structured_variables(Config) ->
                 name => ~"3",
                 value => ~"{6,7}",
                 evaluateName => ~"lists:nth(3, M)",
-                variablesReference => 8
+                variablesReference => 9
             }
         },
         ChildrenListVars
@@ -219,19 +225,33 @@ test_structured_variables(Config) ->
         ChildrenMapVars
     ),
 
+    ChildBinaryVarRef = maps:get(variablesReference, maps:get(~"B", LocalVars)),
+    ChildrenBinaryVars = edb_dap_test_support:get_variables(Client, ChildBinaryVarRef),
+    ?assertEqual(
+        #{
+            integer_to_binary(I) => #{
+                name => integer_to_binary(I),
+                value => integer_to_binary($a + I),
+                variablesReference => 0
+            }
+         || I <- lists:seq(0, 25)
+        },
+        ChildrenBinaryVars
+    ),
+
     ChildFunVarRef = maps:get(variablesReference, maps:get(~"F", LocalVars)),
     ChildrenFunVars = edb_dap_test_support:get_variables(Client, ChildFunVarRef),
     ?assertEqual(
         #{
             ~"fun" => #{
                 name => ~"fun",
-                value => ~"foo:'-go/2-fun-0-'/1",
+                value => ~"foo:'-go/3-fun-0-'/1",
                 variablesReference => 0
             },
             ~"env" => #{
                 name => ~"env",
                 value => ~"[[1,2,3],[4,[]|...]]",
-                variablesReference => 9,
+                variablesReference => 10,
                 evaluateName => ~"erlang:element(2, erlang:fun_info(F, env))"
             }
         },
@@ -263,9 +283,9 @@ test_structured_variables_with_pagination(Config) ->
             modules => [
                 {source, [~"""
                     -module(foo).            %L01\n
-                    -export([go/3]).         %L02\n
-                    go(L, T, M) ->           %L03\n
-                        {L, T, M}.           %L04\n
+                    -export([go/4]).         %L02\n
+                    go(L, T, M, B) ->        %L03\n
+                        {L, T, M, B}.        %L04\n
                 """]}
             ]
         }),
@@ -274,8 +294,9 @@ test_structured_variables_with_pagination(Config) ->
     L = [10, 20, 30, 40, 50, 60, 70, 80, 90],
     T = {4, [], {6, 7}, 8, {}, 9},
     M = #{life => 42, death => 43, etc => 44, more => {45, 46, 47}, universe => 99},
+    B = ~"abcdefghijklmnopqrstuvwxyz",
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
-        Client, Peer, {foo, go, [L, T, M]}
+        Client, Peer, {foo, go, [L, T, M, B]}
     ),
 
     % When client supports variable paging, scopes include variable count
@@ -285,8 +306,8 @@ test_structured_variables_with_pagination(Config) ->
             name => ~"Locals",
             expensive => false,
             presentationHint => ~"locals",
-            variablesReference => 4,
-            indexedVariables => 3
+            variablesReference => 5,
+            indexedVariables => 4
         },
         LocalsScope
     ),
@@ -300,22 +321,29 @@ test_structured_variables_with_pagination(Config) ->
                 name => ~"L",
                 evaluateName => ~"L",
                 value => ~"[10,20,30,40|...]",
-                variablesReference => 1,
+                variablesReference => 2,
                 indexedVariables => 9
             },
             ~"T" => #{
                 name => ~"T",
                 evaluateName => ~"T",
                 value => ~"{4,[],{6,...},8,...}",
-                variablesReference => 3,
+                variablesReference => 4,
                 indexedVariables => 6
             },
             ~"M" => #{
                 name => ~"M",
                 evaluateName => ~"M",
                 value => ~"#{death => 43,etc => 44,life => 42,more => {45,46,47},...}",
-                variablesReference => 2,
+                variablesReference => 3,
                 indexedVariables => 5
+            },
+            ~"B" => #{
+                name => ~"B",
+                evaluateName => ~"B",
+                value => ~"<<\"abcdefghijklmnop\"...>>",
+                variablesReference => 1,
+                indexedVariables => 26
             }
         },
         LocalVars
@@ -341,7 +369,7 @@ test_structured_variables_with_pagination(Config) ->
                 name => ~"3",
                 value => ~"{6,7}",
                 evaluateName => ~"erlang:element(3, T)",
-                variablesReference => 7,
+                variablesReference => 8,
                 indexedVariables => 2
             },
             #{name => ~"4", value => ~"8", variablesReference => 0},
@@ -359,12 +387,23 @@ test_structured_variables_with_pagination(Config) ->
             #{
                 name => ~"more",
                 value => ~"{45,46,47}",
-                variablesReference => 8,
+                variablesReference => 9,
                 evaluateName => ~"maps:get(more, M)",
                 indexedVariables => 3
             }
         ],
         get_variables_page(Client, MapVarsRef, #{start => 1, count => 3})
+    ),
+
+    % Test pagination for binaries
+    BinVarsRef = maps:get(variablesReference, maps:get(~"B", LocalVars)),
+    ?assertEqual(
+        [
+            #{name => <<"1">>, value => <<"98">>, variablesReference => 0},
+            #{name => <<"2">>, value => <<"99">>, variablesReference => 0},
+            #{name => <<"3">>, value => <<"100">>, variablesReference => 0}
+        ],
+        get_variables_page(Client, BinVarsRef, #{start => 1, count => 3})
     ),
     ok.
 

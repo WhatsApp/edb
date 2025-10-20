@@ -312,7 +312,8 @@ structure_callback(Accessor, EvalName, Window) ->
                     List when is_list(List) -> list_structure(List, Accessor, EvalName, Window);
                     Tuple when is_tuple(Tuple) -> tuple_structure(Tuple, Accessor, EvalName, Window);
                     Map when is_map(Map) -> map_structure(Map, Accessor, EvalName, Window);
-                    Fun when is_function(Fun) -> fun_structure(Fun, Accessor, EvalName, Window);
+                    Bin when is_binary(Bin) -> binary_structure(Bin, Window);
+                    Fun when is_function(Fun) -> fun_structure(Fun, Accessor, EvalName);
                     _ -> []
                 end
             end
@@ -408,26 +409,11 @@ slice_map_iterator(Iterator0, 1, Count) when is_integer(Count) ->
         {K, V, Iterator1} -> [{K, V} | slice_map_iterator(Iterator1, 1, Count - 1)]
     end.
 
--spec extend_accessor(Accessor, EvalName, Step, StepStr) -> {accessor(), eval_name()} when
-    Accessor :: accessor(),
-    EvalName :: eval_name(),
-    Step :: fun((term()) -> term()),
-    StepStr :: fun((binary()) -> binary()).
-extend_accessor(Accessor, EvalName, Step, StepStr) ->
-    Accessor1 = fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end,
-    EvalName1 =
-        case EvalName of
-            none -> none;
-            _ -> StepStr(EvalName)
-        end,
-    {Accessor1, EvalName1}.
-
--spec fun_structure(Fun, Accessor, EvalName, Window) -> [variable()] when
+-spec fun_structure(Fun, Accessor, EvalName) -> [variable()] when
     Fun :: fun(),
     Accessor :: accessor(),
-    EvalName :: eval_name(),
-    Window :: window().
-fun_structure(Fun, Accessor, EvalName, _Window) ->
+    EvalName :: eval_name().
+fun_structure(Fun, Accessor, EvalName) ->
     FunInfo = maps:from_list(erlang:fun_info(Fun)),
     EnvStep = fun(_) -> maps:get(env, FunInfo) end,
     EnvStepStr = fun(E) -> format("erlang:element(2, erlang:fun_info(~s, env))", [E]) end,
@@ -449,6 +435,42 @@ fun_structure(Fun, Accessor, EvalName, _Window) ->
             )
         }
     ].
+
+-spec binary_structure(Bin, Window) -> [variable()] when
+    Bin :: binary(),
+    Window :: window().
+binary_structure(Bin, Window) ->
+    Indices =
+        case Window of
+            #{start := Start, count := infinity} ->
+                lists:seq(Start - 1, byte_size(Bin) - 1);
+            #{start := Start, count := Count} ->
+                End = min(byte_size(Bin), Start + Count - 1) - 1,
+                lists:seq(Start - 1, End)
+        end,
+    [
+        #{
+            name => integer_to_binary(Index),
+            value_rep => value_rep({value, Value}),
+            structure => none
+        }
+     || Index <- Indices,
+        Value <- [binary:at(Bin, Index)]
+    ].
+
+-spec extend_accessor(Accessor, EvalName, Step, StepStr) -> {accessor(), eval_name()} when
+    Accessor :: accessor(),
+    EvalName :: eval_name(),
+    Step :: fun((term()) -> term()),
+    StepStr :: fun((binary()) -> binary()).
+extend_accessor(Accessor, EvalName, Step, StepStr) ->
+    Accessor1 = fun(StackFrameVars) -> Step(Accessor(StackFrameVars)) end,
+    EvalName1 =
+        case EvalName of
+            none -> none;
+            _ -> StepStr(EvalName)
+        end,
+    {Accessor1, EvalName1}.
 
 % -----------------------------------------------------------------------------
 % Callback for the "evaluate" request
@@ -546,6 +568,12 @@ structure({value, Val}, {ValAccessor, EvalName}) when is_tuple(Val), tuple_size(
 structure({value, Val}, {ValAccessor, EvalName}) when is_map(Val), map_size(Val) > 0 ->
     #{
         count => map_size(Val),
+        accessor => ValAccessor,
+        evaluate_name => EvalName
+    };
+structure({value, Val}, {ValAccessor, EvalName}) when is_binary(Val) ->
+    #{
+        count => byte_size(Val),
         accessor => ValAccessor,
         evaluate_name => EvalName
     };
