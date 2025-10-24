@@ -595,7 +595,6 @@ test_add_module_substitute_transfers_stepping_breakpoints(Config) ->
 
         % Step over to other_module:5
         ok = edb:step_over(PausedPid),
-
         {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line2, mfa := MFA2} | _]} = edb:stack_frames(PausedPid),
@@ -603,7 +602,6 @@ test_add_module_substitute_transfers_stepping_breakpoints(Config) ->
 
         % Step out of other_module:test_function()
         ok = edb:step_out(PausedPid),
-
         {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line3, mfa := MFA3} | _]} = edb:stack_frames(PausedPid),
@@ -678,7 +676,6 @@ test_additional_frames_are_added_in_step_patterns(Config) ->
 
         % Step into foo_sub:test_function()
         ok = edb:step_in(PausedPid),
-
         {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line, mfa := MFA} | _]} = edb:stack_frames(PausedPid),
@@ -686,7 +683,6 @@ test_additional_frames_are_added_in_step_patterns(Config) ->
 
         % Step over to foo_sub:5
         ok = edb:step_over(PausedPid),
-
         {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line2, mfa := MFA2} | _]} = edb:stack_frames(PausedPid),
@@ -981,18 +977,21 @@ test_stepping_breakpoints_work_after_removing_substitute(Config) ->
 
         % Step into other_module:test_function() (which should use substitute)
         ok = edb:step_in(PausedPid),
+        {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line, mfa := MFA} | _]} = edb:stack_frames(PausedPid),
         ?assertEqual({4, {other_module, test_function, 0}}, {Line, MFA}),
 
         % Step over to other_module:5
         ok = edb:step_over(PausedPid),
+        {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line2, mfa := MFA2} | _]} = edb:stack_frames(PausedPid),
         ?assertEqual({5, {other_module, test_function, 0}}, {Line2, MFA2}),
 
         % Step out and continue to finish this test process
         ok = edb:step_out(PausedPid),
+        {ok, paused} = edb:wait(),
 
         ok = edb:step_over(PausedPid),
         {ok, paused} = edb:wait(),
@@ -1002,12 +1001,14 @@ test_stepping_breakpoints_work_after_removing_substitute(Config) ->
 
         % Step into other_module:test_function() (should now use original module)
         ok = edb:step_in(PausedPid),
+        {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line3, mfa := MFA3} | _]} = edb:stack_frames(PausedPid),
         ?assertEqual({4, {other_module, test_function, 0}}, {Line3, MFA3}),
 
         % Step over to other_module:5
         ok = edb:step_over(PausedPid),
+        {ok, paused} = edb:wait(),
 
         {ok, [#{line := Line4, mfa := MFA4} | _]} = edb:stack_frames(PausedPid),
         ?assertEqual({5, {other_module, test_function, 0}}, {Line4, MFA4}),
