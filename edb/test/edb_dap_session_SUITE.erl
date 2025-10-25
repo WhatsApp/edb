@@ -173,7 +173,7 @@ test_handles_disconnect_request_via_attach_can_terminate_debuggee(Config) ->
     ),
 
     % Node was killed
-    {down, _} = peer:get_state(Peer),
+    wait_until_down(Peer, 5_000),
 
     ok.
 
@@ -189,8 +189,7 @@ test_handles_disconnect_request_via_launch(Config) ->
     ),
 
     % Node was killed
-    {down, _} = peer:get_state(Peer),
-
+    wait_until_down(Peer, 5_000),
     ok.
 
 test_handles_disconnect_request_via_launch_can_spare_debuggee(Config) ->
@@ -239,3 +238,28 @@ test_terminates_when_node_goes_down_while_configuring(Config) ->
     ?assertMatch([#{event := ~"terminated"}], TerminatedEvent),
 
     ok.
+
+%%--------------------------------------------------------------------
+%% Helpers
+%%--------------------------------------------------------------------
+
+-spec wait_until_down(Peer, Timeout) -> ok when
+    Peer :: edb_test_support:peer(),
+    Timeout :: timeout().
+wait_until_down(Peer, Timeout) ->
+    case peer:get_state(Peer) of
+        {down, _} ->
+            ok;
+        running when Timeout > 0 ->
+            SleepTime = 10,
+            % elp:ignore WA019 (no_sleep) -- need to poll
+            timer:sleep(SleepTime),
+            Timeout1 =
+                case Timeout of
+                    infinity -> Timeout;
+                    _ -> Timeout - SleepTime
+                end,
+            wait_until_down(Peer, Timeout1);
+        running ->
+            error(peer_never_died)
+    end.
