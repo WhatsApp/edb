@@ -71,13 +71,21 @@ get_debug_info(Module, Line) when is_atom(Module) ->
             case lists:keyfind(Line, 1, DebugInfo) of
                 false ->
                     {error, line_not_found};
-                {Line, LineDebugInfo} ->
+                {Line, LineDebugInfo} when is_map(LineDebugInfo) ->
                     Vars =
                         #{
                             Var => assert_is_var_debug_info(Val)
                          || {Var, Val} <- maps:get(vars, LineDebugInfo, []), is_binary(Var)
                         },
                     Calls = maps:get(calls, LineDebugInfo, []),
+                    {ok, #{vars => Vars, calls => Calls}};
+                {Line, {_, Bindings}} ->
+                    Vars =
+                        #{
+                            Var => assert_is_var_debug_info(Val)
+                         || {Var, Val} <- Bindings, is_binary(Var)
+                        },
+                    Calls = [],
                     {ok, #{vars => Vars, calls => Calls}}
             end
     catch

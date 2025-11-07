@@ -60,6 +60,8 @@
     handle_info/2
 ]).
 
+-define(ESCRIPT, "escript").
+
 -type awaitable_key() :: {event, edb_dap:event_type()} | {reverse_request, edb_dap:command()}.
 -type awaitable() :: edb_dap:event() | edb_dap:request().
 
@@ -185,8 +187,14 @@ respond_success(Client, ReverseRequest, ResponseBody) ->
 
 -spec init(#{executable := file:filename_all(), args := [string()]}) -> {ok, state()}.
 init(#{executable := Executable, args := Args}) ->
-    Opts = [{args, Args}, exit_status, eof, binary, stream, use_stdio],
-    Port = open_port({spawn_executable, Executable}, Opts),
+    {Opts, SpawnExec} = case os:type() of
+        {win32, _} ->
+            CmdArgs = [Executable | Args],
+            {[{args, CmdArgs}, exit_status, eof, binary, stream, use_stdio], ?ESCRIPT};
+        _ ->
+            {[{args, Args}, exit_status, eof, binary, stream, use_stdio], Executable}
+    end,
+    Port = open_port({spawn_executable, os:find_executable(SpawnExec)}, Opts),
     State = #{
         io => Port,
         buffer => <<>>,

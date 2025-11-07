@@ -57,9 +57,14 @@ escript_executable(Config) ->
     Escript = filename:join([DataDir, ?EDB]),
     ?assert(filelib:is_file(Escript), "Escript should exists"),
     {ok, FileInfo} = file:read_file_info(Escript),
-    case FileInfo#file_info.mode of
-        Mode when is_integer(Mode) ->
-            ?assertEqual(8#111, Mode band 8#111, "Escript should be executable")
+    case os:type() of
+        {win32, _} ->
+            ok;
+        _ ->
+            case FileInfo#file_info.mode of
+                Mode when is_integer(Mode) ->
+                    ?assertEqual(8#111, Mode band 8#111, "Escript should be executable")
+            end
     end.
 
 escript_dap(Config) ->
