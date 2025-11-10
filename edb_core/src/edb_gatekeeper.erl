@@ -65,28 +65,44 @@ new(Options) when node() /= 'nonode@nohost' ->
 
     #{name_domain := NameDomain} = net_kernel:get_state(),
 
+    NameDomainStr = atom_to_list(NameDomain),
+    NodeStr = atom_to_list(node()),
+    CookieStr = atom_to_list(erlang:get_cookie()),
+    GatekeeperNameStr = atom_to_list(GatekeeperName),
+
+    EscNameDomain = build_esc(NameDomainStr),
+    EscNode = build_esc(NodeStr),
+    EscCookie = build_esc(CookieStr),
+    EscGatekeeper = build_esc(GatekeeperNameStr),
+
     CallGatekeeperCode = io_lib:format(
         ~"""
         case net_kernel:get_state() of
-        #{started := no} -> {ok, _} = net_kernel:start(undefined, #{name_domain => ~p});
+        #{started := no} -> {ok, _} = net_kernel:start(undefined, #{name_domain => list_to_atom(binary_to_list(~s))});
         _ -> ok
         end,
-        erlang:set_cookie(~p, ~p),
-        true = net_kernel:connect_node(~p),
-        ok = gen_server:call({~p, ~p}, [])
+        erlang:set_cookie(list_to_atom(binary_to_list(~s)), list_to_atom(binary_to_list(~s))),
+        true = net_kernel:connect_node(list_to_atom(binary_to_list(~s))),
+        ok = gen_server:call({list_to_atom(binary_to_list(~s)), list_to_atom(binary_to_list(~s))}, [])
         """,
         [
-            NameDomain,
-            node(),
-            erlang:get_cookie(),
-            node(),
-            GatekeeperName,
-            node()
+            EscNameDomain,
+            EscNode,
+            EscCookie,
+            EscNode,
+            EscGatekeeper,
+            EscNode
         ]
     ),
-
-    SingleLine = iolist_to_binary(re:replace(CallGatekeeperCode, "\\n", " ", [global])),
+    CallGatekeeperCodeNoCR = re:replace(CallGatekeeperCode, "\\r", "", [global]),
+    SingleLine = iolist_to_binary(re:replace(CallGatekeeperCodeNoCR, "\\n", " ", [global])),
     {ok, Id, SingleLine}.
+
+-spec build_esc(string()) -> string().
+build_esc(Str) ->
+    IntStrs = [integer_to_list(C) || C <- Str],
+    Joined = lists:flatten(lists:join(",", IntStrs)),
+    "<<" ++ Joined ++ ">>".
 
 %% -------------------------------------------------------------------
 %% gen_server callbacks
