@@ -225,8 +225,9 @@ handle_edb_event({edb_event, Subscription, Event}, State0 = #{subscription := Su
     Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle_edb_event/2, Event, State0),
     State1 = react(Reaction, State0),
     {noreply, State1};
-handle_edb_event(_UnexpectedEvent, State0) ->
-    ?LOG_WARNING("Invalid Subscription, skipping."),
+handle_edb_event(UnexpectedEvent, State0) ->
+    ExpectedSubscription = maps:get(subscription, State0, undefined),
+    ?LOG_WARNING("Skipping unexpected event ~tp -- expected subscription: ~tp", [UnexpectedEvent, ExpectedSubscription]),
     {noreply, State0}.
 
 -spec react(Reaction, state()) -> state() when

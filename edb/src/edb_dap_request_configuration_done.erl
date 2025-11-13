@@ -50,12 +50,10 @@ parse_arguments(Args) ->
     State :: edb_dap_server:state(),
     Args :: arguments().
 handle(State0 = #{state := configuring}, #{}) ->
-    {ok, Subscription} = edb:subscribe(),
     {ok, resumed} = edb:continue(),
     #{
         new_state => State0#{
-            state => attached,
-            subscription => Subscription
+            state => attached
         },
         response => edb_dap_request:success()
     };
