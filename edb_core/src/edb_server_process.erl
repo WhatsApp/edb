@@ -55,10 +55,10 @@ try_suspend_process(Pid) ->
     try
         erlang:suspend_process(Pid)
     catch
-        error:badarg:ST ->
+        E:badarg:ST ->
             case erlang:is_process_alive(Pid) of
                 false -> false;
-                true -> erlang:raise(error, badarg, ST)
+                true -> erlang:raise(E, badarg, ST)
             end
     end.
 
@@ -67,10 +67,10 @@ try_resume_process(Pid) ->
     try
         true = erlang:resume_process(Pid)
     catch
-        error:bardarg:ST ->
+        E:badarg:ST ->
             case erlang:is_process_alive(Pid) of
                 false -> true;
-                true -> erlang:raise(error, badarg, ST)
+                true -> erlang:raise(E, badarg, ST)
             end
     end.
 
