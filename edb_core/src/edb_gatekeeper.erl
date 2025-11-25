@@ -105,8 +105,8 @@ init(Options = #{id := Id}) ->
 handle_call([], From, State = #{id := Id, multi_node_enabled := MultiNodeEnabled}) ->
     {ClientPid, _ReplayTag} = From,
     DebuggeeNode = node(ClientPid),
-    ok = edb_node_monitor:reverse_attach_notification(Id, DebuggeeNode),
-    gen_server:reply(From, ok),
+    BootstrapResult = edb_node_monitor:reverse_attach_notification(Id, DebuggeeNode),
+    gen_server:reply(From, BootstrapResult),
     case MultiNodeEnabled of
         true ->
             {noreply, State};
