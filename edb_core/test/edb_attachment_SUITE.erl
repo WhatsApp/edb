@@ -60,6 +60,7 @@
     test_can_reverse_attach_to_node_with_dynamic_name/1,
     test_can_reverse_attach_to_node_with_no_dist/1,
     test_injectable_code_can_be_composed/1,
+    test_reverse_attach_blocks_further_evals/1,
     test_reverse_attaching_blocks_further_attachs/1,
     test_reverse_attach_fails_after_timeout/1,
     test_reverse_attach_fails_if_debuggee_not_in_debugging_mode/1,
@@ -135,6 +136,7 @@ groups() ->
             test_can_reverse_attach_to_node_with_no_dist,
 
             test_injectable_code_can_be_composed,
+            test_reverse_attach_blocks_further_evals,
             test_reverse_attaching_blocks_further_attachs,
             test_reverse_attach_fails_after_timeout,
             test_reverse_attach_detects_domain_mismatch,
@@ -641,6 +643,55 @@ test_injectable_code_can_be_composed(Config) ->
             peer:call(Peer, erlang, whereis, [foo])
         ),
 
+        ok
+    end).
+
+test_reverse_attach_blocks_further_evals(Config) ->
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % We are waiting for a node to attach
+        {ok, #{reverse_attach_ref := Ref, erl_code_to_inject := InjectedCode}} = edb:reverse_attach(#{
+            name_domain => shortnames
+        }),
+
+        % Subscribe to events to receive reverse attach result
+        {ok, Subscription} = edb:subscribe(),
+
+        % Register running process with a name, so it can receive messages from debuggee
+        Name = ?MODULE,
+        erlang:register(Name, self()),
+
+        % Send-me-a-message code
+        SendMsgCode =
+            case
+                unicode:characters_to_binary(io_lib:format("erlang:send({'~ts', '~ts'}, cheers)", [?MODULE, node()]))
+            of
+                Bin when is_binary(Bin) -> Bin
+            end,
+
+        % Launch a node that should send us a message only after resumed
+        {ok, #{node := Node}} = edb_test_support:start_peer_node(Config, #{
+            extra_args => ["-eval", InjectedCode, "-eval", SendMsgCode]
+        }),
+
+        % Wait for the node to be attached
+        {ok, Node} = wait_reverse_attach_event(Subscription, Ref),
+
+        % Sanity-check: the node was paused on attachment
+        ?assert(edb:is_paused()),
+
+        receive
+            cheers -> error(~"-eval block was evaluated before resuming")
+        after 0 ->
+            ok
+        end,
+
+        {ok, resumed} = edb:continue(),
+
+        receive
+            cheers -> ok
+        after 2_000 ->
+            error(~"timeout waiting for message from debuggee")
+        end,
         ok
     end).
 
