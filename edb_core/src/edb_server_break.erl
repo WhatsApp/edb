@@ -124,8 +124,8 @@ create() ->
 %% --------------------------------------------------------------------
 -spec add_explicit(vm_module(), line(), breakpoints()) -> {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
 add_explicit({vm_module, Module} = VmModule, Line, Breakpoints0) ->
-    case code:ensure_loaded(Module) of
-        {module, Module} ->
+    case try_ensure_module_loaded(Module) of
+        ok ->
             case add_vm_breakpoint(VmModule, Line, explicit, Breakpoints0) of
                 {ok, Breakpoints1} ->
                     #breakpoints{explicits = Explicits1} = Breakpoints1,
@@ -135,6 +135,8 @@ add_explicit({vm_module, Module} = VmModule, Line, Breakpoints0) ->
                 {error, Reason} ->
                     {error, Reason}
             end;
+        {error, timeout} ->
+            {error, timeout_loading_module};
         {error, _} ->
             {error, {badkey, Module}}
     end.
@@ -319,10 +321,12 @@ when
     Addrs :: call_stack_addrs().
 add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
     {Mod, Fun, Arity} = TargetMFA,
-    case code:ensure_loaded(Mod) of
+    case try_ensure_module_loaded(Mod) of
+        {error, timeout} ->
+            {error, {call_target, {timeout_loading_module, Mod}}};
         {error, _} ->
             {error, {call_target, {module_not_found, Mod}}};
-        {module, Mod} ->
+        ok ->
             case erl_debugger:breakpoints(Mod, Fun, Arity) of
                 {error, {badkey, Mod}} ->
                     % Mod deleted concurrently?
@@ -1071,8 +1075,31 @@ remove_substitute(
     }.
 
 %% --------------------------------------------------------------------
-%% Module source
+%% Module info
 %% --------------------------------------------------------------------
+
+-spec try_ensure_module_loaded(Module) -> ok | {error, embedded | badfile | nofile | timeout} when
+    Module :: module().
+try_ensure_module_loaded(Module) ->
+    ResponseRef = erlang:make_ref(),
+    Me = self(),
+    {Pid, MonRef} = erlang:spawn_monitor(fun() -> Me ! {ResponseRef, code:ensure_loaded(Module)} end),
+    receive
+        {ResponseRef, {module, Module}} -> ok;
+        {ResponseRef, Err = {error, _}} -> Err;
+        {'DOWN', MonRef, process, Pid, Reason} -> error({crashed_ensuring_loaded, Reason})
+    after 5_000 ->
+        erlang:exit(Pid, kill),
+        receive
+            {'DOWN', MonRef, process, Pid, _Reason} -> ok
+        end,
+        receive
+            {ResponseRef, {module, Module}} -> ok;
+            {ResponseRef, Err = {error, _}} -> Err
+        after 0 ->
+            {error, timeout}
+        end
+    end.
 
 -spec get_vm_module_source(VmModule, Breakpoints) -> file:filename() | undefined when
     VmModule :: vm_module(),

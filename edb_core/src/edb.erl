@@ -80,13 +80,15 @@ A breakpoint may not be added for various reasons:
      the module source, and so on.
   * `{unsupported, Line}`: It is not possible to set a breakpoint in the given line;
      for example, if it refers to a function head.
+  * `timeout_loading_module`: The module could not be loaded in time, possibly because a user process loading it is suspended.
 """.
 -type add_breakpoint_error() ::
     unsupported
     | {unsupported, module()}
     | {unsupported, Line :: line()}
     | {badkey, module()}
-    | {badkey, Line :: line()}.
+    | {badkey, Line :: line()}
+    | timeout_loading_module.
 
 -export_type([set_breakpoints_result/0]).
 -type set_breakpoints_result() :: [{line(), Result :: ok | {error, add_breakpoint_error()}}].
@@ -103,7 +105,8 @@ A breakpoint may not be added for various reasons:
 -type call_target_error() ::
     not_found
     | {module_not_found, module()}
-    | {function_not_found, mfa()}.
+    | {function_not_found, mfa()}
+    | {timeout_loading_module, module()}.
 
 -export_type([procs_spec/0]).
 -type procs_spec() :: {proc, pid() | atom()} | {application, atom()} | {except, pid()}.

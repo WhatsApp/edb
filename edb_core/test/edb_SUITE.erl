@@ -54,6 +54,7 @@
 -export([test_set_breakpoints_sets_breakpoints/1]).
 -export([test_set_breakpoints_returns_result_per_line/1]).
 -export([test_set_breakpoints_loads_the_module_if_necessary/1]).
+-export([test_set_breakpoints_fails_if_module_loading_is_stuck/1]).
 
 %% Test cases for the test_step_over group
 -export([test_step_over_goes_to_next_line/1]).
@@ -84,6 +85,7 @@
 -export([test_step_in_fails_if_non_fun_target/1]).
 -export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
+-export([test_step_in_fails_if_module_loading_is_stuck/1]).
 
 %% Test cases for the test_step_out group
 -export([test_step_out_of_external_closure/1]).
@@ -144,7 +146,8 @@ groups() ->
             test_get_breakpoints_works_per_module,
             test_set_breakpoints_sets_breakpoints,
             test_set_breakpoints_returns_result_per_line,
-            test_set_breakpoints_loads_the_module_if_necessary
+            test_set_breakpoints_loads_the_module_if_necessary,
+            test_set_breakpoints_fails_if_module_loading_is_stuck
         ]},
         {test_step_over, [
             test_step_over_goes_to_next_line,
@@ -176,7 +179,8 @@ groups() ->
             test_step_in_fails_if_non_fun_target,
             test_step_in_fails_if_fun_not_found,
 
-            test_step_in_loads_module_if_necessary
+            test_step_in_loads_module_if_necessary,
+            test_step_in_fails_if_module_loading_is_stuck
         ]},
         {test_step_out, [
             test_step_out_of_external_closure,
@@ -1490,6 +1494,29 @@ test_set_breakpoints_loads_the_module_if_necessary(Config) ->
 
     ok.
 
+test_set_breakpoints_fails_if_module_loading_is_stuck(Config) ->
+    ModuleSource = ~"""
+    -module(some_module_stucked_loading).
+    -on_load(hang_forever/0).
+    hang_forever() ->
+        timer:sleep(infinity).
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info],
+        load_it => false
+    }),
+
+    % Sanity-check: the module is not initially loaded
+    ?assertNot(code:is_loaded(Module)),
+
+    % Trying to set a breakpoint will try to load it, which should timeout
+    ?assertEqual(
+        [{4, {error, timeout_loading_module}}],
+        edb:set_breakpoints(Module, [4])
+    ),
+
+    ok.
+
 %% ------------------------------------------------------------------
 %% Test cases for test_step_over fixture
 %% ------------------------------------------------------------------
@@ -2343,6 +2370,49 @@ test_step_in_loads_module_if_necessary(Config) ->
 
     ?assertEqual(
         {error, {call_target, {module_not_found, non_existent_module}}},
+        edb:step_in(Pid)
+    ),
+
+    ok.
+
+test_step_in_fails_if_module_loading_is_stuck(Config) ->
+    CallerSource = ~"""
+    -module(caller_module).
+    -export([go/0]).
+    go() ->
+        stuck_module:run().
+    """,
+    StuckModuleSource = ~"""
+    -module(stuck_module).
+    -export([run/0]).
+    -on_load(hang_forever/0).
+    hang_forever() ->
+        timer:sleep(infinity).
+    run() ->
+        ok.
+    """,
+    {ok, #{caller_module := _, stuck_module := _}} = edb_test_support:compile_modules(
+        Config,
+        [{source, CallerSource}, {source, StuckModuleSource}],
+        #{
+            flags => [beam_debug_info],
+            load_it => false
+        }
+    ),
+
+    % Sanity-check: stuck_module is not initially loaded
+    ?assertNot(code:is_loaded(stuck_module)),
+
+    % Add a breakpoint before calling stuck_module:run()
+    ok = edb:add_breakpoint(caller_module, 4),
+
+    % Start a process and wait until it hits the breakpoint
+    Pid = erlang:spawn(caller_module, go, []),
+    {ok, paused} = edb:wait(),
+
+    % Trying to step in will try to load the module, which should timeout
+    ?assertEqual(
+        {error, {call_target, {timeout_loading_module, stuck_module}}},
         edb:step_in(Pid)
     ),
 
