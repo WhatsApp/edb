@@ -101,4 +101,11 @@ react_to_call_target_error({module_not_found, Module}) ->
 react_to_call_target_error({function_not_found, {M, F, A}}) ->
     edb_dap_request:precondition_violation(
         io_lib:format(~"Target function '~p:~p/~p' not found", [M, F, A])
+    );
+react_to_call_target_error({timeout_loading_module, M}) ->
+    edb_dap_request:unsupported(
+        io_lib:format(
+            ~"Module ~p couldn't be loaded in time; a process loading it may be suspended.",
+            [M]
+        )
     ).

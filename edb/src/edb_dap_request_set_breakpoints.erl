@@ -246,4 +246,6 @@ format_breakpoint_error({unsupported, Mod}) when is_atom(Mod) ->
 format_breakpoint_error({badkey, Line}) when is_integer(Line) ->
     ~"Line is not executable";
 format_breakpoint_error({unsupported, Line}) when is_integer(Line) ->
-    ~"Can't set a breakpoint on this line".
+    ~"Can't set a breakpoint on this line";
+format_breakpoint_error(timeout_loading_module) ->
+    ~"The module failed to be loaded in time; the process loading it may be paused".
