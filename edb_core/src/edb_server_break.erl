@@ -71,9 +71,6 @@
     %% on the new version (lines could have changed, so seems
     %% right). We need some way to be aware/handle this.
 
-    %% Explicit breakpoints requested by the client, grouped by module
-    explicits :: #{vm_module() => #{line() => []}},
-
     %% Internal breakpoints set by the server to step through, grouped by pid.
     %% For each such breakpoint, there are only certain call-stacks under which
     %% we want to suspend the process.
@@ -109,7 +106,6 @@
 -spec create() -> breakpoints().
 create() ->
     #breakpoints{
-        explicits = #{},
         steps = #{},
         explicits_hit = #{},
         resume_actions = #{},
@@ -126,15 +122,7 @@ create() ->
 add_explicit({vm_module, Module} = VmModule, Line, Breakpoints0) ->
     case try_ensure_module_loaded(Module) of
         ok ->
-            case add_vm_breakpoint(VmModule, Line, explicit, Breakpoints0) of
-                {ok, Breakpoints1} ->
-                    #breakpoints{explicits = Explicits1} = Breakpoints1,
-                    Explicits2 = edb_server_maps:add(VmModule, Line, [], Explicits1),
-                    Breakpoints2 = Breakpoints1#breakpoints{explicits = Explicits2},
-                    {ok, Breakpoints2};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
+            add_vm_breakpoint(VmModule, Line, explicit, Breakpoints0);
         {error, timeout} ->
             {error, timeout_loading_module};
         {error, _} ->
@@ -157,29 +145,22 @@ add_explicits(Module, Lines, Breakpoints0) ->
     ).
 
 -spec get_explicits(breakpoints()) -> #{vm_module() => #{line() => []}}.
-get_explicits(#breakpoints{explicits = Explicits}) ->
-    Explicits.
+get_explicits(Breakpoints) ->
+    VmBreakpoints = Breakpoints#breakpoints.vm_breakpoints,
+    #{VmMod => #{K => [] || K := #{explicit := []} <- Info} || VmMod := Info <- VmBreakpoints}.
 
 -spec get_explicits(vm_module(), breakpoints()) -> #{line() => []}.
-get_explicits(Module, #breakpoints{explicits = Explicits}) ->
-    maps:get(Module, Explicits, #{}).
+get_explicits(Module, Breakpoints) ->
+    Info = maps:get(Module, Breakpoints#breakpoints.vm_breakpoints, #{}),
+    #{K => [] || K := #{explicit := []} <- Info}.
 
 -spec clear_explicit(vm_module(), line(), breakpoints()) ->
     {ok, removed | vanished, breakpoints()} | {error, not_found}.
 clear_explicit(Module, Line, Breakpoints0) ->
-    case unregister_explicit(Module, Line, Breakpoints0) of
-        {found, Breakpoints1} ->
-            %% We knew about this breakpoint. Now remove it from the VM.
-            case remove_vm_breakpoint(Module, Line, explicit, Breakpoints1) of
-                {ok, DeletionResult, Breakpoints2} ->
-                    {ok, DeletionResult, Breakpoints2};
-                {error, unknown_vm_breakpoint} ->
-                    % Breakpoint was registered as explicit but not as a reason?
-                    % This should never happen, if it does we have a bug.
-                    edb_server:invariant_violation(inconsistent_explicit_breakpoint)
-            end;
-        not_found ->
-            %% We didn't know about this breakpoint, trying to clear it is a user error.
+    case remove_vm_breakpoint(Module, Line, explicit, Breakpoints0) of
+        {ok, DeletionResult, Breakpoints1} ->
+            {ok, DeletionResult, Breakpoints1};
+        {error, unknown_vm_breakpoint} ->
             {error, not_found}
     end.
 
@@ -198,23 +179,6 @@ clear_explicits(Module, Breakpoints0) ->
         Lines
     ),
     {ok, Breakpoints1}.
-
--spec unregister_explicit(vm_module(), line(), breakpoints()) -> {found, breakpoints()} | not_found.
-unregister_explicit(Module, Line, Breakpoints0) ->
-    #breakpoints{explicits = Explicits0} = Breakpoints0,
-    BreakpointInfos0 = maps:get(Module, Explicits0, #{}),
-    case edb_server_sets:take_element(Line, BreakpointInfos0) of
-        not_found ->
-            not_found;
-        {found, BreakpointInfos1} ->
-            Explicits1 =
-                case edb_server_sets:is_empty(BreakpointInfos1) of
-                    true -> maps:remove(Module, Explicits0);
-                    false -> Explicits0#{Module := BreakpointInfos1}
-                end,
-            Breakpoints1 = Breakpoints0#breakpoints{explicits = Explicits1},
-            {found, Breakpoints1}
-    end.
 
 -spec get_explicits_hit(breakpoints()) -> #{pid() => #{module := vm_module(), line := line()}}.
 get_explicits_hit(#breakpoints{explicits_hit = ExplicitsHit}) ->
@@ -553,13 +517,12 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
 
 -spec should_be_suspended(vm_module(), line(), pid(), breakpoints()) -> {true, explicit | step} | false.
 should_be_suspended(Module, Line, Pid, Breakpoints) ->
-    #breakpoints{explicits = Explicits, steps = Steps} = Breakpoints,
-    case Explicits of
-        #{Module := #{Line := []}} ->
+    case Breakpoints#breakpoints.vm_breakpoints of
+        #{Module := #{Line := #{explicit := []}}} ->
             %% This is an explicit breakpoint
             {true, explicit};
-        _ ->
-            case Steps of
+        #{Module := #{Line := #{{step, Pid} := []}}} ->
+            case Breakpoints#breakpoints.steps of
                 #{Pid := #{Module := #{Line := Patterns}}} ->
                     % We need stack-frames, and these require the process to be suspended
                     case edb_server_process:try_suspend_process(Pid) of
@@ -585,10 +548,10 @@ should_be_suspended(Module, Line, Pid, Breakpoints) ->
                         false ->
                             % Process was concurrently killed, etc
                             false
-                    end;
-                _ ->
-                    false
-            end
+                    end
+            end;
+        _ ->
+            false
     end.
 
 -spec register_resume_action(Pid, Resume, Breakpoints) -> Breakpoints when
@@ -835,18 +798,9 @@ reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
     Breakpoints1 :: breakpoints().
 transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
     #breakpoints{
-        explicits = Explicits0,
         steps = Steps0,
         vm_breakpoints = VmBreakpoints0
     } = Breakpoints0,
-
-    Explicits1 =
-        case Explicits0 of
-            #{SourceModule := Explicits} ->
-                Explicits0#{TargetModule => Explicits};
-            #{} ->
-                Explicits0
-        end,
 
     Steps1 =
         #{
@@ -869,7 +823,6 @@ transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
         end,
 
     Breakpoints0#breakpoints{
-        explicits = Explicits1,
         steps = Steps1,
         vm_breakpoints = VmBreakpoints1
     }.
