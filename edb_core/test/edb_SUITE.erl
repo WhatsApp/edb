@@ -2127,6 +2127,12 @@ test_multiprocess_parallel_steps(_Config) ->
     % Add a breakpoint to start stepping from
     ok = edb:add_breakpoint(test_step_over, 100),
 
+    % Sanity-check: user-breakpoints shows up
+    ?assertEqual(
+        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        edb:get_breakpoints()
+    ),
+
     % Spawn one process that will hit the breakpoint
     Pid1 = erlang:spawn(test_step_over, awaiting_steps, []),
     {ok, paused} = edb:wait(),
@@ -2158,6 +2164,12 @@ test_multiprocess_parallel_steps(_Config) ->
     AssertInStep(Pid1),
     AssertInStep(Pid2),
 
+    % Sanity-check: breakpoints used for stepping don't leak to the user
+    ?assertEqual(
+        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        edb:get_breakpoints()
+    ),
+
     % Unblock Pid1 and wait for it to complete its step
     Pid1 ! continue,
     edb:wait(),
@@ -2176,6 +2188,12 @@ test_multiprocess_parallel_steps(_Config) ->
     % Both processes await
     AssertInStep(Pid1),
     AssertInStep(Pid2),
+
+    % Sanity-check: breakpoints used for stepping don't leak to the user
+    ?assertEqual(
+        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        edb:get_breakpoints()
+    ),
 
     % Unblock Pid2 and wait for it to complete its (still first) step
     Pid2 ! continue,
