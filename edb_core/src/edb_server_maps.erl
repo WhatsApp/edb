@@ -23,6 +23,7 @@
 
 %% Public API
 -export([add/3, add/4, add/5, add/6]).
+-export([remove/2, remove/3, remove/4, remove/5]).
 
 -spec add(Key, Value, Map) -> Map when
     Map :: #{Key => Value}.
@@ -58,3 +59,54 @@ add(Key1, Key2, Key3, Key4, Value, Map) ->
         #{Key2 => #{Key3 => #{Key4 => Value}}},
         Map
     ).
+
+-spec remove(Key, Map0) -> Map1 when
+    Map0 :: #{Key => Value},
+    Map1 :: #{Key => Value}.
+remove(Key, Map) ->
+    maps:remove(Key, Map).
+
+-spec remove(Key1, Key2, Map0) -> Map1 when
+    Map0 :: #{Key1 => #{Key2 => Value}},
+    Map1 :: #{Key1 => #{Key2 => Value}}.
+remove(Key1, Key2, Map) ->
+    case maps:find(Key1, Map) of
+        {ok, Map1} ->
+            NewMap1 = remove(Key2, Map1),
+            case maps:size(NewMap1) of
+                0 -> maps:remove(Key1, Map);
+                _ -> Map#{Key1 := NewMap1}
+            end;
+        error ->
+            Map
+    end.
+
+-spec remove(Key1, Key2, Key3, Map0) -> Map1 when
+    Map0 :: #{Key1 => #{Key2 => #{Key3 => Value}}},
+    Map1 :: #{Key1 => #{Key2 => #{Key3 => Value}}}.
+remove(Key1, Key2, Key3, Map) ->
+    case maps:find(Key1, Map) of
+        {ok, Map1} ->
+            NewMap1 = remove(Key2, Key3, Map1),
+            case maps:size(NewMap1) of
+                0 -> maps:remove(Key1, Map);
+                _ -> Map#{Key1 := NewMap1}
+            end;
+        error ->
+            Map
+    end.
+
+-spec remove(Key1, Key2, Key3, Key4, Map0) -> Map1 when
+    Map0 :: #{Key1 => #{Key2 => #{Key3 => #{Key4 => Value}}}},
+    Map1 :: #{Key1 => #{Key2 => #{Key3 => #{Key4 => Value}}}}.
+remove(Key1, Key2, Key3, Key4, Map) ->
+    case maps:find(Key1, Map) of
+        {ok, Map1} ->
+            NewMap1 = remove(Key2, Key3, Key4, Map1),
+            case maps:size(NewMap1) of
+                0 -> maps:remove(Key1, Map);
+                _ -> Map#{Key1 := NewMap1}
+            end;
+        error ->
+            Map
+    end.

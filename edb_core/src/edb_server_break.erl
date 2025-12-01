@@ -701,7 +701,7 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
         #{Module := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) =:= 1 ->
             %% We have exactly one breakpoint reason on this line (and it's the one we're trying to remove)
             %% Unset the breakpoint and remove this location from the state
-            VmBreakpoints1 = maps:remove({Module, Line}, VmBreakpoints0),
+            VmBreakpoints1 = edb_server_maps:remove(Module, Line, VmBreakpoints0),
             Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
 
             DeletionResult = vm_unset_breakpoint(Module, Line),
