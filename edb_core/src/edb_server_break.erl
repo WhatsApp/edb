@@ -710,7 +710,7 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
             %% We have more than one VM breakpoint on this line (and one of them is the one we're trying to remove)
             %% Remove the reason and leave the VM breakpoint in place
             Reasons1 = maps:remove(Reason, Reasons0),
-            VmBreakpoints1 = VmBreakpoints0#{Module => #{Line => Reasons1}},
+            VmBreakpoints1 = edb_server_maps:add(Module, Line, Reasons1, VmBreakpoints0),
             Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
             {ok, removed, Breakpoints1};
         _ ->
