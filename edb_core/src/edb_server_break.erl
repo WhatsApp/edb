@@ -85,7 +85,7 @@
     steps :: #{pid() => #{vm_module() => #{line() => #{call_stack_pattern() => []}}}},
 
     %% User-breakpoints that have been hit
-    user_bps_hit :: #{pid() => #{type := line, module := vm_module(), line := line()}},
+    user_bps_hit :: #{pid() => edb:breakpoint_info()},
 
     %% Callbacks to resume processes that hit a VM breakpoint
     resume_actions :: #{pid() => fun(() -> ok)},
@@ -206,16 +206,13 @@ clear_user_breakpoints(Module, Breakpoints0) ->
 
 -spec get_user_breakpoints_hit(breakpoints()) -> #{pid() => edb:breakpoint_info()}.
 get_user_breakpoints_hit(Breakpoints) ->
-    #{
-        Pid => BpInfo#{module => from_vm_module(VmModule, Breakpoints)}
-     || Pid := BpInfo = #{module := VmModule} <- Breakpoints#breakpoints.user_bps_hit
-    }.
+    Breakpoints#breakpoints.user_bps_hit.
 
 -spec get_user_breakpoint_hit(pid(), breakpoints()) -> {ok, edb:breakpoint_info()} | no_breakpoint_hit.
 get_user_breakpoint_hit(Pid, Breakpoints) ->
     case Breakpoints#breakpoints.user_bps_hit of
-        #{Pid := BpInfo = #{module := VmModule}} ->
-            {ok, BpInfo#{module => from_vm_module(VmModule, Breakpoints)}};
+        #{Pid := BpInfo} ->
+            {ok, BpInfo};
         #{} ->
             no_breakpoint_hit
     end.
@@ -593,7 +590,8 @@ register_resume_action(Pid, Resume, Breakpoints) ->
     Module :: vm_module(),
     Line :: integer(),
     Pid :: pid().
-register_user_breakpoint_hit(Module, Line, Pid, Breakpoints) ->
+register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints) ->
+    Module = from_vm_module(VmModule, Breakpoints),
     #breakpoints{user_bps_hit = UserBpsHit} = Breakpoints,
     NewBPHit = #{type => line, module => Module, line => Line},
     UserBpsHit1 = UserBpsHit#{Pid => NewBPHit},
