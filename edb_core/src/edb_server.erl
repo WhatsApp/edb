@@ -598,7 +598,7 @@ get_breakpoints_impl(State0) ->
     BPSet = get_breakpoints(State0),
     Result =
         #{
-            Module => [#{module => Module, line => Line} || Line := [] <- Lines]
+            Module => [#{type => line, module => Module, line => Line} || Line := [] <- Lines]
          || VmModule := Lines <- BPSet,
             Module <- [from_vm_module(VmModule, State0)]
         },
@@ -608,17 +608,17 @@ get_breakpoints_impl(State0) ->
 get_breakpoints_impl(Module, State0) ->
     BPSet = get_breakpoints(State0),
     Lines = maps:get(to_vm_module(Module, State0), BPSet, #{}),
-    BPInfoList = [#{module => Module, line => Line} || Line := [] <- Lines],
+    BPInfoList = [#{type => line, module => Module, line => Line} || Line := [] <- Lines],
     {reply, BPInfoList, State0}.
 
 -spec get_breakpoints_hit_impl(State0 :: state()) -> {reply, BreakpointsHit, State1 :: state()} when
-    BreakpointsHit :: #{pid() => #{module := module(), line := line()}}.
+    BreakpointsHit :: #{pid() => #{type := line, module := module(), line := line()}}.
 get_breakpoints_hit_impl(State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmBreakpointsHit = edb_server_break:get_user_breakpoints_hit(Breakpoints0),
     BreakpointsHit = maps:map(
-        fun(_Pid, #{line := Line, module := VmModule}) ->
-            #{line => Line, module => from_vm_module(VmModule, State0)}
+        fun(_Pid, BpInfo = #{module := VmModule}) ->
+            BpInfo#{module => from_vm_module(VmModule, State0)}
         end,
         VmBreakpointsHit
     ),
@@ -1134,8 +1134,8 @@ process_status(Pid, State) ->
             case edb_server_break:get_user_breakpoint_hit(Pid, BP) of
                 no_breakpoint_hit ->
                     paused;
-                {ok, #{module := VmModule, line := Line}} ->
-                    {breakpoint, #{module => from_vm_module(VmModule, State), line => Line}}
+                {ok, BpInfo = #{module := VmModule}} ->
+                    {breakpoint, BpInfo#{module => from_vm_module(VmModule, State)}}
             end
     end.
 
