@@ -846,7 +846,16 @@ to_vm_module(Module, Breakpoints) ->
     VmModule :: vm_module(),
     Breakpoints :: breakpoints().
 from_vm_module(VmModule, Breakpoints) ->
-    resolve_module_substitute_reverse(VmModule, Breakpoints).
+    #breakpoints{substituted_modules_reverse = SubstitutedModulesReverse} = Breakpoints,
+    case SubstitutedModulesReverse of
+        #{VmModule := {vm_module, _} = PrevSubstitute} ->
+            from_vm_module(PrevSubstitute, Breakpoints);
+        #{VmModule := OrigModule} when is_atom(OrigModule) ->
+            OrigModule;
+        #{} ->
+            {vm_module, Module} = VmModule,
+            Module
+    end.
 
 -spec add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
     {ok, Breakpoints1} | {error, edb_server:add_substitute_error()}
@@ -946,20 +955,6 @@ resolve_module_substitute(
             Subst
     end.
 
--spec resolve_module_substitute_reverse(Substitute, Breakpoints) -> module() when
-    Substitute :: vm_module(),
-    Breakpoints :: breakpoints().
-resolve_module_substitute_reverse({vm_module, SubMod} = Substitute, Breakpoints) ->
-    #breakpoints{substituted_modules_reverse = SubstitutedModulesReverse} = Breakpoints,
-    case SubstitutedModulesReverse of
-        #{Substitute := {vm_module, _} = PrevSubstitute} ->
-            resolve_module_substitute_reverse(PrevSubstitute, Breakpoints);
-        #{Substitute := OrigModule} when is_atom(OrigModule) ->
-            OrigModule;
-        #{} ->
-            SubMod
-    end.
-
 -spec remove_module_substitute(SubstituteModule, Breakpoints0) ->
     {ok, Breakpoints1} | {error, edb_server:remove_substitute_error()}
 when
@@ -968,25 +963,21 @@ when
     Breakpoints1 :: breakpoints().
 remove_module_substitute(SubstituteModule, Breakpoints0) ->
     #breakpoints{
-        substituted_modules = SubstitutedModules0,
         further_substituted_modules = FurtherSubstitutes0,
         substituted_modules_reverse = SubstituteModulesReverse0
     } = Breakpoints0,
     VmSubstitute = {vm_module, SubstituteModule},
     case SubstituteModulesReverse0 of
         #{VmSubstitute := OriginalModule} ->
-            {SubstitutedModules1, FurtherSubstitutes1, SubstitutedModulesReverse1} = remove_substitute(
-                OriginalModule, VmSubstitute, SubstitutedModules0, FurtherSubstitutes0, SubstituteModulesReverse0
-            ),
             case FurtherSubstitutes0 of
                 #{VmSubstitute := _SubstituteModuleNext} ->
                     {error, has_dependent_substitute};
                 #{} ->
-                    Breakpoints1 = Breakpoints0#breakpoints{
-                        substituted_modules = SubstitutedModules1,
-                        further_substituted_modules = FurtherSubstitutes1,
-                        substituted_modules_reverse = SubstitutedModulesReverse1
-                    },
+                    Breakpoints1 = remove_substitute(
+                        OriginalModule,
+                        VmSubstitute,
+                        Breakpoints0
+                    ),
                     OriginalModuleAtom =
                         case OriginalModule of
                             {vm_module, Mod} -> Mod;
@@ -1003,35 +994,27 @@ remove_module_substitute(SubstituteModule, Breakpoints0) ->
             {error, not_a_substitute}
     end.
 
--spec remove_substitute(
+-spec remove_substitute(OriginalModule, SubstituteModule, Breakpoints0) -> breakpoints() when
     OriginalModule :: module() | vm_module(),
     SubstituteModule :: vm_module(),
-    SubstitutedModules :: #{module() => substitute_info()},
-    FurtherSubstitutes :: #{vm_module() => further_substitute_info()},
-    SubstitutedModulesReverse :: #{vm_module() => module() | vm_module()}
-) ->
-    {#{module() => substitute_info()}, #{vm_module() => further_substitute_info()}, #{
-        vm_module() => module() | vm_module()
-    }}.
-remove_substitute(
-    {vm_module, _} = OriginalModule,
-    SubstituteModule,
-    SubstitutedModules,
-    FurtherSubstitutes,
-    SubstitutedModulesReverse
-) ->
-    {
-        SubstitutedModules,
-        maps:remove(OriginalModule, FurtherSubstitutes),
-        maps:remove(SubstituteModule, SubstitutedModulesReverse)
+    Breakpoints0 :: breakpoints().
+remove_substitute({vm_module, _} = OriginalModule, SubstituteModule, Breakpoints0) ->
+    #breakpoints{
+        further_substituted_modules = FurtherSubstitutes,
+        substituted_modules_reverse = SubstitutedModulesReverse
+    } = Breakpoints0,
+    Breakpoints0#breakpoints{
+        further_substituted_modules = maps:remove(OriginalModule, FurtherSubstitutes),
+        substituted_modules_reverse = maps:remove(SubstituteModule, SubstitutedModulesReverse)
     };
-remove_substitute(
-    OriginalModule, SubstituteModule, SubstitutedModules, FurtherSubstitutes, SubstitutedModulesReverse
-) ->
-    {
-        maps:remove(OriginalModule, SubstitutedModules),
-        FurtherSubstitutes,
-        maps:remove(SubstituteModule, SubstitutedModulesReverse)
+remove_substitute(OriginalModule, SubstituteModule, Breakpoints0) ->
+    #breakpoints{
+        substituted_modules = SubstitutedModules,
+        substituted_modules_reverse = SubstitutedModulesReverse
+    } = Breakpoints0,
+    Breakpoints0#breakpoints{
+        substituted_modules = maps:remove(OriginalModule, SubstitutedModules),
+        substituted_modules_reverse = maps:remove(SubstituteModule, SubstitutedModulesReverse)
     }.
 
 %% --------------------------------------------------------------------
