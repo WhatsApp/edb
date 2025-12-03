@@ -592,7 +592,7 @@ get_breakpoints_impl(Module, State0) ->
     {reply, BPInfoList, State0}.
 
 -spec get_breakpoints_hit_impl(State0 :: state()) -> {reply, BreakpointsHit, State1 :: state()} when
-    BreakpointsHit :: #{pid() => #{type := line, module := module(), line := line()}}.
+    BreakpointsHit :: #{pid() => edb:breakpoint_info()}.
 get_breakpoints_hit_impl(State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     BreakpointsHit = edb_server_break:get_user_breakpoints_hit(Breakpoints0),
