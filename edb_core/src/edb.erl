@@ -64,6 +64,7 @@ The (new!) Erlang debugger
 
 -export_type([breakpoint_info/0]).
 -type breakpoint_info() :: #{
+    type := line,
     module := module(),
     line := line()
 }.

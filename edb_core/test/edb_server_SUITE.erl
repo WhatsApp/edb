@@ -123,8 +123,8 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         Breakpoints1 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints1
         ),
@@ -137,8 +137,8 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         Breakpoints2 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints2
         ),
@@ -163,8 +163,8 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         Breakpoints3 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints3
         ),
@@ -181,7 +181,7 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         Breakpoints4Map = edb:get_breakpoints_hit(),
         Breakpoints4 = maps:values(Breakpoints4Map),
         ?assertEqual(
-            [#{line => 4, module => test_reapply_module}], Breakpoints4
+            [#{type => line, line => 4, module => test_reapply_module}], Breakpoints4
         ),
 
         % Resume the test process and wait to hit the next breakpoint
@@ -192,7 +192,7 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         % Breakpoint on line 4 is hit
         Breakpoints5 = maps:values(Breakpoints5Map),
         ?assertEqual(
-            [#{line => 5, module => test_reapply_module}], Breakpoints5
+            [#{type => line, line => 5, module => test_reapply_module}], Breakpoints5
         ),
         ok
     end),
@@ -241,8 +241,8 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
         Breakpoints1 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints1
         ),
@@ -255,8 +255,8 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
         Breakpoints2 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints2
         ),
@@ -281,8 +281,8 @@ test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module
         Breakpoints3 = edb:get_breakpoints(test_reapply_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_reapply_module},
-                #{line => 5, module => test_reapply_module}
+                #{type => line, line => 4, module => test_reapply_module},
+                #{type => line, line => 5, module => test_reapply_module}
             ],
             Breakpoints3
         ),
@@ -333,8 +333,8 @@ test_add_module_substitute_transfers_existing_breakpoints_to_substitute_module(C
         Breakpoints1 = edb:get_breakpoints(test_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_module},
-                #{line => 5, module => test_module}
+                #{type => line, line => 4, module => test_module},
+                #{type => line, line => 5, module => test_module}
             ],
             Breakpoints1
         ),
@@ -351,7 +351,7 @@ test_add_module_substitute_transfers_existing_breakpoints_to_substitute_module(C
         Breakpoints2Map = edb:get_breakpoints_hit(),
         Breakpoints2 = maps:values(Breakpoints2Map),
         ?assertEqual(
-            [#{line => 4, module => test_module}], Breakpoints2
+            [#{type => line, line => 4, module => test_module}], Breakpoints2
         ),
 
         % Resume the test process and wait to hit the next breakpoint
@@ -362,7 +362,7 @@ test_add_module_substitute_transfers_existing_breakpoints_to_substitute_module(C
         Breakpoints3Map = edb:get_breakpoints_hit(),
         Breakpoints3 = maps:values(Breakpoints3Map),
         ?assertEqual(
-            [#{line => 5, module => test_module}], Breakpoints3
+            [#{type => line, line => 5, module => test_module}], Breakpoints3
         ),
         ok
     end),
@@ -398,8 +398,8 @@ test_add_module_substitute_adds_new_breakpoints_to_substitute_module(Config) ->
         Breakpoints1 = edb:get_breakpoints(test_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_module},
-                #{line => 5, module => test_module}
+                #{type => line, line => 4, module => test_module},
+                #{type => line, line => 5, module => test_module}
             ],
             Breakpoints1
         ),
@@ -416,7 +416,7 @@ test_add_module_substitute_adds_new_breakpoints_to_substitute_module(Config) ->
         Breakpoints2Map = edb:get_breakpoints_hit(),
         Breakpoints2 = maps:values(Breakpoints2Map),
         ?assertEqual(
-            [#{line => 4, module => test_module}], Breakpoints2
+            [#{type => line, line => 4, module => test_module}], Breakpoints2
         ),
 
         % Resume the test process and wait to hit the next breakpoint
@@ -427,7 +427,7 @@ test_add_module_substitute_adds_new_breakpoints_to_substitute_module(Config) ->
         Breakpoints3Map = edb:get_breakpoints_hit(),
         Breakpoints3 = maps:values(Breakpoints3Map),
         ?assertEqual(
-            [#{line => 5, module => test_module}], Breakpoints3
+            [#{type => line, line => 5, module => test_module}], Breakpoints3
         ),
         ok
     end),
@@ -478,7 +478,7 @@ test_add_module_substitute_handles_transitive_substitutes(Config) ->
         % Verify breakpoint is transferred to final module
         Breakpoints1 = edb:get_breakpoints(test_module_original),
         ?assertEqual(
-            [#{line => 4, module => test_module_original}],
+            [#{type => line, line => 4, module => test_module_original}],
             Breakpoints1
         ),
 
@@ -495,7 +495,7 @@ test_add_module_substitute_handles_transitive_substitutes(Config) ->
         % Verify breakpoint is set on final module
         Breakpoints3 = edb:get_breakpoints(test_module_original),
         ?assertEqual(
-            [#{line => 4, module => test_module_original}],
+            [#{type => line, line => 4, module => test_module_original}],
             Breakpoints3
         ),
 
@@ -511,7 +511,7 @@ test_add_module_substitute_handles_transitive_substitutes(Config) ->
         BreakpointsHitMap = edb:get_breakpoints_hit(),
         BreakpointsHit = maps:values(BreakpointsHitMap),
         ?assertEqual(
-            [#{line => 4, module => test_module_original}],
+            [#{type => line, line => 4, module => test_module_original}],
             BreakpointsHit
         ),
 
@@ -875,7 +875,7 @@ test_remove_module_substitute_transfers_breakpoints_back_to_original_module(Conf
         Breakpoints1 = edb:get_breakpoints(test_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_module}
+                #{type => line, line => 4, module => test_module}
             ],
             Breakpoints1
         ),
@@ -887,7 +887,7 @@ test_remove_module_substitute_transfers_breakpoints_back_to_original_module(Conf
         Breakpoints2 = edb:get_breakpoints(test_module),
         ?assertEqual(
             [
-                #{line => 4, module => test_module}
+                #{type => line, line => 4, module => test_module}
             ],
             Breakpoints2
         ),
@@ -904,7 +904,7 @@ test_remove_module_substitute_transfers_breakpoints_back_to_original_module(Conf
         Breakpoints3Map = edb:get_breakpoints_hit(),
         Breakpoints3 = maps:values(Breakpoints3Map),
         ?assertEqual(
-            [#{line => 4, module => test_module}], Breakpoints3
+            [#{type => line, line => 4, module => test_module}], Breakpoints3
         ),
 
         ok
@@ -1064,7 +1064,7 @@ test_remove_module_substitute_handles_transitive_substitutes(Config) ->
         Breakpoints1 = edb:get_breakpoints(test_module_original),
         ?assertEqual(
             [
-                #{line => 4, module => test_module_original}
+                #{type => line, line => 4, module => test_module_original}
             ],
             Breakpoints1
         ),
@@ -1076,7 +1076,7 @@ test_remove_module_substitute_handles_transitive_substitutes(Config) ->
         Breakpoints2 = edb:get_breakpoints(test_module_original),
         ?assertEqual(
             [
-                #{line => 4, module => test_module_original}
+                #{type => line, line => 4, module => test_module_original}
             ],
             Breakpoints2
         ),
@@ -1093,7 +1093,7 @@ test_remove_module_substitute_handles_transitive_substitutes(Config) ->
         BreakpointsHitMap = edb:get_breakpoints_hit(),
         BreakpointsHit = maps:values(BreakpointsHitMap),
         ?assertEqual(
-            [#{line => 4, module => test_module_original}], BreakpointsHit
+            [#{type => line, line => 4, module => test_module_original}], BreakpointsHit
         ),
 
         edb:continue(),
@@ -1106,7 +1106,7 @@ test_remove_module_substitute_handles_transitive_substitutes(Config) ->
         Breakpoints3 = edb:get_breakpoints(test_module_original),
         ?assertEqual(
             [
-                #{line => 4, module => test_module_original}
+                #{type => line, line => 4, module => test_module_original}
             ],
             Breakpoints3
         ),
@@ -1123,7 +1123,7 @@ test_remove_module_substitute_handles_transitive_substitutes(Config) ->
         BreakpointsHitMap2 = edb:get_breakpoints_hit(),
         BreakpointsHit2 = maps:values(BreakpointsHitMap2),
         ?assertEqual(
-            [#{line => 4, module => test_module_original}], BreakpointsHit2
+            [#{type => line, line => 4, module => test_module_original}], BreakpointsHit2
         ),
 
         ok

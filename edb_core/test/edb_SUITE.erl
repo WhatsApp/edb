@@ -481,7 +481,7 @@ test_wait_waits_for_breakpoint_hit(_Config) ->
     % the breakpoint being hit
     ?assertEqual({status, suspended}, erlang:process_info(Pid, status)),
     ?assertEqual(
-        #{Pid => #{module => test_breakpoints, line => 8}},
+        #{Pid => #{type => line, module => test_breakpoints, line => 8}},
         edb:get_breakpoints_hit()
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(6, Pid),
@@ -516,7 +516,7 @@ test_continue_continues(_Config) ->
 
     % Sanity check: process hit the first bp, and we saw the right side-effects
     ?assertEqual(
-        #{Pid => #{module => test_breakpoints, line => 7}},
+        #{Pid => #{type => line, module => test_breakpoints, line => 7}},
         edb:get_breakpoints_hit()
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(6, Pid),
@@ -532,7 +532,7 @@ test_continue_continues(_Config) ->
     % and we saw the remaining side-effects
     ?assertEqual({status, suspended}, erlang:process_info(Pid, status)),
     ?assertEqual(
-        #{Pid => #{module => test_breakpoints, line => 8}},
+        #{Pid => #{type => line, module => test_breakpoints, line => 8}},
         edb:get_breakpoints_hit()
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(7, Pid),
@@ -1151,7 +1151,7 @@ test_clear_breakpoint_clears_breakpoints(_Config) ->
     % We expect to be in line 8, since the breakpoint on line 7
     % was removed
     ?assertEqual(
-        #{Pid => #{module => test_breakpoints, line => 8}},
+        #{Pid => #{type => line, module => test_breakpoints, line => 8}},
         edb:get_breakpoints_hit()
     ),
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(6, Pid),
@@ -1180,10 +1180,10 @@ test_clear_breakpoints_clears_all_breakpoints(_Config) ->
         #{
             test_breakpoints =>
                 [
-                    #{line => 6, module => test_breakpoints},
-                    #{line => 7, module => test_breakpoints},
-                    #{line => 8, module => test_breakpoints},
-                    #{line => 9, module => test_breakpoints}
+                    #{type => line, line => 6, module => test_breakpoints},
+                    #{type => line, line => 7, module => test_breakpoints},
+                    #{type => line, line => 8, module => test_breakpoints},
+                    #{type => line, line => 9, module => test_breakpoints}
                 ]
         },
         edb:get_breakpoints()
@@ -1203,7 +1203,7 @@ test_clear_breakpoints_clears_all_breakpoints(_Config) ->
         #{
             test_breakpoints =>
                 [
-                    #{line => 10, module => test_breakpoints}
+                    #{type => line, line => 10, module => test_breakpoints}
                 ]
         },
         edb:get_breakpoints()
@@ -1215,7 +1215,7 @@ test_clear_breakpoints_clears_all_breakpoints(_Config) ->
 
     % We check that we only hit the later breakpoint
     ?assertEqual(
-        #{Pid => #{line => 10, module => test_breakpoints}},
+        #{Pid => #{type => line, line => 10, module => test_breakpoints}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1245,9 +1245,9 @@ test_get_breakpoints_reports_current_set_breakpoints(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints},
-                #{line => 7, module => test_breakpoints},
-                #{line => 8, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints},
+                #{type => line, line => 7, module => test_breakpoints},
+                #{type => line, line => 8, module => test_breakpoints}
             ]
         },
         edb:get_breakpoints()
@@ -1260,8 +1260,8 @@ test_get_breakpoints_reports_current_set_breakpoints(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints},
-                #{line => 8, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints},
+                #{type => line, line => 8, module => test_breakpoints}
             ]
         },
         edb:get_breakpoints()
@@ -1274,7 +1274,7 @@ test_get_breakpoints_reports_current_set_breakpoints(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints}
             ]
         },
         edb:get_breakpoints()
@@ -1310,14 +1310,14 @@ test_get_breakpoints_works_per_module(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints},
-                #{line => 7, module => test_breakpoints},
-                #{line => 8, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints},
+                #{type => line, line => 7, module => test_breakpoints},
+                #{type => line, line => 8, module => test_breakpoints}
             ],
             test_breakpoints_2 => [
-                #{line => 6, module => test_breakpoints_2},
-                #{line => 8, module => test_breakpoints_2},
-                #{line => 9, module => test_breakpoints_2}
+                #{type => line, line => 6, module => test_breakpoints_2},
+                #{type => line, line => 8, module => test_breakpoints_2},
+                #{type => line, line => 9, module => test_breakpoints_2}
             ]
         },
         edb:get_breakpoints()
@@ -1326,18 +1326,18 @@ test_get_breakpoints_works_per_module(_Config) ->
     % We can retrieve them per module
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints},
-            #{line => 7, module => test_breakpoints},
-            #{line => 8, module => test_breakpoints}
+            #{type => line, line => 6, module => test_breakpoints},
+            #{type => line, line => 7, module => test_breakpoints},
+            #{type => line, line => 8, module => test_breakpoints}
         ],
         edb:get_breakpoints(test_breakpoints)
     ),
 
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints_2},
-            #{line => 8, module => test_breakpoints_2},
-            #{line => 9, module => test_breakpoints_2}
+            #{type => line, line => 6, module => test_breakpoints_2},
+            #{type => line, line => 8, module => test_breakpoints_2},
+            #{type => line, line => 9, module => test_breakpoints_2}
         ],
         edb:get_breakpoints(test_breakpoints_2)
     ),
@@ -1348,8 +1348,8 @@ test_get_breakpoints_works_per_module(_Config) ->
     % We no longer see it
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints},
-            #{line => 7, module => test_breakpoints}
+            #{type => line, line => 6, module => test_breakpoints},
+            #{type => line, line => 7, module => test_breakpoints}
         ],
         edb:get_breakpoints(test_breakpoints)
     ),
@@ -1357,9 +1357,9 @@ test_get_breakpoints_works_per_module(_Config) ->
     % The other module is not affected
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints_2},
-            #{line => 8, module => test_breakpoints_2},
-            #{line => 9, module => test_breakpoints_2}
+            #{type => line, line => 6, module => test_breakpoints_2},
+            #{type => line, line => 8, module => test_breakpoints_2},
+            #{type => line, line => 9, module => test_breakpoints_2}
         ],
         edb:get_breakpoints(test_breakpoints_2)
     ),
@@ -1381,14 +1381,14 @@ test_set_breakpoints_sets_breakpoints(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints},
-                #{line => 7, module => test_breakpoints},
-                #{line => 8, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints},
+                #{type => line, line => 7, module => test_breakpoints},
+                #{type => line, line => 8, module => test_breakpoints}
             ],
             test_breakpoints_2 => [
-                #{line => 6, module => test_breakpoints_2},
-                #{line => 8, module => test_breakpoints_2},
-                #{line => 9, module => test_breakpoints_2}
+                #{type => line, line => 6, module => test_breakpoints_2},
+                #{type => line, line => 8, module => test_breakpoints_2},
+                #{type => line, line => 9, module => test_breakpoints_2}
             ]
         },
         edb:get_breakpoints()
@@ -1400,8 +1400,8 @@ test_set_breakpoints_sets_breakpoints(_Config) ->
     % We see the updated breakpoints
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints},
-            #{line => 9, module => test_breakpoints}
+            #{type => line, line => 6, module => test_breakpoints},
+            #{type => line, line => 9, module => test_breakpoints}
         ],
         edb:get_breakpoints(test_breakpoints)
     ),
@@ -1409,9 +1409,9 @@ test_set_breakpoints_sets_breakpoints(_Config) ->
     % The other module is not affected
     ?assertEqual(
         [
-            #{line => 6, module => test_breakpoints_2},
-            #{line => 8, module => test_breakpoints_2},
-            #{line => 9, module => test_breakpoints_2}
+            #{type => line, line => 6, module => test_breakpoints_2},
+            #{type => line, line => 8, module => test_breakpoints_2},
+            #{type => line, line => 9, module => test_breakpoints_2}
         ],
         edb:get_breakpoints(test_breakpoints_2)
     ),
@@ -1447,8 +1447,8 @@ test_set_breakpoints_returns_result_per_line(_Config) ->
     ?assertEqual(
         #{
             test_breakpoints => [
-                #{line => 6, module => test_breakpoints},
-                #{line => 7, module => test_breakpoints}
+                #{type => line, line => 6, module => test_breakpoints},
+                #{type => line, line => 7, module => test_breakpoints}
             ]
         },
         edb:get_breakpoints()
@@ -1534,7 +1534,7 @@ test_step_over_goes_to_next_line(_Config) ->
 
     % Sanity check that we hit the breapoint
     ?assertEqual(
-        #{Pid => #{line => 20, module => test_step_over}},
+        #{Pid => #{type => line, line => 20, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1595,7 +1595,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
 
     % Sanity check that we hit the breapoint
     ?assertEqual(
-        #{Pid => #{line => 44, module => test_step_over}},
+        #{Pid => #{type => line, line => 44, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1705,7 +1705,7 @@ test_step_over_within_and_out_of_closure(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 54, module => test_step_over}},
+        #{Pid => #{type => line, line => 54, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1787,7 +1787,7 @@ test_step_over_within_and_out_of_external_closure(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 71, module => test_step_over}},
+        #{Pid => #{type => line, line => 71, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1983,7 +1983,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 20, module => test_step_over}},
+        #{Pid => #{type => line, line => 20, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -1996,7 +1996,7 @@ test_step_over_progresses_from_breakpoint(_Config) ->
 
     % "Breakpoint hit wins": if we step on a breakpoint then we consider having hit it
     ?assertEqual(
-        #{Pid => #{line => 21, module => test_step_over}},
+        #{Pid => #{type => line, line => 21, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2047,7 +2047,7 @@ test_step_over_in_unbreakpointable_code(Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 118, module => test_step_over}},
+        #{Pid => #{type => line, line => 118, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
     ChildPid =
@@ -2080,7 +2080,7 @@ test_breakpoint_consumes_step(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 20, module => test_step_over}},
+        #{Pid => #{type => line, line => 20, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2093,7 +2093,7 @@ test_breakpoint_consumes_step(_Config) ->
 
     % "Breakpoint hit wins": if we step on a breakpoint then we consider having hit it
     ?assertEqual(
-        #{Pid => #{line => 21, module => test_step_over}},
+        #{Pid => #{type => line, line => 21, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2131,7 +2131,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Sanity-check: user-breakpoints shows up
     ?assertEqual(
-        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        #{test_step_over => [#{type => line, line => 100, module => test_step_over}]},
         edb:get_breakpoints()
     ),
 
@@ -2141,7 +2141,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid1 => #{line => 100, module => test_step_over}},
+        #{Pid1 => #{type => line, line => 100, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2154,7 +2154,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Pid2 should have hit its breakpoint
     ?assertEqual(
-        #{Pid2 => #{line => 100, module => test_step_over}},
+        #{Pid2 => #{type => line, line => 100, module => test_step_over}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2168,7 +2168,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Sanity-check: breakpoints used for stepping don't leak to the user
     ?assertEqual(
-        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        #{test_step_over => [#{type => line, line => 100, module => test_step_over}]},
         edb:get_breakpoints()
     ),
 
@@ -2193,7 +2193,7 @@ test_multiprocess_parallel_steps(_Config) ->
 
     % Sanity-check: breakpoints used for stepping don't leak to the user
     ?assertEqual(
-        #{test_step_over => [#{line => 100, module => test_step_over}]},
+        #{test_step_over => [#{type => line, line => 100, module => test_step_over}]},
         edb:get_breakpoints()
     ),
 
@@ -2482,7 +2482,7 @@ test_step_out_of_external_closure(_Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 71, module => test_step_out}},
+        #{Pid => #{type => line, line => 71, module => test_step_out}},
         edb:get_breakpoints_hit()
     ),
 
@@ -2613,7 +2613,7 @@ test_step_out_with_unbreakpointable_caller(Config) ->
 
     % Sanity check that we hit the breakpoint
     ?assertEqual(
-        #{Pid => #{line => 101, module => test_step_out}},
+        #{Pid => #{type => line, line => 101, module => test_step_out}},
         edb:get_breakpoints_hit()
     ),
 
