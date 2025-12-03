@@ -253,15 +253,11 @@ init([]) ->
 -spec terminate(Reason :: term(), State :: state()) -> ok.
 terminate(Reason, State0) ->
     erl_debugger:unregister(self(), State0#state.debugger_session),
-    BPs = get_breakpoints(State0),
-    State1 = maps:fold(
-        fun(Module, _ModuleBPS, StateN) ->
-            {reply, _, StateN_plus_1} = clear_breakpoints_impl(Module, StateN),
-            StateN_plus_1
-        end,
-        State0,
-        BPs
-    ),
+
+    Breakpoints0 = State0#state.breakpoints,
+    {ok, Breakpoints1} = edb_server_break:clear_all_breakpoints(Breakpoints0),
+    State1 = State0#state{breakpoints = Breakpoints1},
+
     {ok, _ActuallyResumed, State2} = resume_processes(all, termination, State1),
     ok = edb_events:broadcast({terminated, Reason}, State2#state.event_subscribers),
     ok.

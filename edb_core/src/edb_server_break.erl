@@ -22,6 +22,7 @@
 -export([add_user_breakpoint/2, add_user_breakpoints/2]).
 -export([get_user_breakpoints/1, get_user_breakpoints/2]).
 -export([clear_user_breakpoint/2, clear_user_breakpoints/2]).
+-export([clear_all_breakpoints/1]).
 -export([get_user_breakpoints_hit/1, get_user_breakpoint_hit/2]).
 -export([reapply_breakpoints/2]).
 
@@ -198,6 +199,15 @@ clear_user_breakpoints(Module, Breakpoints0) ->
         Breakpoints0,
         get_user_breakpoints(Module, Breakpoints0)
     ),
+    {ok, Breakpoints1}.
+
+-spec clear_all_breakpoints(breakpoints()) -> {ok, breakpoints()}.
+clear_all_breakpoints(Breakpoints0) ->
+    [
+        vm_unset_breakpoint(VmMod, Line)
+     || VmMod := Lines <- Breakpoints0#breakpoints.vm_breakpoints, Line <- maps:keys(Lines)
+    ],
+    Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = #{}, steps = #{}},
     {ok, Breakpoints1}.
 
 -spec get_user_breakpoints_hit(breakpoints()) -> #{pid() => edb:breakpoint_info()}.
