@@ -125,7 +125,7 @@ find() ->
 Reapply all existing breakpoints for the specified module to the VM.
 
 This function will attempt to set VM breakpoints for all lines that currently
-have explicit breakpoints or step breakpoints registered for the given module.
+have user-breakpoints or step-breakpoints registered for the given module.
 
 The operation is atomic - either all breakpoints are successfully reapplied, or
 none are applied at all. If any individual breakpoint fails to be set, all
@@ -450,7 +450,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                         {ok, State2} = suspend_all_processes(Universe, UnsuspendablePids, State1),
                         PausedEvent =
                             case Reason of
-                                explicit ->
+                                user_breakpoint ->
                                     {breakpoint, Pid, MFA, {line, Line}};
                                 step ->
                                     % Pid was already suspended when processing the step breakpoint, so
@@ -541,7 +541,7 @@ send_sync_event_impl(Subscription, State) ->
 add_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    case edb_server_break:add_explicit(VmModule, Line, Breakpoints0) of
+    case edb_server_break:add_user_breakpoint(VmModule, Line, Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {reply, ok, State1};
@@ -556,7 +556,7 @@ add_breakpoint_impl(Module, Line, State0) ->
 clear_breakpoints_impl(Module, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    {ok, Breakpoints1} = edb_server_break:clear_explicits(VmModule, Breakpoints0),
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(VmModule, Breakpoints0),
     State1 = State0#state{breakpoints = Breakpoints1},
     {reply, ok, State1}.
 
@@ -568,7 +568,7 @@ clear_breakpoints_impl(Module, State0) ->
 clear_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    case edb_server_break:clear_explicit(VmModule, Line, Breakpoints0) of
+    case edb_server_break:clear_user_breakpoint(VmModule, Line, Breakpoints0) of
         {ok, _, Breakpoints1} ->
             %% We don't do anything particular yet if the breakpoint vanished from the VM
             State1 = State0#state{breakpoints = Breakpoints1},
@@ -586,8 +586,8 @@ clear_breakpoint_impl(Module, Line, State0) ->
 set_breakpoints_impl(Module, Lines, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    {ok, Breakpoints1} = edb_server_break:clear_explicits(VmModule, Breakpoints0),
-    {LineResults, Breakpoints2} = edb_server_break:add_explicits(VmModule, Lines, Breakpoints1),
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(VmModule, Breakpoints0),
+    {LineResults, Breakpoints2} = edb_server_break:add_user_breakpoints(VmModule, Lines, Breakpoints1),
     State2 = State0#state{breakpoints = Breakpoints2},
     {reply, LineResults, State2}.
 
@@ -613,7 +613,7 @@ get_breakpoints_impl(Module, State0) ->
     BreakpointsHit :: #{pid() => #{module := module(), line := line()}}.
 get_breakpoints_hit_impl(State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    VmBreakpointsHit = edb_server_break:get_explicits_hit(Breakpoints0),
+    VmBreakpointsHit = edb_server_break:get_user_breakpoints_hit(Breakpoints0),
     BreakpointsHit = maps:map(
         fun(_Pid, #{line := Line, module := VmModule}) ->
             #{line => Line, module => from_vm_module(VmModule, State0)}
@@ -1031,7 +1031,7 @@ is_paused(State) ->
 -spec get_breakpoints(State0) -> #{edb_server_break:vm_module() => #{line() => []}} when State0 :: state().
 get_breakpoints(State0) ->
     #state{breakpoints = Breakpoints} = State0,
-    edb_server_break:get_explicits(Breakpoints).
+    edb_server_break:get_user_breakpoints(Breakpoints).
 
 -spec resume_processes(Targets, Reason, State0) -> {ok, ActuallyResumed, State1} when
     Targets :: set(pid()) | all,
@@ -1129,7 +1129,7 @@ process_status(Pid, State) ->
             running;
         true ->
             #state{breakpoints = BP} = State,
-            case edb_server_break:get_explicit_hit(Pid, BP) of
+            case edb_server_break:get_user_breakpoint_hit(Pid, BP) of
                 no_breakpoint_hit ->
                     paused;
                 {ok, #{module := VmModule, line := Line}} ->
