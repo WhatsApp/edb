@@ -42,7 +42,7 @@
 
 % Module substitutes
 -export([add_module_substitute/4, remove_module_substitute/2]).
--export([to_vm_module/2, from_vm_module/2]).
+-export([from_vm_module/2]).
 -export([get_vm_module_source/2]).
 
 %% --------------------------------------------------------------------
@@ -60,6 +60,14 @@
     substitute => vm_module(),
     added_frames => [mfa()]
 }.
+
+-type add_vm_breakpoint_error() ::
+    unsupported
+    | {unsupported, vm_module()}
+    | {unsupported, Line :: line()}
+    | {badkey, vm_module()}
+    | {badkey, Line :: line()}
+    | timeout_loading_module.
 
 -export_type([breakpoints/0, vm_module/0]).
 -record(breakpoints, {
@@ -121,11 +129,15 @@ create() ->
 -spec add_user_breakpoint(BreakpointDescription, breakpoints()) ->
     {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
 when
-    BreakpointDescription :: {vm_module(), line()}.
-add_user_breakpoint({{vm_module, Module} = VmModule, Line}, Breakpoints0) ->
-    case try_ensure_module_loaded(Module) of
+    BreakpointDescription :: {module(), line()}.
+add_user_breakpoint({Module, Line}, Breakpoints0) ->
+    VmModule = to_vm_module(Module, Breakpoints0),
+    case try_ensure_module_loaded(VmModule) of
         ok ->
-            add_vm_breakpoint(VmModule, Line, user_breakpoint, Breakpoints0);
+            case add_vm_breakpoint(VmModule, Line, user_breakpoint, Breakpoints0) of
+                {ok, _} = OkResult -> OkResult;
+                {error, Reason} -> {error, from_add_vm_breakpoint_error(Reason, Breakpoints0)}
+            end;
         {error, timeout} ->
             {error, timeout_loading_module};
         {error, _} ->
@@ -134,7 +146,7 @@ add_user_breakpoint({{vm_module, Module} = VmModule, Line}, Breakpoints0) ->
 
 -spec add_user_breakpoints(BreakpointDescriptions, breakpoints()) -> {BreakpointResults, breakpoints()} when
     BreakpointDescriptions :: [BreakpointDescription],
-    BreakpointDescription :: {vm_module(), line()},
+    BreakpointDescription :: {module(), line()},
     BreakpointResults :: [{BreakpointDescription, Result}],
     Result :: ok | {error, edb:add_breakpoint_error()}.
 add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
@@ -149,29 +161,34 @@ add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
         BreakpointDescriptions
     ).
 
--spec get_user_breakpoints(breakpoints()) -> #{vm_module() => #{line() => []}}.
+-spec get_user_breakpoints(breakpoints()) -> #{module() => #{line() => []}}.
 get_user_breakpoints(Breakpoints) ->
     VmBreakpoints = Breakpoints#breakpoints.vm_breakpoints,
-    #{VmMod => #{K => [] || K := #{user_breakpoint := []} <- Info} || VmMod := Info <- VmBreakpoints}.
+    #{
+        from_vm_module(VmMod, Breakpoints) => #{K => [] || K := #{user_breakpoint := []} <- Info}
+     || VmMod := Info <- VmBreakpoints
+    }.
 
--spec get_user_breakpoints(vm_module(), breakpoints()) -> #{line() => []}.
+-spec get_user_breakpoints(module(), breakpoints()) -> #{line() => []}.
 get_user_breakpoints(Module, Breakpoints) ->
-    Info = maps:get(Module, Breakpoints#breakpoints.vm_breakpoints, #{}),
+    VmModule = to_vm_module(Module, Breakpoints),
+    Info = maps:get(VmModule, Breakpoints#breakpoints.vm_breakpoints, #{}),
     #{K => [] || K := #{user_breakpoint := []} <- Info}.
 
 -spec clear_user_breakpoint(LineBreakpoint, breakpoints()) ->
     {ok, removed | vanished, breakpoints()} | {error, not_found}
 when
-    LineBreakpoint :: {vm_module(), line()}.
+    LineBreakpoint :: {module(), line()}.
 clear_user_breakpoint({Module, Line}, Breakpoints0) ->
-    case remove_vm_breakpoint(Module, Line, user_breakpoint, Breakpoints0) of
+    VmModule = to_vm_module(Module, Breakpoints0),
+    case remove_vm_breakpoint(VmModule, Line, user_breakpoint, Breakpoints0) of
         {ok, DeletionResult, Breakpoints1} ->
             {ok, DeletionResult, Breakpoints1};
         {error, unknown_vm_breakpoint} ->
             {error, not_found}
     end.
 
--spec clear_user_breakpoints(vm_module(), breakpoints()) -> {ok, breakpoints()}.
+-spec clear_user_breakpoints(module(), breakpoints()) -> {ok, breakpoints()}.
 clear_user_breakpoints(Module, Breakpoints0) ->
     Lines = maps:keys(get_user_breakpoints(Module, Breakpoints0)),
     Breakpoints1 = lists:foldl(
@@ -187,16 +204,18 @@ clear_user_breakpoints(Module, Breakpoints0) ->
     ),
     {ok, Breakpoints1}.
 
--spec get_user_breakpoints_hit(breakpoints()) -> #{pid() => #{type := line, module := vm_module(), line := line()}}.
-get_user_breakpoints_hit(#breakpoints{user_bps_hit = UserBpsHit}) ->
-    UserBpsHit.
+-spec get_user_breakpoints_hit(breakpoints()) -> #{pid() => edb:breakpoint_info()}.
+get_user_breakpoints_hit(Breakpoints) ->
+    #{
+        Pid => BpInfo#{module => from_vm_module(VmModule, Breakpoints)}
+     || Pid := BpInfo = #{module := VmModule} <- Breakpoints#breakpoints.user_bps_hit
+    }.
 
--spec get_user_breakpoint_hit(pid(), breakpoints()) ->
-    {ok, #{type := line, module := vm_module(), line := line()}} | no_breakpoint_hit.
-get_user_breakpoint_hit(Pid, #breakpoints{user_bps_hit = UserBpsHit}) ->
-    case UserBpsHit of
-        #{Pid := BpHit} ->
-            {ok, BpHit};
+-spec get_user_breakpoint_hit(pid(), breakpoints()) -> {ok, edb:breakpoint_info()} | no_breakpoint_hit.
+get_user_breakpoint_hit(Pid, Breakpoints) ->
+    case Breakpoints#breakpoints.user_bps_hit of
+        #{Pid := BpInfo = #{module := VmModule}} ->
+            {ok, BpInfo#{module => from_vm_module(VmModule, Breakpoints)}};
         #{} ->
             no_breakpoint_hit
     end.
@@ -289,7 +308,7 @@ when
     Addrs :: call_stack_addrs().
 add_steps_on_step_in_target(Pid, CurrentMFA, TargetMFA, Addrs, Breakpoints0) ->
     {Mod, Fun, Arity} = TargetMFA,
-    case try_ensure_module_loaded(Mod) of
+    case try_ensure_module_loaded({vm_module, Mod}) of
         {error, timeout} ->
             {error, {call_target, {timeout_loading_module, Mod}}};
         {error, _} ->
@@ -497,13 +516,14 @@ is_process_trapped(Pid, Breakpoints) ->
     {suspend, Reason, breakpoints()} | resume
 when
     Breakpoints :: breakpoints(),
-    Module :: vm_module(),
+    Module :: module(),
     Line :: integer(),
     Pid :: pid(),
     Resume :: fun(() -> ok),
     Reason :: user_breakpoint | step.
 register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
-    case should_be_suspended(Module, Line, Pid, Breakpoints0) of
+    VmModule = to_vm_module(Module, Breakpoints0),
+    case should_be_suspended(VmModule, Line, Pid, Breakpoints0) of
         {true, Reason} ->
             %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
             Breakpoints1 = register_resume_action(Pid, Resume, Breakpoints0),
@@ -512,7 +532,7 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
                     step ->
                         Breakpoints1;
                     user_breakpoint ->
-                        register_user_breakpoint_hit(Module, Line, Pid, Breakpoints1)
+                        register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints1)
                 end,
             {ok, Breakpoints3} = clear_steps(Pid, Breakpoints2),
             {suspend, Reason, Breakpoints3};
@@ -657,15 +677,15 @@ resume_processes(ToResume, Breakpoints) ->
 % erlfmt:ignore-end
 
 -spec add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
-    {ok, Breakpoints1} | {error, edb:add_breakpoint_error()}
+    {ok, Breakpoints1} | {error, add_vm_breakpoint_error()}
 when
     Module :: vm_module(),
     Line :: line(),
     Reason :: vm_breakpoint_reason(),
     Breakpoints0 :: breakpoints(),
     Breakpoints1 :: breakpoints().
-add_vm_breakpoint({vm_module, Module}, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
-    {error, {unsupported, Module}};
+add_vm_breakpoint(VmModule = {vm_module, Module}, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
+    {error, {unsupported, VmModule}};
 add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
@@ -719,7 +739,7 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
 
 %% Low-level VM breakpoint functions. Do not use directly (but through add/remove).
 
--spec vm_set_breakpoint(Module, Line) -> ok | {error, edb:add_breakpoint_error()} when
+-spec vm_set_breakpoint(Module, Line) -> ok | {error, add_vm_breakpoint_error()} when
     Module :: vm_module(),
     Line :: line().
 vm_set_breakpoint({vm_module, Module}, Line) ->
@@ -729,7 +749,7 @@ vm_set_breakpoint({vm_module, Module}, Line) ->
                 ok ->
                     ok;
                 {error, Reason} ->
-                    {error, Reason}
+                    {error, to_add_vm_breakpoint_error(Reason)}
             end;
         _ ->
             {error, unsupported}
@@ -750,14 +770,18 @@ vm_unset_breakpoint({vm_module, Module}, Line) ->
             vanished
     end.
 
--spec reapply_breakpoints(vm_module(), breakpoints()) -> ok | {error, edb:add_breakpoint_error()}.
+-spec reapply_breakpoints(module(), breakpoints()) -> ok | {error, edb:add_breakpoint_error()}.
 reapply_breakpoints(Module, Breakpoints0) ->
+    VmModule = to_vm_module(Module, Breakpoints0),
     #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
-    AllLines = maps:keys(maps:get(Module, VmBreakpoints, #{})),
-    reapply_breakpoints_with_rollback(Module, AllLines, []).
+    AllLines = maps:keys(maps:get(VmModule, VmBreakpoints, #{})),
+    case reapply_breakpoints_with_rollback(VmModule, AllLines, []) of
+        ok -> ok;
+        {error, Reason} -> {error, from_add_vm_breakpoint_error(Reason, Breakpoints0)}
+    end.
 
 -spec reapply_breakpoints(SourceModule, TargetModule, breakpoints()) ->
-    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
+    {ok, breakpoints()} | {error, add_vm_breakpoint_error()}
 when
     SourceModule :: vm_module(),
     TargetModule :: vm_module().
@@ -778,7 +802,7 @@ has_breakpoints(Module, Breakpoints0) ->
     maps:is_key(Module, VmBreakpoints).
 
 -spec reapply_breakpoints_with_rollback(vm_module(), [line()], [line()]) ->
-    ok | {error, edb:add_breakpoint_error()}.
+    ok | {error, add_vm_breakpoint_error()}.
 reapply_breakpoints_with_rollback(_Module, [], _Applied) ->
     ok;
 reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
@@ -856,6 +880,19 @@ from_vm_module(VmModule, Breakpoints) ->
             {vm_module, Module} = VmModule,
             Module
     end.
+
+-spec to_add_vm_breakpoint_error(edb:add_breakpoint_error()) -> add_vm_breakpoint_error().
+to_add_vm_breakpoint_error({unsupported, Module}) when is_atom(Module) -> {unsupported, {vm_module, Module}};
+to_add_vm_breakpoint_error({badkey, Module}) when is_atom(Module) -> {badkey, {vm_module, Module}};
+to_add_vm_breakpoint_error(Error) -> Error.
+
+-spec from_add_vm_breakpoint_error(add_vm_breakpoint_error(), breakpoints()) -> edb:add_breakpoint_error().
+from_add_vm_breakpoint_error({unsupported, VmModule = {vm_module, _}}, Breakpoints) ->
+    {unsupported, from_vm_module(VmModule, Breakpoints)};
+from_add_vm_breakpoint_error({badkey, VmModule = {vm_module, _}}, Breakpoints) ->
+    {badkey, from_vm_module(VmModule, Breakpoints)};
+from_add_vm_breakpoint_error(Error, _Breakpoints) ->
+    Error.
 
 -spec add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
     {ok, Breakpoints1} | {error, edb_server:add_substitute_error()}
@@ -1021,9 +1058,10 @@ remove_substitute(OriginalModule, SubstituteModule, Breakpoints0) ->
 %% Module info
 %% --------------------------------------------------------------------
 
--spec try_ensure_module_loaded(Module) -> ok | {error, embedded | badfile | nofile | timeout} when
-    Module :: module().
-try_ensure_module_loaded(Module) ->
+-spec try_ensure_module_loaded(VmModule) -> ok | {error, embedded | badfile | nofile | timeout} when
+    VmModule :: vm_module().
+try_ensure_module_loaded(VmModule) ->
+    {vm_module, Module} = VmModule,
     ResponseRef = erlang:make_ref(),
     Me = self(),
     {Pid, MonRef} = erlang:spawn_monitor(fun() -> Me ! {ResponseRef, code:ensure_loaded(Module)} end),
