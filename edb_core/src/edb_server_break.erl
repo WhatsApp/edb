@@ -19,9 +19,9 @@
 -export([create/0]).
 
 % User-brekapoints manipulation
--export([add_user_breakpoint/3, add_user_breakpoints/3]).
+-export([add_user_breakpoint/2, add_user_breakpoints/2]).
 -export([get_user_breakpoints/1, get_user_breakpoints/2]).
--export([clear_user_breakpoint/3, clear_user_breakpoints/2]).
+-export([clear_user_breakpoint/2, clear_user_breakpoints/2]).
 -export([get_user_breakpoints_hit/1, get_user_breakpoint_hit/2]).
 -export([reapply_breakpoints/2]).
 
@@ -114,9 +114,11 @@ create() ->
 %% --------------------------------------------------------------------
 %% User breakpoints manipulation
 %% --------------------------------------------------------------------
--spec add_user_breakpoint(vm_module(), line(), breakpoints()) ->
-    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}.
-add_user_breakpoint({vm_module, Module} = VmModule, Line, Breakpoints0) ->
+-spec add_user_breakpoint(BreakpointDescription, breakpoints()) ->
+    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
+when
+    BreakpointDescription :: {vm_module(), line()}.
+add_user_breakpoint({{vm_module, Module} = VmModule, Line}, Breakpoints0) ->
     case try_ensure_module_loaded(Module) of
         ok ->
             add_vm_breakpoint(VmModule, Line, user_breakpoint, Breakpoints0);
@@ -126,19 +128,21 @@ add_user_breakpoint({vm_module, Module} = VmModule, Line, Breakpoints0) ->
             {error, {badkey, Module}}
     end.
 
--spec add_user_breakpoints(vm_module(), [line()], breakpoints()) -> {LineResults, breakpoints()} when
-    LineResults :: [{line(), Result}],
+-spec add_user_breakpoints(BreakpointDescriptions, breakpoints()) -> {BreakpointResults, breakpoints()} when
+    BreakpointDescriptions :: [BreakpointDescription],
+    BreakpointDescription :: {vm_module(), line()},
+    BreakpointResults :: [{BreakpointDescription, Result}],
     Result :: ok | {error, edb:add_breakpoint_error()}.
-add_user_breakpoints(Module, Lines, Breakpoints0) ->
+add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
     lists:mapfoldl(
-        fun(Line, AccBreakpointsIn) ->
-            case add_user_breakpoint(Module, Line, AccBreakpointsIn) of
-                {ok, AccBreakpointsOut} -> {{Line, ok}, AccBreakpointsOut};
-                {error, Error} -> {{Line, {error, Error}}, AccBreakpointsIn}
+        fun(BreakpointDescription, AccBreakpointsIn) ->
+            case add_user_breakpoint(BreakpointDescription, AccBreakpointsIn) of
+                {ok, AccBreakpointsOut} -> {{BreakpointDescription, ok}, AccBreakpointsOut};
+                {error, Error} -> {{BreakpointDescription, {error, Error}}, AccBreakpointsIn}
             end
         end,
         Breakpoints0,
-        Lines
+        BreakpointDescriptions
     ).
 
 -spec get_user_breakpoints(breakpoints()) -> #{vm_module() => #{line() => []}}.
@@ -151,9 +155,11 @@ get_user_breakpoints(Module, Breakpoints) ->
     Info = maps:get(Module, Breakpoints#breakpoints.vm_breakpoints, #{}),
     #{K => [] || K := #{user_breakpoint := []} <- Info}.
 
--spec clear_user_breakpoint(vm_module(), line(), breakpoints()) ->
-    {ok, removed | vanished, breakpoints()} | {error, not_found}.
-clear_user_breakpoint(Module, Line, Breakpoints0) ->
+-spec clear_user_breakpoint(LineBreakpoint, breakpoints()) ->
+    {ok, removed | vanished, breakpoints()} | {error, not_found}
+when
+    LineBreakpoint :: {vm_module(), line()}.
+clear_user_breakpoint({Module, Line}, Breakpoints0) ->
     case remove_vm_breakpoint(Module, Line, user_breakpoint, Breakpoints0) of
         {ok, DeletionResult, Breakpoints1} ->
             {ok, DeletionResult, Breakpoints1};
@@ -166,7 +172,7 @@ clear_user_breakpoints(Module, Breakpoints0) ->
     Lines = maps:keys(get_user_breakpoints(Module, Breakpoints0)),
     Breakpoints1 = lists:foldl(
         fun(Line, AccBreakpointsIn) ->
-            case clear_user_breakpoint(Module, Line, AccBreakpointsIn) of
+            case clear_user_breakpoint({Module, Line}, AccBreakpointsIn) of
                 {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
                 % A breakpoint line taken from the list cannot be not_found
                 {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)

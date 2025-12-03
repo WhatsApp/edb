@@ -541,7 +541,7 @@ send_sync_event_impl(Subscription, State) ->
 add_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    case edb_server_break:add_user_breakpoint(VmModule, Line, Breakpoints0) of
+    case edb_server_break:add_user_breakpoint({VmModule, Line}, Breakpoints0) of
         {ok, Breakpoints1} ->
             State1 = State0#state{breakpoints = Breakpoints1},
             {reply, ok, State1};
@@ -568,7 +568,7 @@ clear_breakpoints_impl(Module, State0) ->
 clear_breakpoint_impl(Module, Line, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
-    case edb_server_break:clear_user_breakpoint(VmModule, Line, Breakpoints0) of
+    case edb_server_break:clear_user_breakpoint({VmModule, Line}, Breakpoints0) of
         {ok, _, Breakpoints1} ->
             %% We don't do anything particular yet if the breakpoint vanished from the VM
             State1 = State0#state{breakpoints = Breakpoints1},
@@ -587,8 +587,10 @@ set_breakpoints_impl(Module, Lines, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
     VmModule = to_vm_module(Module, State0),
     {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(VmModule, Breakpoints0),
-    {LineResults, Breakpoints2} = edb_server_break:add_user_breakpoints(VmModule, Lines, Breakpoints1),
+    BreakpointDescriptions = [{VmModule, Line} || Line <- Lines],
+    {Results, Breakpoints2} = edb_server_break:add_user_breakpoints(BreakpointDescriptions, Breakpoints1),
     State2 = State0#state{breakpoints = Breakpoints2},
+    LineResults = [{Line, Result} || {{M, Line}, Result} <- Results, M =:= VmModule],
     {reply, LineResults, State2}.
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
