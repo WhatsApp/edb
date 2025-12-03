@@ -447,22 +447,22 @@ add_steps_on_function(Pid, MFA, BasePatterns, Breakpoints0) ->
             end
     end.
 
--spec add_step(Pid, Patterns, Module, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
+-spec add_step(Pid, Patterns, VmModule, Line, breakpoints()) -> {ok, breakpoints()} | no_breakpoint_set when
     Pid :: pid(),
     Patterns :: [call_stack_pattern()],
-    Module :: vm_module(),
+    VmModule :: vm_module(),
     Line :: line().
-add_step(Pid, Patterns, Module, Line, Breakpoints0) ->
+add_step(Pid, Patterns, VmModule, Line, Breakpoints0) ->
     %% TODO(T233850146): Corner case - Sometimes we want to add a stepping breakpoint to the old (non-substitute)
     %% version of a module. In this case, the semantics of Erlang will call fun() in the old version of
     %% the module, and the breakpoint should be set in the old version, so we need to add a way to
     %% do this in the VM.
-    case add_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
+    case add_vm_breakpoint(VmModule, Line, {step, Pid}, Breakpoints0) of
         {ok, Breakpoints1} ->
             #breakpoints{steps = Steps1} = Breakpoints1,
             Steps2 = lists:foldl(
                 fun(Pattern, StepsN) ->
-                    edb_server_maps:add(Pid, Module, Line, Pattern, [], StepsN)
+                    edb_server_maps:add(Pid, VmModule, Line, Pattern, [], StepsN)
                 end,
                 Steps1,
                 Patterns
@@ -494,8 +494,8 @@ get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_
 get_targets_for_step_in(_TopFrame) ->
     edb_server:invariant_violation(stepping_from_unbreakable_frame).
 
--spec try_resolve_mfa(Mod, Target) -> false | {true, mfa()} when
-    Mod :: vm_module(),
+-spec try_resolve_mfa(VmMod, Target) -> false | {true, mfa()} when
+    VmMod :: vm_module(),
     Target :: edb_server_code:call_target().
 try_resolve_mfa(_, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
     {true, MFA};
@@ -549,13 +549,13 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
 
 -spec should_be_suspended(vm_module(), line(), pid(), breakpoints()) -> {true, Reason} | false when
     Reason :: user_breakpoint | step.
-should_be_suspended(Module, Line, Pid, Breakpoints) ->
+should_be_suspended(VmModule, Line, Pid, Breakpoints) ->
     case Breakpoints#breakpoints.vm_breakpoints of
-        #{Module := #{Line := #{user_breakpoint := []}}} ->
+        #{VmModule := #{Line := #{user_breakpoint := []}}} ->
             {true, user_breakpoint};
-        #{Module := #{Line := #{{step, Pid} := []}}} ->
+        #{VmModule := #{Line := #{{step, Pid} := []}}} ->
             case Breakpoints#breakpoints.steps of
-                #{Pid := #{Module := #{Line := Patterns}}} ->
+                #{Pid := #{VmModule := #{Line := Patterns}}} ->
                     % We need stack-frames, and these require the process to be suspended
                     case edb_server_process:try_suspend_process(Pid) of
                         true ->
@@ -595,9 +595,9 @@ register_resume_action(Pid, Resume, Breakpoints) ->
     ResumeActions1 = ResumeActions#{Pid => Resume},
     Breakpoints#breakpoints{resume_actions = ResumeActions1}.
 
--spec register_user_breakpoint_hit(Module, Line, Pid, Breakpoints) -> breakpoints() when
+-spec register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints) -> breakpoints() when
     Breakpoints :: breakpoints(),
-    Module :: vm_module(),
+    VmModule :: vm_module(),
     Line :: integer(),
     Pid :: pid().
 register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints) ->
@@ -629,8 +629,8 @@ clear_steps(Pid, Breakpoints) ->
 
 %% Try to clear one step breakpoint in the VM. If error happens, do nothing.
 -spec try_clear_step_in_vm(pid(), vm_module(), line(), breakpoints()) -> breakpoints().
-try_clear_step_in_vm(Pid, Module, Line, Breakpoints0) ->
-    case remove_vm_breakpoint(Module, Line, {step, Pid}, Breakpoints0) of
+try_clear_step_in_vm(Pid, VmModule, Line, Breakpoints0) ->
+    case remove_vm_breakpoint(VmModule, Line, {step, Pid}, Breakpoints0) of
         {ok, _, Breakpoints1} -> Breakpoints1;
         {error, unknown_vm_breakpoint} -> Breakpoints0
     end.
@@ -684,57 +684,57 @@ resume_processes(ToResume, Breakpoints) ->
 ).
 % erlfmt:ignore-end
 
--spec add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+-spec add_vm_breakpoint(VmModule, Line, Reason, Breakpoints0) ->
     {ok, Breakpoints1} | {error, add_vm_breakpoint_error()}
 when
-    Module :: vm_module(),
+    VmModule :: vm_module(),
     Line :: line(),
     Reason :: vm_breakpoint_reason(),
     Breakpoints0 :: breakpoints(),
     Breakpoints1 :: breakpoints().
 add_vm_breakpoint(VmModule = {vm_module, Module}, _, _, _) when map_get(Module, ?unbreakpointable_modules) ->
     {error, {unsupported, VmModule}};
-add_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+add_vm_breakpoint(VmModule, Line, Reason, Breakpoints0) ->
     %% Register the new breakpoint reason at this location
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
-    VmBreakpoints1 = edb_server_maps:add(Module, Line, Reason, [], VmBreakpoints0),
+    VmBreakpoints1 = edb_server_maps:add(VmModule, Line, Reason, [], VmBreakpoints0),
     Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
 
     %% Set the VM breakpoint.
     %% We do this regardless of whether it was already set at this location
     %% because the module could have been reloaded in the meantime.
-    case vm_set_breakpoint(Module, Line) of
+    case vm_set_breakpoint(VmModule, Line) of
         ok ->
             {ok, Breakpoints1};
         {error, Error} ->
             {error, Error}
     end.
 
--spec remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+-spec remove_vm_breakpoint(VmModule, Line, Reason, Breakpoints0) ->
     {ok, removed | vanished, Breakpoints1} | {error, unknown_vm_breakpoint}
 when
-    Module :: vm_module(),
+    VmModule :: vm_module(),
     Line :: line(),
     Reason :: vm_breakpoint_reason(),
     Breakpoints0 :: breakpoints(),
     Breakpoints1 :: breakpoints().
-remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
+remove_vm_breakpoint(VmModule, Line, Reason, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints0} = Breakpoints0,
 
     case VmBreakpoints0 of
-        #{Module := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) =:= 1 ->
+        #{VmModule := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) =:= 1 ->
             %% We have exactly one breakpoint reason on this line (and it's the one we're trying to remove)
             %% Unset the breakpoint and remove this location from the state
-            VmBreakpoints1 = edb_server_maps:remove(Module, Line, VmBreakpoints0),
+            VmBreakpoints1 = edb_server_maps:remove(VmModule, Line, VmBreakpoints0),
             Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
 
-            DeletionResult = vm_unset_breakpoint(Module, Line),
+            DeletionResult = vm_unset_breakpoint(VmModule, Line),
             {ok, DeletionResult, Breakpoints1};
-        #{Module := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) > 1 ->
+        #{VmModule := #{Line := #{Reason := []} = Reasons0}} when map_size(Reasons0) > 1 ->
             %% We have more than one VM breakpoint on this line (and one of them is the one we're trying to remove)
             %% Remove the reason and leave the VM breakpoint in place
             Reasons1 = maps:remove(Reason, Reasons0),
-            VmBreakpoints1 = edb_server_maps:add(Module, Line, Reasons1, VmBreakpoints0),
+            VmBreakpoints1 = edb_server_maps:add(VmModule, Line, Reasons1, VmBreakpoints0),
             Breakpoints1 = Breakpoints0#breakpoints{vm_breakpoints = VmBreakpoints1},
             {ok, removed, Breakpoints1};
         _ ->
@@ -747,10 +747,11 @@ remove_vm_breakpoint(Module, Line, Reason, Breakpoints0) ->
 
 %% Low-level VM breakpoint functions. Do not use directly (but through add/remove).
 
--spec vm_set_breakpoint(Module, Line) -> ok | {error, add_vm_breakpoint_error()} when
-    Module :: vm_module(),
+-spec vm_set_breakpoint(VmModule, Line) -> ok | {error, add_vm_breakpoint_error()} when
+    VmModule :: vm_module(),
     Line :: line().
-vm_set_breakpoint({vm_module, Module}, Line) ->
+vm_set_breakpoint(VmModule, Line) ->
+    {vm_module, Module} = VmModule,
     case erl_debugger:instrumentations() of
         #{line_breakpoint := true} ->
             case erl_debugger:breakpoint(Module, Line, true) of
@@ -763,10 +764,11 @@ vm_set_breakpoint({vm_module, Module}, Line) ->
             {error, unsupported}
     end.
 
--spec vm_unset_breakpoint(Module, Line) -> removed | vanished when
-    Module :: vm_module(),
+-spec vm_unset_breakpoint(VmModule, Line) -> removed | vanished when
+    VmModule :: vm_module(),
     Line :: line().
-vm_unset_breakpoint({vm_module, Module}, Line) ->
+vm_unset_breakpoint(VmModule, Line) ->
+    {vm_module, Module} = VmModule,
     case erl_debugger:breakpoint(Module, Line, false) of
         ok ->
             %% Breakpoint has been successfully removed from the VM
@@ -788,52 +790,52 @@ reapply_breakpoints(Module, Breakpoints0) ->
         {error, Reason} -> {error, from_add_vm_breakpoint_error(Reason, Breakpoints0)}
     end.
 
--spec reapply_breakpoints(SourceModule, TargetModule, breakpoints()) ->
+-spec reapply_breakpoints(SourceVmModule, TargetVmModule, breakpoints()) ->
     {ok, breakpoints()} | {error, add_vm_breakpoint_error()}
 when
-    SourceModule :: vm_module(),
-    TargetModule :: vm_module().
-reapply_breakpoints(SourceModule, TargetModule, Breakpoints0) ->
+    SourceVmModule :: vm_module(),
+    TargetVmModule :: vm_module().
+reapply_breakpoints(SourceVmModule, TargetVmModule, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
-    AllLines = maps:keys(maps:get(SourceModule, VmBreakpoints, #{})),
-    case reapply_breakpoints_with_rollback(TargetModule, AllLines, []) of
+    AllLines = maps:keys(maps:get(SourceVmModule, VmBreakpoints, #{})),
+    case reapply_breakpoints_with_rollback(TargetVmModule, AllLines, []) of
         ok ->
-            Breakpoints1 = transfer_module_references(SourceModule, TargetModule, Breakpoints0),
+            Breakpoints1 = transfer_module_references(SourceVmModule, TargetVmModule, Breakpoints0),
             {ok, Breakpoints1};
         Error ->
             Error
     end.
 
 -spec has_breakpoints(vm_module(), breakpoints()) -> boolean().
-has_breakpoints(Module, Breakpoints0) ->
+has_breakpoints(VmModule, Breakpoints0) ->
     #breakpoints{vm_breakpoints = VmBreakpoints} = Breakpoints0,
-    maps:is_key(Module, VmBreakpoints).
+    maps:is_key(VmModule, VmBreakpoints).
 
 -spec reapply_breakpoints_with_rollback(vm_module(), [line()], [line()]) ->
     ok | {error, add_vm_breakpoint_error()}.
-reapply_breakpoints_with_rollback(_Module, [], _Applied) ->
+reapply_breakpoints_with_rollback(_VmModule, [], _Applied) ->
     ok;
-reapply_breakpoints_with_rollback(Module, [Line | Rest], Applied) ->
-    case vm_set_breakpoint(Module, Line) of
+reapply_breakpoints_with_rollback(VmModule, [Line | Rest], Applied) ->
+    case vm_set_breakpoint(VmModule, Line) of
         ok ->
-            reapply_breakpoints_with_rollback(Module, Rest, [Line | Applied]);
+            reapply_breakpoints_with_rollback(VmModule, Rest, [Line | Applied]);
         {error, _} = Error ->
             % Unset all previously applied breakpoints
             lists:foreach(
                 fun(AppliedLine) ->
-                    vm_unset_breakpoint(Module, AppliedLine)
+                    vm_unset_breakpoint(VmModule, AppliedLine)
                 end,
                 Applied
             ),
             Error
     end.
 
--spec transfer_module_references(SourceModule, TargetModule, Breakpoints0) -> Breakpoints1 when
-    SourceModule :: vm_module(),
-    TargetModule :: vm_module(),
+-spec transfer_module_references(SourceVmModule, TargetVmModule, Breakpoints0) -> Breakpoints1 when
+    SourceVmModule :: vm_module(),
+    TargetVmModule :: vm_module(),
     Breakpoints0 :: breakpoints(),
     Breakpoints1 :: breakpoints().
-transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
+transfer_module_references(SourceVmModule, TargetVmModule, Breakpoints0) ->
     #breakpoints{
         steps = Steps0,
         vm_breakpoints = VmBreakpoints0
@@ -843,8 +845,8 @@ transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
         #{
             Pid =>
                 case PidSteps of
-                    #{SourceModule := LinePatterns} ->
-                        PidSteps#{TargetModule => LinePatterns};
+                    #{SourceVmModule := LinePatterns} ->
+                        PidSteps#{TargetVmModule => LinePatterns};
                     #{} ->
                         PidSteps
                 end
@@ -853,8 +855,8 @@ transfer_module_references(SourceModule, TargetModule, Breakpoints0) ->
 
     VmBreakpoints1 =
         case VmBreakpoints0 of
-            #{SourceModule := LineReasons} ->
-                VmBreakpoints0#{TargetModule => LineReasons};
+            #{SourceVmModule := LineReasons} ->
+                VmBreakpoints0#{TargetVmModule => LineReasons};
             #{} ->
                 VmBreakpoints0
         end,
@@ -978,8 +980,8 @@ add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
             end
     end.
 
--spec resolve_module_substitute(Module, Breakpoints) -> vm_module() when
-    Module :: module() | vm_module(),
+-spec resolve_module_substitute(ModuleOrVmModule, Breakpoints) -> vm_module() when
+    ModuleOrVmModule :: module() | vm_module(),
     Breakpoints :: breakpoints().
 resolve_module_substitute(Module, #breakpoints{substituted_modules = SubstitutedModules} = Breakpoints) when
     is_atom(Module)
