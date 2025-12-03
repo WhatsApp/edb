@@ -576,20 +576,14 @@ set_breakpoints_impl(Module, Lines, State0) ->
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->
-    BPSet = get_breakpoints(State0),
-    Result =
-        #{
-            Module => [#{type => line, module => Module, line => Line} || Line := [] <- Lines]
-         || Module := Lines <- BPSet
-        },
+    Result = get_breakpoints(State0),
     {reply, Result, State0}.
 
 -spec get_breakpoints_impl(module(), state()) -> {reply, [edb:breakpoint_info()], state()}.
 get_breakpoints_impl(Module, State0) ->
     #state{breakpoints = Breakpoints} = State0,
-    Lines = edb_server_break:get_user_breakpoints(Module, Breakpoints),
-    BPInfoList = [#{type => line, module => Module, line => Line} || Line := [] <- Lines],
-    {reply, BPInfoList, State0}.
+    Result = edb_server_break:get_user_breakpoints(Module, Breakpoints),
+    {reply, Result, State0}.
 
 -spec get_breakpoints_hit_impl(State0 :: state()) -> {reply, BreakpointsHit, State1 :: state()} when
     BreakpointsHit :: #{pid() => edb:breakpoint_info()}.
@@ -1003,7 +997,8 @@ is_paused(State) ->
     HasAPausedProcess = maps:size(Procs) =/= 0,
     HasAPausedProcess.
 
--spec get_breakpoints(State0) -> #{module() => #{line() => []}} when State0 :: state().
+-spec get_breakpoints(State0) -> #{module() => [edb:breakpoint_info()]} when
+    State0 :: state().
 get_breakpoints(State0) ->
     #state{breakpoints = Breakpoints} = State0,
     edb_server_break:get_user_breakpoints(Breakpoints).

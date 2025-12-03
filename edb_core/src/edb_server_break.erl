@@ -157,19 +157,20 @@ add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
         BreakpointDescriptions
     ).
 
--spec get_user_breakpoints(breakpoints()) -> #{module() => #{line() => []}}.
+-spec get_user_breakpoints(breakpoints()) -> #{module() => [edb:breakpoint_info()]}.
 get_user_breakpoints(Breakpoints) ->
     VmBreakpoints = Breakpoints#breakpoints.vm_breakpoints,
     #{
-        from_vm_module(VmMod, Breakpoints) => #{K => [] || K := #{user_breakpoint := []} <- Info}
-     || VmMod := Info <- VmBreakpoints
+        Mod => [#{type => line, module => Mod, line => Line} || Line := #{user_breakpoint := []} <- Info]
+     || VmMod := Info <- VmBreakpoints,
+        Mod <- [from_vm_module(VmMod, Breakpoints)]
     }.
 
--spec get_user_breakpoints(module(), breakpoints()) -> #{line() => []}.
+-spec get_user_breakpoints(module(), breakpoints()) -> [edb:breakpoint_info()].
 get_user_breakpoints(Module, Breakpoints) ->
     VmModule = to_vm_module(Module, Breakpoints),
     Info = maps:get(VmModule, Breakpoints#breakpoints.vm_breakpoints, #{}),
-    #{K => [] || K := #{user_breakpoint := []} <- Info}.
+    [#{type => line, module => Module, line => Line} || Line := #{user_breakpoint := []} <- Info].
 
 -spec clear_user_breakpoint(LineBreakpoint, breakpoints()) ->
     {ok, removed | vanished, breakpoints()} | {error, not_found}
@@ -186,9 +187,8 @@ clear_user_breakpoint({Module, Line}, Breakpoints0) ->
 
 -spec clear_user_breakpoints(module(), breakpoints()) -> {ok, breakpoints()}.
 clear_user_breakpoints(Module, Breakpoints0) ->
-    Lines = maps:keys(get_user_breakpoints(Module, Breakpoints0)),
     Breakpoints1 = lists:foldl(
-        fun(Line, AccBreakpointsIn) ->
+        fun(#{type := line, line := Line}, AccBreakpointsIn) ->
             case clear_user_breakpoint({Module, Line}, AccBreakpointsIn) of
                 {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
                 % A breakpoint line taken from the list cannot be not_found
@@ -196,7 +196,7 @@ clear_user_breakpoints(Module, Breakpoints0) ->
             end
         end,
         Breakpoints0,
-        Lines
+        get_user_breakpoints(Module, Breakpoints0)
     ),
     {ok, Breakpoints1}.
 
