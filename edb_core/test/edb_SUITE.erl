@@ -61,6 +61,10 @@
 -export([test_function_and_line_breakpoint_interaction/1]).
 -export([test_clear_function_breakpoints/1]).
 -export([test_function_breakpoint_errors/1]).
+-export([test_set_function_breakpoints_sets_function_breakpoints/1]).
+-export([test_set_function_breakpoints_returns_result_per_function/1]).
+-export([test_set_function_breakpoints_loads_the_module_if_necessary/1]).
+-export([test_set_function_breakpoints_fails_if_module_loading_is_stuck/1]).
 
 %% Test cases for the test_step_over group
 -export([test_step_over_goes_to_next_line/1]).
@@ -159,7 +163,11 @@ groups() ->
             test_function_breakpoint_three_clauses,
             test_function_and_line_breakpoint_interaction,
             test_clear_function_breakpoints,
-            test_function_breakpoint_errors
+            test_function_breakpoint_errors,
+            test_set_function_breakpoints_sets_function_breakpoints,
+            test_set_function_breakpoints_returns_result_per_function,
+            test_set_function_breakpoints_loads_the_module_if_necessary,
+            test_set_function_breakpoints_fails_if_module_loading_is_stuck
         ]},
         {test_step_over, [
             test_step_over_goes_to_next_line,
@@ -1920,6 +1928,185 @@ test_function_breakpoint_errors(Config) ->
     ?assertEqual(
         {error, no_abstract_code},
         edb:add_function_breakpoint(ModuleNoDebug, go, 0)
+    ),
+
+    ok.
+
+test_set_function_breakpoints_sets_function_breakpoints(Config) ->
+    Module1Source = ~"""
+    -module(test_set_function_breakpoints_sets_function_breakpoints_1).
+    -export([foo/0, bar/0, baz/0]).
+    foo() -> ok.
+    bar() -> ok.
+    baz() -> ok.
+    """,
+    Module2Source = ~"""
+    -module(test_set_function_breakpoints_sets_function_breakpoints_2).
+    -export([alpha/0, beta/0]).
+    alpha() -> ok.
+    beta() -> ok.
+    """,
+    {ok, _Modules} = edb_test_support:compile_modules(
+        Config,
+        [{source, Module1Source}, {source, Module2Source}],
+        #{flags => [debug_info, beam_debug_info], load_it => true}
+    ),
+    Module1 = test_set_function_breakpoints_sets_function_breakpoints_1,
+    Module2 = test_set_function_breakpoints_sets_function_breakpoints_2,
+
+    % Set function breakpoints on several functions across two modules
+    edb:set_function_breakpoints([
+        {Module1, bar, 0},
+        {Module1, foo, 0},
+        {Module2, alpha, 0},
+        {Module2, beta, 0}
+    ]),
+
+    % We can see them with get_breakpoints(), they show up in sorted order
+    ?assertEqual(
+        #{
+            Module1 => [
+                #{type => function, module => Module1, function => {Module1, bar, 0}},
+                #{type => function, module => Module1, function => {Module1, foo, 0}}
+            ],
+            Module2 => [
+                #{type => function, module => Module2, function => {Module2, alpha, 0}},
+                #{type => function, module => Module2, function => {Module2, beta, 0}}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    % We change the function breakpoints for one module
+    edb:set_function_breakpoints([
+        {Module1, foo, 0},
+        {Module1, baz, 0}
+    ]),
+
+    % We see the updated function breakpoints, the ones in Module2 are gone
+    ?assertEqual(
+        #{
+            Module1 => [
+                #{type => function, module => Module1, function => {Module1, baz, 0}},
+                #{type => function, module => Module1, function => {Module1, foo, 0}}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    ok.
+
+test_set_function_breakpoints_returns_result_per_function(Config) ->
+    Module1Source = ~"""
+    -module(test_set_function_breakpoints_returns_result_per_function_1).
+    -export([existing_function/0]).
+    existing_function() -> ok.
+    """,
+    Module2Source = ~"""
+    -module(test_set_function_breakpoints_returns_result_per_function_2).
+    -export([another_function/0]).
+    another_function() -> ok.
+    """,
+    {ok, _Modules} = edb_test_support:compile_modules(
+        Config,
+        [{source, Module1Source}, {source, Module2Source}],
+        #{flags => [debug_info, beam_debug_info], load_it => true}
+    ),
+
+    Module1 = test_set_function_breakpoints_returns_result_per_function_1,
+    Module2 = test_set_function_breakpoints_returns_result_per_function_2,
+    NonExistentModule = this_module_does_not_exist,
+
+    % Try to set function breakpoints on several functions, some valid, some invalid
+    FunctionResults = edb:set_function_breakpoints([
+        {Module1, existing_function, 0},
+        {Module1, non_existent_function, 0},
+        {NonExistentModule, foo, 0},
+        {Module2, another_function, 0},
+        {Module1, existing_function, 0}
+    ]),
+
+    % We get the result for each function, in the same order as the input
+    ?assertEqual(
+        [
+            {{Module1, existing_function, 0}, ok},
+            {{Module1, non_existent_function, 0}, {error, {badkey, {Module1, non_existent_function, 0}}}},
+            {{NonExistentModule, foo, 0}, {error, {badkey, {NonExistentModule, foo, 0}}}},
+            {{Module2, another_function, 0}, ok},
+            {{Module1, existing_function, 0}, ok}
+        ],
+        FunctionResults
+    ),
+
+    % We can see the valid ones with get_breakpoints(), they show up in sorted order
+    ?assertEqual(
+        #{
+            Module1 => [
+                #{type => function, module => Module1, function => {Module1, existing_function, 0}}
+            ],
+            Module2 => [
+                #{type => function, module => Module2, function => {Module2, another_function, 0}}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+    ok.
+
+test_set_function_breakpoints_loads_the_module_if_necessary(Config) ->
+    ModuleSource = ~"""
+    -module(some_module_for_function_bp).
+    -export([go/0]).
+    go() ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => false
+    }),
+
+    % Sanity-check: the module is not initially loaded
+    ?assertNot(code:is_loaded(Module)),
+
+    % We set a function breakpoint on the module, it will get loaded as a side-effect
+    ?assertEqual(
+        [{{Module, go, 0}, ok}],
+        edb:set_function_breakpoints([{Module, go, 0}])
+    ),
+    ?assertMatch({file, _}, code:is_loaded(Module)),
+
+    code:delete(Module),
+
+    % We fail if the module can't be loaded
+    NonExistentModule = some_non_existent_module_for_function_bp,
+    ?assertEqual(
+        [{{NonExistentModule, go, 0}, {error, {badkey, {NonExistentModule, go, 0}}}}],
+        edb:set_function_breakpoints([{NonExistentModule, go, 0}])
+    ),
+
+    ok.
+
+test_set_function_breakpoints_fails_if_module_loading_is_stuck(Config) ->
+    ModuleSource = ~"""
+    -module(some_module_stucked_loading_for_function_bp).
+    -on_load(hang_forever/0).
+    -export([run/0]).
+    hang_forever() ->
+        timer:sleep(infinity).
+    run() ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => false
+    }),
+
+    % Sanity-check: the module is not initially loaded
+    ?assertNot(code:is_loaded(Module)),
+
+    % Trying to set a function breakpoint will try to load it, which should timeout
+    ?assertEqual(
+        [{{Module, run, 0}, {error, timeout_loading_module}}],
+        edb:set_function_breakpoints([{Module, run, 0}])
     ),
 
     ok.
