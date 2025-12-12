@@ -599,9 +599,9 @@ when
     Line :: integer(),
     Pid :: pid(),
     Resume :: fun(() -> ok),
-    Reason :: user_line_breakpoint | {user_fun_breakpoint, mfa()} | step.
-register_breakpoint_event(ActualModule, Line, Pid, Resume, Breakpoints0) ->
-    VmModule = {vm_module, ActualModule},
+    Reason :: {user_line_breakpoint, module()} | {user_fun_breakpoint, mfa()} | step.
+register_breakpoint_event(BpModule, Line, Pid, Resume, Breakpoints0) ->
+    VmModule = {vm_module, BpModule},
     case should_be_suspended(VmModule, Line, Pid, Breakpoints0) of
         {true, Reason} ->
             %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
@@ -610,8 +610,7 @@ register_breakpoint_event(ActualModule, Line, Pid, Resume, Breakpoints0) ->
                 case Reason of
                     step ->
                         Breakpoints1;
-                    user_line_breakpoint ->
-                        Module = from_vm_module(VmModule, Breakpoints1),
+                    {user_line_breakpoint, Module} ->
                         register_user_breakpoint_hit({Module, Line}, Pid, Breakpoints1);
                     {user_fun_breakpoint, MFA} ->
                         register_user_breakpoint_hit(MFA, Pid, Breakpoints1)
@@ -623,7 +622,7 @@ register_breakpoint_event(ActualModule, Line, Pid, Resume, Breakpoints0) ->
     end.
 
 -spec should_be_suspended(vm_module(), line(), pid(), breakpoints()) -> {true, Reason} | false when
-    Reason :: user_line_breakpoint | {user_fun_breakpoint, mfa()} | step.
+    Reason :: {user_line_breakpoint, module()} | {user_fun_breakpoint, mfa()} | step.
 should_be_suspended(VmModule, Line, Pid, Breakpoints) ->
     case Breakpoints#breakpoints.vm_breakpoints of
         #{VmModule := #{Line := #{fun_breakpoint := MFA}}} ->
@@ -631,7 +630,8 @@ should_be_suspended(VmModule, Line, Pid, Breakpoints) ->
             % the clause, as conceptually you first enter the function
             {true, {user_fun_breakpoint, MFA}};
         #{VmModule := #{Line := #{line_breakpoint := []}}} ->
-            {true, user_line_breakpoint};
+            Module = from_vm_module(VmModule, Breakpoints),
+            {true, {user_line_breakpoint, Module}};
         #{VmModule := #{Line := #{{step, Pid} := Patterns}}} when is_map(Patterns) ->
             % We need stack-frames, and these require the process to be suspended
             case edb_server_process:try_suspend_process(Pid) of
