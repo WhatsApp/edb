@@ -63,13 +63,19 @@ The (new!) Erlang debugger
     | {module_injection_failed, module(), Reason :: term()}.
 
 -export_type([breakpoint_info/0]).
--type breakpoint_info() :: #{
-    type := line,
-    module := module(),
-    line := line()
-}.
+-type breakpoint_info() ::
+    #{
+        type := line,
+        module := module(),
+        line := line()
+    }
+    | #{
+        type := function,
+        module := module(),
+        function := mfa()
+    }.
 
--export_type([add_breakpoint_error/0]).
+-export_type([add_breakpoint_error/0, add_function_breakpoint_error/0]).
 
 -doc """
 A breakpoint may not be added for various reasons:
@@ -89,6 +95,22 @@ A breakpoint may not be added for various reasons:
     | {unsupported, Line :: line()}
     | {badkey, module()}
     | {badkey, Line :: line()}
+    | timeout_loading_module.
+
+-doc """
+A function-breakpoint may not be added for various reasons:
+  * `unsupported`: The node does not support line-breakpoint instrumentations
+     (likely for not being started with the `+D` emulator flag).
+  * `{unsupported, Module}`: The module was loaded without suppor for line-breakpoints.
+  * `no_abstract_code`: The module was not compiled with the `debug_info` option.
+  * `{badkey, MFA}`: The given function (or module) does not exist.
+  * `timeout_loading_module`: The module could not be loaded in time, possibly because a user process loading it is suspended.
+""".
+-type add_function_breakpoint_error() ::
+    unsupported
+    | {unsupported, module()}
+    | no_abstract_code
+    | {badkey, mfa()}
     | timeout_loading_module.
 
 -export_type([set_breakpoints_result/0]).

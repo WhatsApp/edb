@@ -431,7 +431,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                         {ok, State2} = suspend_all_processes(Universe, UnsuspendablePids, State1),
                         PausedEvent =
                             case Reason of
-                                user_breakpoint ->
+                                user_line_breakpoint ->
                                     {breakpoint, Pid, MFA, {line, Line}};
                                 step ->
                                     % Pid was already suspended when processing the step breakpoint, so
@@ -535,7 +535,8 @@ add_breakpoint_impl(Module, Line, State0) ->
     State1 :: state().
 clear_breakpoints_impl(Module, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, Breakpoints0),
+    LineBpsOnly = #{line => true, function => false},
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, LineBpsOnly, Breakpoints0),
     State1 = State0#state{breakpoints = Breakpoints1},
     {reply, ok, State1}.
 
@@ -563,7 +564,8 @@ clear_breakpoint_impl(Module, Line, State0) ->
     Result :: edb:set_breakpoints_result().
 set_breakpoints_impl(Module, Lines, State0) ->
     #state{breakpoints = Breakpoints0} = State0,
-    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, Breakpoints0),
+    LineBpsOnly = #{line => true, function => false},
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, LineBpsOnly, Breakpoints0),
     BreakpointDescriptions = [{Module, Line} || Line <- Lines],
     {Results, Breakpoints2} = edb_server_break:add_user_breakpoints(BreakpointDescriptions, Breakpoints1),
     State2 = State0#state{breakpoints = Breakpoints2},

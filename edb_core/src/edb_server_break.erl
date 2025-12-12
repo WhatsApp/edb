@@ -21,7 +21,7 @@
 % User-brekapoints manipulation
 -export([add_user_breakpoint/2, add_user_breakpoints/2]).
 -export([get_user_breakpoints/1, get_user_breakpoints/2]).
--export([clear_user_breakpoint/2, clear_user_breakpoints/2]).
+-export([clear_user_breakpoint/2, clear_user_breakpoints/3]).
 -export([clear_all_breakpoints/1]).
 -export([get_user_breakpoints_hit/1, get_user_breakpoint_hit/2]).
 -export([reapply_breakpoints/2]).
@@ -47,6 +47,11 @@
 %% --------------------------------------------------------------------
 
 -type line() :: edb:line().
+
+-type user_line_breakpoint() :: {module(), line()}.
+-type user_function_breakpoint() :: mfa().
+-type user_breakpoint() :: user_line_breakpoint() | user_function_breakpoint().
+
 -type vm_module() :: {vm_module, module()}.
 -type substitute_info() :: #{
     substitute => vm_module(),
@@ -113,15 +118,16 @@ create() ->
 %% --------------------------------------------------------------------
 %% User breakpoints manipulation
 %% --------------------------------------------------------------------
--spec add_user_breakpoint(LineBreakpoint, breakpoints()) ->
-    {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
-when
-    LineBreakpoint :: {module(), line()}.
+-spec add_user_breakpoint
+    (user_line_breakpoint(), breakpoints()) ->
+        {ok, breakpoints()} | {error, edb:add_breakpoint_error()};
+    (user_function_breakpoint(), breakpoints()) ->
+        {ok, breakpoints()} | {error, edb:add_function_breakpoint_error()}.
 add_user_breakpoint({Module, Line}, Breakpoints0) ->
     VmModule = to_vm_module(Module, Breakpoints0),
     case try_ensure_module_loaded(VmModule) of
         ok ->
-            case add_vm_breakpoint(VmModule, Line, {user_breakpoint, []}, Breakpoints0) of
+            case add_vm_breakpoint(VmModule, Line, {line_breakpoint, []}, Breakpoints0) of
                 {ok, _} = OkResult -> OkResult;
                 {error, Reason} -> {error, from_add_vm_breakpoint_error(Reason, Breakpoints0)}
             end;
@@ -129,13 +135,37 @@ add_user_breakpoint({Module, Line}, Breakpoints0) ->
             {error, timeout_loading_module};
         {error, _} ->
             {error, {badkey, Module}}
+    end;
+add_user_breakpoint(MFA = {Module, Fun, Arity}, Breakpoints0) ->
+    VmModule = to_vm_module(Module, Breakpoints0),
+    case try_ensure_module_loaded(VmModule) of
+        ok ->
+            case edb_server_code:first_line_of_fun_clauses(Module, Fun, Arity) of
+                {error, module_not_loaded} ->
+                    {error, {badkey, MFA}};
+                {error, no_abstract_code} ->
+                    {error, no_abstract_code};
+                {error, function_not_found} ->
+                    {error, {badkey, MFA}};
+                {ok, Lines} ->
+                    ReasonItem = {fun_breakpoint, MFA},
+                    case add_vm_breakpoints_or_rollback(VmModule, Lines, ReasonItem, Breakpoints0) of
+                        {ok, _} = OkResult -> OkResult;
+                        failed -> {error, {unsupported, Module}}
+                    end
+            end;
+        {error, timeout} ->
+            {error, timeout_loading_module};
+        {error, _} ->
+            {error, {badkey, MFA}}
     end.
 
 -spec add_user_breakpoints(DesiredBreakpoints, breakpoints()) -> {BreakpointResults, breakpoints()} when
-    DesiredBreakpoints :: [LineBreakpoint],
-    LineBreakpoint :: {module(), line()},
-    BreakpointResults :: [{LineBreakpoint, LineBreakpointResult}],
-    LineBreakpointResult :: ok | {error, edb:add_breakpoint_error()}.
+    DesiredBreakpoints :: [user_breakpoint()],
+    BreakpointResults :: [
+        {user_line_breakpoint(), ok | {error, edb:add_breakpoint_error()}}
+        | {user_function_breakpoint(), ok | {error, edb:add_function_breakpoint_error()}}
+    ].
 add_user_breakpoints(DesiredBreakpoints, Breakpoints0) ->
     lists:mapfoldl(
         fun(BreakpointDescription, AccBreakpointsIn) ->
@@ -152,39 +182,99 @@ add_user_breakpoints(DesiredBreakpoints, Breakpoints0) ->
 get_user_breakpoints(Breakpoints) ->
     VmBreakpoints = Breakpoints#breakpoints.vm_breakpoints,
     #{
-        Mod => [#{type => line, module => Mod, line => Line} || Line := #{user_breakpoint := []} <- Info]
-     || VmMod := Info <- VmBreakpoints,
-        Mod <- [from_vm_module(VmMod, Breakpoints)]
+        Mod => BpInfoList
+     || VmMod := ReasonsPerLine <- VmBreakpoints,
+        Mod <- [from_vm_module(VmMod, Breakpoints)],
+        BpInfoList <- [breakpoint_info_list(Mod, ReasonsPerLine)],
+        BpInfoList /= []
     }.
 
 -spec get_user_breakpoints(module(), breakpoints()) -> [edb:breakpoint_info()].
 get_user_breakpoints(Module, Breakpoints) ->
     VmModule = to_vm_module(Module, Breakpoints),
-    Info = maps:get(VmModule, Breakpoints#breakpoints.vm_breakpoints, #{}),
-    [#{type => line, module => Module, line => Line} || Line := #{user_breakpoint := []} <- Info].
+    ReasonsPerLine = maps:get(VmModule, Breakpoints#breakpoints.vm_breakpoints, #{}),
+    breakpoint_info_list(Module, ReasonsPerLine).
 
--spec clear_user_breakpoint(LineBreakpoint, breakpoints()) ->
+-spec breakpoint_info_list(Module, ReasonsPerLine) -> [edb:breakpoint_info()] when
+    Module :: module(),
+    ReasonsPerLine :: #{line() => vm_breakpoint_reasons()}.
+breakpoint_info_list(Module, ReasonsPerLine) ->
+    LineBreakpoints = [
+        #{type => line, module => Module, line => Line}
+     || Line := #{line_breakpoint := _} <- maps:iterator(ReasonsPerLine, ordered)
+    ],
+
+    FunBreakpointsMFAs = #{MFA => [] || _Line := #{fun_breakpoint := MFA} <- ReasonsPerLine},
+    FunBreakpoints = [
+        #{type => function, module => Module, function => MFA}
+     || MFA := _ <- maps:iterator(FunBreakpointsMFAs, ordered)
+    ],
+
+    FunBreakpoints ++ LineBreakpoints.
+
+-spec clear_user_breakpoint(UserBreakpoint, breakpoints()) ->
     {ok, removed | vanished, breakpoints()} | {error, not_found}
 when
-    LineBreakpoint :: {module(), line()}.
+    UserBreakpoint :: user_breakpoint().
 clear_user_breakpoint({Module, Line}, Breakpoints0) ->
     VmModule = to_vm_module(Module, Breakpoints0),
-    case remove_vm_breakpoint(VmModule, Line, user_breakpoint, Breakpoints0) of
+    case remove_vm_breakpoint(VmModule, Line, line_breakpoint, Breakpoints0) of
         {ok, DeletionResult, Breakpoints1} ->
             {ok, DeletionResult, Breakpoints1};
         {error, unknown_vm_breakpoint} ->
             {error, not_found}
+    end;
+clear_user_breakpoint(MFA = {Module, _, _}, Breakpoints0) ->
+    VmModule = to_vm_module(Module, Breakpoints0),
+    case Breakpoints0#breakpoints.vm_breakpoints of
+        #{VmModule := ReasonsPerLine} ->
+            case [Line || Line := #{fun_breakpoint := Fun} <- ReasonsPerLine, Fun =:= MFA] of
+                [] ->
+                    {error, not_found};
+                Lines ->
+                    {Result, Breakpoints1} = lists:foldl(
+                        fun(Line, {Result, AccBreakpoints0}) ->
+                            case remove_vm_breakpoint(VmModule, Line, fun_breakpoint, AccBreakpoints0) of
+                                {ok, vanished, AccBreakpoints1} ->
+                                    {vanished, AccBreakpoints1};
+                                {ok, removed, AccBreakpoints1} ->
+                                    {Result, AccBreakpoints1};
+                                {error, unknown_vm_breakpoint} ->
+                                    edb_server:invariant_violation(unexpected_bp_not_found)
+                            end
+                        end,
+                        {removed, Breakpoints0},
+                        Lines
+                    ),
+                    {ok, Result, Breakpoints1}
+            end;
+        _ ->
+            {error, not_found}
     end.
 
--spec clear_user_breakpoints(module(), breakpoints()) -> {ok, breakpoints()}.
-clear_user_breakpoints(Module, Breakpoints0) ->
+-spec clear_user_breakpoints(Module, Types, breakpoints()) -> {ok, breakpoints()} when
+    Module :: module(),
+    Types :: #{line := boolean(), function := boolean()}.
+clear_user_breakpoints(Module, Types, Breakpoints0) ->
+    ClearLineBps = maps:get(line, Types),
+    ClearFunctionBps = maps:get(function, Types),
+
     Breakpoints1 = lists:foldl(
-        fun(#{type := line, line := Line}, AccBreakpointsIn) ->
-            case clear_user_breakpoint({Module, Line}, AccBreakpointsIn) of
-                {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
-                % A breakpoint line taken from the list cannot be not_found
-                {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
-            end
+        fun
+            (#{type := line, line := Line}, AccBreakpointsIn) when ClearLineBps ->
+                case clear_user_breakpoint({Module, Line}, AccBreakpointsIn) of
+                    {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
+                    % A breakpoint line taken from the list cannot be not_found
+                    {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
+                end;
+            (#{type := function, function := MFA}, AccBreakpointsIn) when ClearFunctionBps ->
+                case clear_user_breakpoint(MFA, AccBreakpointsIn) of
+                    {ok, _RemovedOrVanished, AccBreakpointsOut} -> AccBreakpointsOut;
+                    % A breakpoint line taken from the list cannot be not_found
+                    {error, not_found} -> edb_server:invariant_violation(unexpected_bp_not_found)
+                end;
+            (_, AccBreakpointsIn) ->
+                AccBreakpointsIn
         end,
         Breakpoints0,
         get_user_breakpoints(Module, Breakpoints0)
@@ -473,17 +563,17 @@ is_process_trapped(Pid, Breakpoints) ->
     #breakpoints{resume_actions = ResumeActions} = Breakpoints,
     maps:is_key(Pid, ResumeActions).
 
--spec register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints) ->
+-spec register_breakpoint_event(ActualModule, Line, Pid, Resume, Breakpoints) ->
     {suspend, Reason, breakpoints()} | resume
 when
     Breakpoints :: breakpoints(),
-    Module :: module(),
+    ActualModule :: module(),
     Line :: integer(),
     Pid :: pid(),
     Resume :: fun(() -> ok),
-    Reason :: user_breakpoint | step.
-register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
-    VmModule = to_vm_module(Module, Breakpoints0),
+    Reason :: user_line_breakpoint | {user_fun_breakpoint, mfa()} | step.
+register_breakpoint_event(ActualModule, Line, Pid, Resume, Breakpoints0) ->
+    VmModule = {vm_module, ActualModule},
     case should_be_suspended(VmModule, Line, Pid, Breakpoints0) of
         {true, Reason} ->
             %% Relevant breakpoint hit. Register it, clear steps in both cases and suspend.
@@ -492,8 +582,11 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
                 case Reason of
                     step ->
                         Breakpoints1;
-                    user_breakpoint ->
-                        register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints1)
+                    user_line_breakpoint ->
+                        Module = from_vm_module(VmModule, Breakpoints1),
+                        register_user_breakpoint_hit({Module, Line}, Pid, Breakpoints1);
+                    {user_fun_breakpoint, MFA} ->
+                        register_user_breakpoint_hit(MFA, Pid, Breakpoints1)
                 end,
             {ok, Breakpoints3} = clear_steps(Pid, Breakpoints2),
             {suspend, Reason, Breakpoints3};
@@ -502,11 +595,15 @@ register_breakpoint_event(Module, Line, Pid, Resume, Breakpoints0) ->
     end.
 
 -spec should_be_suspended(vm_module(), line(), pid(), breakpoints()) -> {true, Reason} | false when
-    Reason :: user_breakpoint | step.
+    Reason :: user_line_breakpoint | {user_fun_breakpoint, mfa()} | step.
 should_be_suspended(VmModule, Line, Pid, Breakpoints) ->
     case Breakpoints#breakpoints.vm_breakpoints of
-        #{VmModule := #{Line := #{user_breakpoint := []}}} ->
-            {true, user_breakpoint};
+        #{VmModule := #{Line := #{fun_breakpoint := MFA}}} ->
+            % Prioritize function-breakpoints over a line-breakpoint on first line of
+            % the clause, as conceptually you first enter the function
+            {true, {user_fun_breakpoint, MFA}};
+        #{VmModule := #{Line := #{line_breakpoint := []}}} ->
+            {true, user_line_breakpoint};
         #{VmModule := #{Line := #{{step, Pid} := Patterns}}} when is_map(Patterns) ->
             % We need stack-frames, and these require the process to be suspended
             case edb_server_process:try_suspend_process(Pid) of
@@ -546,15 +643,18 @@ register_resume_action(Pid, Resume, Breakpoints) ->
     ResumeActions1 = ResumeActions#{Pid => Resume},
     Breakpoints#breakpoints{resume_actions = ResumeActions1}.
 
--spec register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints) -> breakpoints() when
-    Breakpoints :: breakpoints(),
-    VmModule :: vm_module(),
-    Line :: integer(),
-    Pid :: pid().
-register_user_breakpoint_hit(VmModule, Line, Pid, Breakpoints) ->
-    Module = from_vm_module(VmModule, Breakpoints),
+-spec register_user_breakpoint_hit(UserBreakpoint, Pid, Breakpoints) -> breakpoints() when
+    UserBreakpoint :: user_breakpoint(),
+    Pid :: pid(),
+    Breakpoints :: breakpoints().
+register_user_breakpoint_hit({Module, Line}, Pid, Breakpoints) ->
     #breakpoints{user_bps_hit = UserBpsHit} = Breakpoints,
     NewBPHit = #{type => line, module => Module, line => Line},
+    UserBpsHit1 = UserBpsHit#{Pid => NewBPHit},
+    Breakpoints#breakpoints{user_bps_hit = UserBpsHit1};
+register_user_breakpoint_hit(MFA = {Module, _, _}, Pid, Breakpoints) ->
+    #breakpoints{user_bps_hit = UserBpsHit} = Breakpoints,
+    NewBPHit = #{type => function, module => Module, function => MFA},
     UserBpsHit1 = UserBpsHit#{Pid => NewBPHit},
     Breakpoints#breakpoints{user_bps_hit = UserBpsHit1}.
 
@@ -655,6 +755,28 @@ add_vm_breakpoint(VmModule, Line, ReasonItem, Breakpoints0) ->
             {ok, Breakpoints1};
         {error, Error} ->
             {error, Error}
+    end.
+
+-spec add_vm_breakpoints_or_rollback(VmModule, Lines, ReasonItem, Breakpoints0) -> {ok, Breakpoints1} | failed when
+    VmModule :: vm_module(),
+    Lines :: [line()],
+    ReasonItem :: vm_breakpoint_reason_item(),
+    Breakpoints0 :: breakpoints(),
+    Breakpoints1 :: breakpoints().
+add_vm_breakpoints_or_rollback(_VmModule, [], _ReasonItem, Breakpoints0) ->
+    {ok, Breakpoints0};
+add_vm_breakpoints_or_rollback(VmModule, [Line | Lines], ReasonItem, Breakpoints0) ->
+    case add_vm_breakpoint(VmModule, Line, ReasonItem, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            case add_vm_breakpoints_or_rollback(VmModule, Lines, ReasonItem, Breakpoints1) of
+                {ok, _} = OkResult ->
+                    OkResult;
+                failed ->
+                    vm_unset_breakpoint(VmModule, Line),
+                    failed
+            end;
+        {error, _} ->
+            failed
     end.
 
 -spec remove_vm_breakpoint(VmModule, Line, Reason, Breakpoints0) ->
@@ -1070,7 +1192,10 @@ no reason remain to hold it remain. Each reason may have some associated metadat
 -type vm_breakpoint_reasons() ::
     #{
         % Line-breakpoint set by the user
-        user_breakpoint => [],
+        line_breakpoint => [],
+
+        % Functoion-breakpoint set by the user
+        fun_breakpoint => mfa(),
 
         %% Stepping-breakpoint. For each such breakpoint, there are only certain
         %% call-stacks under which we want to suspend the process.
@@ -1081,7 +1206,8 @@ no reason remain to hold it remain. Each reason may have some associated metadat
 A key in `m:vm_breakpoint_reasons()`
 """.
 -type vm_breakpoint_reason() ::
-    user_breakpoint
+    line_breakpoint
+    | fun_breakpoint
     | {step, pid()}.
 
 -doc """
@@ -1089,7 +1215,8 @@ An item in `m:vm_breakpoint_reasons()`. That is, a `m:vm_breakpoint_reason()` an
 its associated metadata.
 """.
 -type vm_breakpoint_reason_item() ::
-    {user_breakpoint, []}
+    {line_breakpoint, []}
+    | {fun_breakpoint, mfa()}
     | {{step, pid()}, #{call_stack_pattern() => []}}.
 
 -spec record_vm_breakpoint(VmModule, Line, ReasonItem, VmBreakpoints0) -> VmBreakpoints1 when
@@ -1114,7 +1241,9 @@ record_vm_breakpoint(VmModule, Line, ReasonItem, VmBreakpoints0) ->
     VmBreakpoints0#{VmModule => Bps1}.
 
 -spec record_vm_breakpoint_reason(vm_breakpoint_reason_item(), vm_breakpoint_reasons()) -> vm_breakpoint_reasons().
-record_vm_breakpoint_reason({K = user_breakpoint, V}, Reasons) ->
+record_vm_breakpoint_reason({K = line_breakpoint, V}, Reasons) ->
+    Reasons#{K => V};
+record_vm_breakpoint_reason({K = fun_breakpoint, V}, Reasons) ->
     Reasons#{K => V};
 record_vm_breakpoint_reason({K = {step, _}, V}, Reasons) ->
     case Reasons of
