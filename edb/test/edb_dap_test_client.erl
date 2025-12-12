@@ -35,6 +35,7 @@
     attach/2,
     launch/2,
     set_breakpoints/2,
+    set_function_breakpoints/2,
     set_exception_breakpoints/2,
     configuration_done/1,
     threads/1,
@@ -104,6 +105,11 @@ set_exception_breakpoints(Client, Args) ->
 -spec set_breakpoints(client(), edb_dap_request_set_breakpoints:arguments()) -> edb_dap:response().
 set_breakpoints(Client, Args) ->
     Request = #{type => request, command => ~"setBreakpoints", arguments => Args},
+    call(Client, Request).
+
+-spec set_function_breakpoints(client(), edb_dap_request_set_function_breakpoints:arguments()) -> edb_dap:response().
+set_function_breakpoints(Client, Args) ->
+    Request = #{type => request, command => ~"setFunctionBreakpoints", arguments => Args},
     call(Client, Request).
 
 -spec configuration_done(client()) -> edb_dap:response().

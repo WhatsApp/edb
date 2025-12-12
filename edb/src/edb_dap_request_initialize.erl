@@ -199,7 +199,7 @@ handle(_InvalidState, _Args) ->
 capabilities() ->
     #{
         supportsConfigurationDoneRequest => true,
-        supportsFunctionBreakpoints => false,
+        supportsFunctionBreakpoints => true,
         supportsConditionalBreakpoints => false,
         supportsHitConditionalBreakpoints => false,
         supportsEvaluateForHovers => false,
