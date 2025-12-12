@@ -102,8 +102,7 @@ A breakpoint may not be added for various reasons:
 -type step_in_error() ::
     step_error()
     | {call_target, call_target_error()}
-    | no_abstract_code
-    | {beam_analysis, term()}.
+    | no_abstract_code.
 
 -type call_target_error() ::
     not_found

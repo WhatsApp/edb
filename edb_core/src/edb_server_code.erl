@@ -22,8 +22,9 @@
 -moduledoc false.
 
 -export([get_debug_info/2]).
--export([fetch_abstract_forms/1]).
 -export([get_call_targets/2]).
+-export([fetch_abstract_code/1]).
+-export([first_line_of_fun_clauses/3]).
 -export([module_source/1]).
 
 % elp:ignore W0048 (no_dialyzer_attribute)
@@ -36,15 +37,25 @@
 
 -export_type([var_debug_info/0]).
 
+-type var_name() :: binary().
+
 -type var_debug_info() ::
     {x, non_neg_integer()} | {y, non_neg_integer()} | {value, term()}.
 
 -type line() :: edb:line().
 
-%% Defined in beam_lib but not exported
--export_type([form/0, forms/0]).
--type form() :: erl_parse:abstract_form() | erl_parse:form_info().
--type forms() :: [form()].
+-export_type([call_target/0]).
+-type call_target() ::
+    % remote function
+    {M :: module() | var_name(), F :: atom() | var_name(), A :: arity()}
+    % local function
+    | {F :: atom() | var_name(), A :: arity()}
+    % function reference
+    | var_name().
+
+-export_type([abstract_form/0, abstract_code/0]).
+-type abstract_form() :: erl_parse:abstract_form() | erl_parse:form_info().
+-type abstract_code() :: [abstract_form()].
 
 %% --------------------------------------------------------------------
 %% Debug info
@@ -84,57 +95,83 @@ assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
 assert_is_var_debug_info(V = {value, _}) -> V.
 
 %% --------------------------------------------------------------------
-%% fetch_abstract_forms: fetch abstract forms from beam file
+%% fetch_abstract_code: fetch abstract code from module
 %% --------------------------------------------------------------------
 
--spec fetch_abstract_forms(Module) -> {ok, forms()} | {error, Error} when
+-spec fetch_abstract_code(Module) -> {ok, abstract_code()} | {error, Error} when
     Module :: module(),
-    Error :: no_abstract_code | {beam_analysis, term()}.
-fetch_abstract_forms(Module) ->
-    case fetch_beam_filename(Module) of
-        {error, Error} ->
-            {error, {beam_analysis, Error}};
-        {ok, ModuleBeamFile} ->
-            case beam_lib:chunks(ModuleBeamFile, [abstract_code]) of
+    Error :: module_not_loaded | no_abstract_code.
+fetch_abstract_code(Module) ->
+    case code:get_object_code(Module) of
+        error ->
+            {error, module_not_loaded};
+        {Module, Binary, _Filename} ->
+            case beam_lib:chunks(Binary, [abstract_code]) of
                 {ok, {Module, [{abstract_code, {raw_abstract_v1, Forms}}]}} ->
                     {ok, Forms};
                 {ok, {Module, [{abstract_code, no_abstract_code}]}} ->
                     {error, no_abstract_code};
-                {ok, _} ->
-                    %% This should never happen, but if it does, it's a bug in beam_lib
-                    {error, {beam_analysis, unexpected}};
-                {error, beam_lib, Error} ->
-                    {error, {beam_analysis, {beam_lib, Error}}}
+                {error, beam_lib, _Error} ->
+                    {error, no_abstract_code}
             end
     end.
 
--spec fetch_beam_filename(Module) -> {ok, file:filename()} | {error, Error} when
+%% --------------------------------------------------------------------
+%% first_line_of_fun_clauses: Where to set function breakpoints
+%% --------------------------------------------------------------------
+
+-spec first_line_of_fun_clauses(Module, Fun, Arity) -> {ok, [edb:line()]} | {error, Reason} when
     Module :: module(),
-    Error :: non_existing | cover_compiled | dynamically_compiled.
-fetch_beam_filename(Module) ->
-    Result =
-        case code:which(Module) of
-            non_existing ->
-                {error, non_existing};
-            cover_compiled ->
-                {error, cover_compiled};
-            preloaded ->
-                ModuleFileName = atom_to_list(Module) ++ ".beam",
-                case code:where_is_file(ModuleFileName) of
-                    non_existing -> {error, non_existing};
-                    Filename -> {ok, Filename}
-                end;
-            Filename ->
-                {ok, Filename}
-        end,
-    case Result of
-        Error = {error, _} ->
-            Error;
-        {ok, BeamFile} ->
-            case string:lowercase(filename:extension(BeamFile)) of
-                ".beam" -> {ok, BeamFile};
-                _ -> {error, dynamically_compiled}
+    Fun :: atom(),
+    Arity :: arity(),
+    Reason :: module_not_loaded | no_abstract_code | function_not_found.
+first_line_of_fun_clauses(Module, Name, Arity) ->
+    case fetch_abstract_code(Module) of
+        Err = {error, _} ->
+            Err;
+        {ok, AbsCode} ->
+            Candidates = [
+                Fun
+             || Fun <- AbsCode,
+                erl_syntax:type(Fun) =:= function,
+                erl_syntax:function_arity(Fun) =:= Arity,
+                erl_syntax:is_atom(erl_syntax:function_name(Fun), Name)
+            ],
+            case Candidates of
+                [] ->
+                    {error, function_not_found};
+                [Fun] ->
+                    ClauseStartLines = [form_line(Clause) || Clause <- erl_syntax:function_clauses(Fun)],
+                    case erl_debugger:breakpoints(Module) of
+                        {error, badkey} ->
+                            {error, module_not_loaded};
+                        {ok, #{{Name, Arity} := Breakpoints}} ->
+                            BreakableLines = [Line || Line := _ <- maps:iterator(Breakpoints, ordered)],
+                            {ok, first_breakable_line_per_clause(BreakableLines, ClauseStartLines)};
+                        {ok, _} ->
+                            {error, function_not_found}
+                    end
             end
+    end.
+
+-spec first_breakable_line_per_clause(BreakableLines, ClauseStartLines) -> [edb:line()] when
+    BreakableLines :: [edb:line()],
+    ClauseStartLines :: [edb:line()].
+first_breakable_line_per_clause([], []) ->
+    [];
+first_breakable_line_per_clause([Line | RestLines], [NextClause | _] = ClauseStartLines) when Line < NextClause ->
+    first_breakable_line_per_clause(RestLines, ClauseStartLines);
+first_breakable_line_per_clause([Line | RestLines] = BreakableLines, [_NextClause | RestClauses]) ->
+    % Line >= _NextClause
+    case RestClauses of
+        [] ->
+            % We found the first line of the last clause
+            [Line];
+        [NextNextClause | _] when Line >= NextNextClause ->
+            % NextClause somehow has no breakable lines; skip it
+            first_breakable_line_per_clause(BreakableLines, RestClauses);
+        _ ->
+            [Line | first_breakable_line_per_clause(RestLines, RestClauses)]
     end.
 
 % --------------------------------------------------------------------
@@ -145,7 +182,7 @@ fetch_beam_filename(Module) ->
     | {error, Reason}
 when
     Line :: line(),
-    Forms :: forms(),
+    Forms :: abstract_code(),
     CallTarget :: {mfa(), Args :: [erl_syntax:syntaxTree()]},
     Reason ::
         not_found
@@ -167,14 +204,16 @@ get_call_targets(Line, Forms) ->
                             {ok, CallTargets};
                         {error, _} = Error ->
                             Error
-                    end
+                    end;
+                {error, beam_lib, _Error} ->
+                    {error, no_abstract_code}
             end
     end.
 
 -type deep_list(A) :: [A | deep_list(A)].
 
 -spec search_call_targets_in_exprs(Exprs, Module, Line, Acc) -> {ok, [CallTarget]} | {error, Reason} when
-    Exprs :: deep_list(form()),
+    Exprs :: deep_list(abstract_form()),
     Module :: module(),
     Line :: line(),
     Acc :: [CallTarget],
@@ -255,7 +294,7 @@ search_call_targets_in_exprs([Expr | Exprs0], Module, Line, Acc) ->
             Error
     end.
 
--spec get_candidate_call_target_subexprs(Expr) -> [Expr] when Expr :: form().
+-spec get_candidate_call_target_subexprs(Expr) -> [Expr] when Expr :: abstract_form().
 get_candidate_call_target_subexprs(Expr) ->
     case erl_syntax:type(Expr) of
         block_expr ->
@@ -298,7 +337,7 @@ get_candidate_call_target_subexprs(Expr) ->
             []
     end.
 
--spec first_form_only(Forms) -> Forms when Forms :: [form()].
+-spec first_form_only(Forms) -> Forms when Forms :: [abstract_form()].
 first_form_only(Forms) -> lists:sublist(Forms, 1).
 
 -spec resolve_arity_qualifier(Module, ArityQualifier) -> {ok, mfa()} | error when
@@ -375,8 +414,13 @@ guess_module_source(Module) ->
 % Helpers
 % --------------------------------------------------------------------
 
+-spec form_line(Form) -> edb:line() when
+    Form :: abstract_form().
+form_line(Form) ->
+    erl_anno:line(erl_syntax:get_pos(Form)).
+
 -spec find_module_name(Forms) -> {ok, module()} | not_found when
-    Forms :: forms().
+    Forms :: abstract_code().
 find_module_name([]) ->
     not_found;
 find_module_name([Form | Forms]) ->
@@ -390,10 +434,6 @@ find_module_name([Form | Forms]) ->
         _ -> find_module_name(Forms)
     end.
 
--spec form_line(form()) -> line().
-form_line(Form) ->
-    erl_anno:line(erl_syntax:get_pos(Form)).
-
 -spec resolve_atom(Expr :: erl_syntax:syntaxTree()) -> {ok, atom()} | none.
 resolve_atom(Expr) ->
     case erl_syntax:type(Expr) of
@@ -403,8 +443,8 @@ resolve_atom(Expr) ->
 
 -spec expr_at_line(Line, FormOrForms) -> {ok, Form} | not_found when
     Line :: line(),
-    Form :: form(),
-    FormOrForms :: form() | forms().
+    Form :: abstract_form(),
+    FormOrForms :: abstract_form() | abstract_code().
 expr_at_line(_Line, []) ->
     not_found;
 expr_at_line(Line, [Form | Forms]) ->

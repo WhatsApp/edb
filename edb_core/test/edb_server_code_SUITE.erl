@@ -107,7 +107,7 @@ test_get_call_target(Config) ->
     {ok, _, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
         load_it => true
     }),
-    {ok, Forms} = edb_server_code:fetch_abstract_forms(call_targets),
+    {ok, Forms} = edb_server_code:fetch_abstract_code(call_targets),
 
     % Returns not_found when line doesn't exit
     {error, not_found} = edb_server_code:get_call_targets(100_000, Forms),
