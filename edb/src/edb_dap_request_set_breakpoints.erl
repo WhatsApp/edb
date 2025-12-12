@@ -31,7 +31,7 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
 
 -export([parse_arguments/1, handle/2]).
 
--export([source_template/0]).
+-export([source_template/0, format_breakpoint_error/1]).
 
 %% ------------------------------------------------------------------
 %% Types
@@ -107,7 +107,7 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
     %% - `failed`: Indicates a breakpoint was not able to be verified, and the
     %% adapter does not believe it can be verified without intervention.
     %% Values: 'pending', 'failed'
-    reason => binary()
+    reason => pending | failed
 }.
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
@@ -228,7 +228,7 @@ set_breakpoints(Args = #{source := #{path := Path}}) ->
                     #{line => Line, verified => true};
                 {error, Reason} ->
                     Message = format_breakpoint_error(Reason),
-                    #{line => Line, verified => false, message => Message, reason => ~"failed"}
+                    #{line => Line, verified => false, message => Message, reason => failed}
             end
         end,
         LineResults

@@ -125,6 +125,7 @@ known_handlers() ->
         ~"scopes" => edb_dap_request_scopes,
         ~"setBreakpoints" => edb_dap_request_set_breakpoints,
         ~"setExceptionBreakpoints" => edb_dap_request_set_exception_breakpoints,
+        ~"setFunctionBreakpoints" => edb_dap_request_set_function_breakpoints,
         ~"stackTrace" => edb_dap_request_stack_trace,
         ~"stepIn" => edb_dap_request_step_in,
         ~"stepOut" => edb_dap_request_step_out,

@@ -81,9 +81,22 @@ nodedown_impl(State, Node, _Reason) ->
     #{}.
 
 -spec paused_impl(edb_dap_server:state(), edb:paused_event()) -> reaction().
+paused_impl(#{state := launching}, pause) ->
+    % Reverse-attaching in progress, the node has been paused
+    #{};
 paused_impl(#{state := attached}, {breakpoint, Pid, _MFA, _Line}) ->
     StoppedEvent = edb_dap_event:stopped(#{
         reason => ~"breakpoint",
+        % On a BP, so we expect the source file of the top-frame
+        % of this process to be shown
+        preserveFocusHint => false,
+        threadId => edb_dap_id_mappings:pid_to_thread_id(Pid),
+        allThreadsStopped => true
+    }),
+    #{actions => [{event, StoppedEvent}]};
+paused_impl(#{state := attached}, {function_breakpoint, Pid, _MFA, _Line}) ->
+    StoppedEvent = edb_dap_event:stopped(#{
+        reason => ~"function_breakpoint",
         % On a BP, so we expect the source file of the top-frame
         % of this process to be shown
         preserveFocusHint => false,
