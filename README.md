@@ -51,8 +51,8 @@ and the `edb` [DAP guide](docs/DAP.md).
 
 ## Configure a rebar3 project
 
-Before we can debug a [rebar3](https://rebar3.org/) project with `edb`, we need to ensure that we build the code using the `beam_debug_info` and
-`beam_debug_stack` option. The former adds debug symbol information needed to be able display variable names on a paused process; the latter
+Before we can debug a [rebar3](https://rebar3.org/) project with `edb`, we need to ensure that we build the code using the `debug_info` option, but also `beam_debug_info` and
+`beam_debug_stack` options. The former adds debug symbol information needed to be able display variable names on a paused process; the latter
 preserves the values of variables that are no longer live, which is more useful for debugging, but increases the stack usage. In modules
 where the increased stack usage is problematic, it can be disabled by adding `-compile(no_beam_debug_stack).`
 
@@ -63,7 +63,7 @@ Open the `rebar.config` file for the project and ensure one of these options is 
 ```
 {profiles, [
     {test, [
-        {erl_opts, [beam_debug_info, beam_debug_stack]}
+        {erl_opts, [debug_info, beam_debug_info, beam_debug_stack]}
     ]}
 ]}.
 ```

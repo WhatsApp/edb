@@ -208,7 +208,8 @@ random_srcdir(CtConfig) ->
         env => #{binary() => binary()},
         extra_args => [binary() | string()],
         srcdir => binary(),
-        modules => [module_spec()]
+        modules => [module_spec()],
+        compile_flags => [compile:option()]
     }.
 
 -type start_peer_result() :: #{
@@ -226,7 +227,8 @@ random_srcdir(CtConfig) ->
         env => #{binary() => binary()},
         extra_args => [binary() | string()],
         srcdir => binary(),
-        modules => [module_spec()]
+        modules => [module_spec()],
+        compile_flags => [compile:option()]
     }.
 
 -type start_peer_no_dist_result() :: #{
@@ -361,12 +363,19 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     ok = file:make_dir(EbinDir),
     true = peer:call(Peer, code, add_patha, [EbinDir]),
 
-    CompileOpts = #{work_dir => WorkDir},
+    CompileOpts0 = #{work_dir => WorkDir},
+    CompileOpts1 =
+        case Opts of
+            #{compile_flags := Flags} ->
+                CompileOpts0#{flags => Flags};
+            _ ->
+                CompileOpts0
+        end,
     Modules =
         #{
             Module => BeamFilePath
          || ModuleSpec <- maps:get(modules, Opts, []),
-            {ok, Module, BeamFilePath} <- [compile_module(CtConfig, ModuleSpec, CompileOpts)]
+            {ok, Module, BeamFilePath} <- [compile_module(CtConfig, ModuleSpec, CompileOpts1)]
         },
 
     {ok, Peer, SrcDir, Modules}.

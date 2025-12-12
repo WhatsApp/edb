@@ -30,9 +30,8 @@ The (new!) Erlang debugger
 
 -export([pause/0, continue/0, wait/0]).
 
--export([add_breakpoint/2]).
--export([clear_breakpoint/2, clear_breakpoints/1]).
--export([set_breakpoints/2]).
+-export([add_breakpoint/2, set_breakpoints/2, clear_breakpoint/2, clear_breakpoints/1]).
+-export([add_function_breakpoint/3, clear_function_breakpoint/3, clear_function_breakpoints/1]).
 -export([get_breakpoints/0, get_breakpoints/1]).
 -export([get_breakpoints_hit/0]).
 
@@ -53,9 +52,6 @@ The (new!) Erlang debugger
 %% -------------------------------------------------------------------
 -type line() :: pos_integer().
 -export_type([line/0]).
-
--type fun_name() :: atom().
--export_type([fun_name/0]).
 
 -export_type([bootstrap_failure/0]).
 -type bootstrap_failure() ::
@@ -211,6 +207,7 @@ A function-breakpoint may not be added for various reasons:
     | {termination, all}.
 -type paused_event() ::
     {breakpoint, pid(), mfa(), {line, line()}}
+    | {function_breakpoint, pid(), mfa(), {line, line()}}
     | pause
     | {step, pid()}.
 -type reverse_attachment_event() ::
@@ -469,7 +466,7 @@ add_breakpoint(Module, Line) ->
     call_server({add_breakpoint, Module, Line}).
 
 -doc """
-Clear all previously set breakpoints of a module on the attached node.
+Clear all previously set line breakpoints of a module on the attached node.
 """.
 -spec clear_breakpoints(Module) -> ok when
     Module :: module().
@@ -477,7 +474,7 @@ clear_breakpoints(Module) ->
     call_server({clear_breakpoints, Module}).
 
 -doc """
-Clear a previously set breakpoint on the attached node.
+Clear a previously set line breakpoint on the attached node.
 """.
 -spec clear_breakpoint(Module, Line) -> ok | {error, not_found} when
     Module :: module(),
@@ -496,6 +493,35 @@ Notice that `Module` may get loaded as a side-effect of this call.
     Result :: set_breakpoints_result().
 set_breakpoints(Module, Lines) ->
     call_server({set_breakpoints, Module, Lines}).
+
+-doc """
+Set a breakpoint on a function in a loaded module on the attached node.
+""".
+-spec add_function_breakpoint(Module, Function, Arity) -> ok | {error, Reason} when
+    Module :: module(),
+    Function :: atom(),
+    Arity :: arity(),
+    Reason :: edb:add_function_breakpoint_error().
+add_function_breakpoint(Module, Function, Arity) ->
+    call_server({add_function_breakpoint, {Module, Function, Arity}}).
+
+-doc """
+Clear all previously set function breakpoints of a module on the attached node.
+""".
+-spec clear_function_breakpoints(Module) -> ok when
+    Module :: module().
+clear_function_breakpoints(Module) ->
+    call_server({clear_function_breakpoints, Module}).
+
+-doc """
+Clear a previously set function breakpoint on the attached node.
+""".
+-spec clear_function_breakpoint(Module, Function, Arity) -> ok | {error, not_found} when
+    Module :: module(),
+    Function :: atom(),
+    Arity :: arity().
+clear_function_breakpoint(Module, Function, Arity) ->
+    call_server({clear_function_breakpoint, {Module, Function, Arity}}).
 
 -doc """
 Get all currently set breakpoints on the attached node.

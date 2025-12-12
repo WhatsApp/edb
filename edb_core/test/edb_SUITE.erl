@@ -55,6 +55,13 @@
 -export([test_set_breakpoints_loads_the_module_if_necessary/1]).
 -export([test_set_breakpoints_fails_if_module_loading_is_stuck/1]).
 
+%% Test cases for the test_function_breakpoints group
+-export([test_function_breakpoint_single_clause/1]).
+-export([test_function_breakpoint_three_clauses/1]).
+-export([test_function_and_line_breakpoint_interaction/1]).
+-export([test_clear_function_breakpoints/1]).
+-export([test_function_breakpoint_errors/1]).
+
 %% Test cases for the test_step_over group
 -export([test_step_over_goes_to_next_line/1]).
 -export([test_step_over_skips_same_name_fun_call/1]).
@@ -148,6 +155,13 @@ groups() ->
             test_set_breakpoints_loads_the_module_if_necessary,
             test_set_breakpoints_fails_if_module_loading_is_stuck
         ]},
+        {test_function_breakpoints, [
+            test_function_breakpoint_single_clause,
+            test_function_breakpoint_three_clauses,
+            test_function_and_line_breakpoint_interaction,
+            test_clear_function_breakpoints,
+            test_function_breakpoint_errors
+        ]},
         {test_step_over, [
             test_step_over_goes_to_next_line,
             test_step_over_skips_same_name_fun_call,
@@ -214,6 +228,7 @@ all() ->
         {group, test_subscriptions},
         {group, test_pause},
         {group, test_breakpoints},
+        {group, test_function_breakpoints},
         {group, test_step_over},
         {group, test_step_in},
         {group, test_step_out},
@@ -1512,6 +1527,401 @@ test_set_breakpoints_fails_if_module_loading_is_stuck(Config) ->
     ?assertEqual(
         [{4, {error, timeout_loading_module}}],
         edb:set_breakpoints(Module, [4])
+    ),
+
+    ok.
+
+%% ------------------------------------------------------------------
+%% Test cases for test_function_breakpoints fixture
+%% ------------------------------------------------------------------
+
+test_function_breakpoint_single_clause(Config) ->
+    ModuleSource = ~"""
+    -module(test_function_breakpoint_single_clause).
+    -export([go/1]).
+    go(TC) ->
+        TC ! {sync, 1},
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    % Set a function breakpoint on go/1
+    ok = edb:add_function_breakpoint(Module, go, 1),
+
+    % Sanity check: function breakpoint shows up in get_breakpoints
+    ?assertEqual(
+        #{Module => [#{type => function, module => Module, function => {Module, go, 1}}]},
+        edb:get_breakpoints()
+    ),
+
+    % Spawn a process that will call the function
+    Pid = erlang:spawn(Module, go, [self()]),
+
+    % Wait for the function breakpoint to be hit
+    {ok, paused} = edb:wait(),
+
+    % Check that we hit the function breakpoint
+    ?assertEqual(
+        #{Pid => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Sanity check: the process is suspended on the first line of go/1
+    ?assertMatch(
+        {ok, [#{mfa := {Module, go, 1}, line := 4}]},
+        edb:stack_frames(Pid)
+    ),
+
+    % The sync on line 4 hasn't been sent yet
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Continue and check that the function completes
+    {ok, resumed} = edb:continue(),
+    ?expectReceive({sync, 1}),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {paused, {function_breakpoint, Pid, {Module, go, 1}, {line, 4}}},
+            {resumed, {continue, all}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_function_breakpoint_three_clauses(Config) ->
+    ModuleSource = ~"""
+    -module(test_function_breakpoint_three_clauses).
+    -export([go/1]).
+    go(first) ->
+        ok;
+    go(second) ->
+        ok;
+    go(third) ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    % Set a function breakpoint on go/1
+    ok = edb:add_function_breakpoint(Module, go, 1),
+
+    % Sanity check: function breakpoint shows up in get_breakpoints
+    ?assertEqual(
+        #{Module => [#{type => function, module => Module, function => {Module, go, 1}}]},
+        edb:get_breakpoints()
+    ),
+
+    % Spawn a process that will call the function three times with different clauses
+    Pid = erlang:spawn(fun() ->
+        Module:go(first),
+        Module:go(second),
+        Module:go(third)
+    end),
+
+    % Wait for the first function breakpoint to be hit (first clause)
+    {ok, paused} = edb:wait(),
+    ?assertEqual(
+        #{Pid => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+    ?assertMatch(
+        {ok, [#{mfa := {Module, go, 1}, line := 4} | _]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Continue to the next call
+    {ok, resumed} = edb:continue(),
+
+    % Wait for the second function breakpoint to be hit (second clause)
+    {ok, paused} = edb:wait(),
+    ?assertEqual(
+        #{Pid => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+    ?assertMatch(
+        {ok, [#{mfa := {Module, go, 1}, line := 6} | _]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Continue to the next call
+    {ok, resumed} = edb:continue(),
+
+    % Wait for the third function breakpoint to be hit (third clause)
+    {ok, paused} = edb:wait(),
+    ?assertEqual(
+        #{Pid => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+    ?assertMatch(
+        {ok, [#{mfa := {Module, go, 1}, line := 8} | _]},
+        edb:stack_frames(Pid)
+    ),
+
+    % Continue and let the process finish
+    {ok, resumed} = edb:continue(),
+    ?ASSERT_NOTHING_ELSE_RECEIVED(),
+
+    % Clear the function breakpoint
+    ok = edb:clear_function_breakpoint(Module, go, 1),
+
+    % Verify function breakpoint is cleared
+    ?assertEqual(#{}, edb:get_breakpoints()),
+
+    % Spawn a process calling all clauses again - it should not hit breakpoints
+    TestProc = self(),
+    Pid2 = erlang:spawn(fun() ->
+        Module:go(first),
+        Module:go(second),
+        Module:go(third),
+        TestProc ! {done, self()}
+    end),
+
+    % Wait for the process to complete
+    ?expectReceive({done, Pid2}),
+
+    % Check the events delivered
+    ?assertEqual(
+        [
+            {paused, {function_breakpoint, Pid, {Module, go, 1}, {line, 4}}},
+            {resumed, {continue, all}},
+            {paused, {function_breakpoint, Pid, {Module, go, 1}, {line, 6}}},
+            {resumed, {continue, all}},
+            {paused, {function_breakpoint, Pid, {Module, go, 1}, {line, 8}}},
+            {resumed, {continue, all}}
+        ],
+        edb_test_support:collected_events()
+    ),
+
+    ok.
+
+test_function_and_line_breakpoint_interaction(Config) ->
+    ModuleSource = ~"""
+    -module(test_function_and_line_breakpoint_interaction).
+    -export([go/1]).
+    go(x) ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    % Set both function breakpoint and line breakpoint on the first line of the clause
+    ok = edb:add_function_breakpoint(Module, go, 1),
+    ok = edb:add_breakpoint(Module, 4),
+
+    % Sanity check: both breakpoints show up in get_breakpoints (function first, then line)
+    ?assertEqual(
+        #{
+            Module => [
+                #{type => function, module => Module, function => {Module, go, 1}},
+                #{type => line, module => Module, line => 4}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    % Spawn a process that will call the function
+    Pid = erlang:spawn(Module, go, [x]),
+
+    % Wait for a breakpoint to be hit
+    {ok, paused} = edb:wait(),
+
+    % Check that the FUNCTION breakpoint is reported (not the line breakpoint)
+    ?assertEqual(
+        #{Pid => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Continue
+    {ok, resumed} = edb:continue(),
+
+    % Remove the function breakpoint
+    ok = edb:clear_function_breakpoint(Module, go, 1),
+
+    % Verify function breakpoint is cleared but line breakpoint remains
+    ?assertEqual(
+        #{Module => [#{type => line, module => Module, line => 4}]},
+        edb:get_breakpoints()
+    ),
+
+    % Spawn another process - it should hit the line breakpoint
+    Pid2 = erlang:spawn(Module, go, [x]),
+    {ok, paused} = edb:wait(),
+
+    % Check that the LINE breakpoint is reported
+    ?assertEqual(
+        #{Pid2 => #{type => line, module => Module, line => 4}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Continue
+    {ok, resumed} = edb:continue(),
+
+    % Add the function breakpoint again
+    ok = edb:add_function_breakpoint(Module, go, 1),
+
+    % Verify both breakpoints show up (function first, then line)
+    ?assertEqual(
+        #{
+            Module => [
+                #{type => function, module => Module, function => {Module, go, 1}},
+                #{type => line, module => Module, line => 4}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    % Remove the line breakpoint
+    ok = edb:clear_breakpoint(Module, 4),
+
+    % Verify line breakpoint is cleared but function breakpoint remains
+    ?assertEqual(
+        #{Module => [#{type => function, module => Module, function => {Module, go, 1}}]},
+        edb:get_breakpoints()
+    ),
+
+    % Spawn another process - it should hit the function breakpoint
+    Pid3 = erlang:spawn(Module, go, [x]),
+    {ok, paused} = edb:wait(),
+
+    % Check that the FUNCTION breakpoint is reported
+    ?assertEqual(
+        #{Pid3 => #{type => function, module => Module, function => {Module, go, 1}}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Continue and let process finish
+    {ok, resumed} = edb:continue(),
+
+    ok.
+
+test_clear_function_breakpoints(Config) ->
+    ModuleSource = ~"""
+    -module(test_clear_function_breakpoints).
+    -export([foo/0, bar/0]).
+    foo() ->
+        ok.
+    bar() ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    % Set function breakpoints on two functions
+    ok = edb:add_function_breakpoint(Module, foo, 0),
+    ok = edb:add_function_breakpoint(Module, bar, 0),
+
+    % Sanity check: both function breakpoints show up in get_breakpoints
+    ?assertEqual(
+        #{
+            Module => [
+                #{type => function, module => Module, function => {Module, bar, 0}},
+                #{type => function, module => Module, function => {Module, foo, 0}}
+            ]
+        },
+        edb:get_breakpoints()
+    ),
+
+    % Spawn a process that will call foo()
+    Pid1 = erlang:spawn(Module, foo, []),
+    {ok, paused} = edb:wait(),
+
+    % Check that we hit the function breakpoint for foo/0
+    ?assertEqual(
+        #{Pid1 => #{type => function, module => Module, function => {Module, foo, 0}}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Continue
+    {ok, resumed} = edb:continue(),
+
+    % Spawn a process that will call bar()
+    Pid2 = erlang:spawn(Module, bar, []),
+    {ok, paused} = edb:wait(),
+
+    % Check that we hit the function breakpoint for bar/0
+    ?assertEqual(
+        #{Pid2 => #{type => function, module => Module, function => {Module, bar, 0}}},
+        edb:get_breakpoints_hit()
+    ),
+
+    % Continue
+    {ok, resumed} = edb:continue(),
+
+    % Clear all function breakpoints for the module
+    ok = edb:clear_function_breakpoints(Module),
+
+    % Verify all function breakpoints are cleared
+    ?assertEqual(#{}, edb:get_breakpoints()),
+
+    % Spawn processes calling both functions again - they should not hit breakpoints
+    TestProc = self(),
+    Pid3 = erlang:spawn(fun() ->
+        Module:foo(),
+        TestProc ! {done, foo, self()}
+    end),
+    Pid4 = erlang:spawn(fun() ->
+        Module:bar(),
+        TestProc ! {done, bar, self()}
+    end),
+
+    % Wait for both processes to complete
+    ?expectReceive({done, foo, Pid3}),
+    ?expectReceive({done, bar, Pid4}),
+
+    ok.
+
+test_function_breakpoint_errors(Config) ->
+    % Test 1: Adding function breakpoint for non-existent module
+    NonExistentModule = this_module_does_not_exist,
+    ?assertEqual(
+        {error, {badkey, {NonExistentModule, foo, 0}}},
+        edb:add_function_breakpoint(NonExistentModule, foo, 0)
+    ),
+
+    % Test 2: Adding function breakpoint for non-existent function in existing module
+    ModuleSource = ~"""
+    -module(test_function_breakpoint_errors).
+    -export([existing_function/0]).
+    existing_function() ->
+        ok.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [debug_info, beam_debug_info],
+        load_it => true
+    }),
+
+    ?assertEqual(
+        {error, {badkey, {Module, non_existent_function, 0}}},
+        edb:add_function_breakpoint(Module, non_existent_function, 0)
+    ),
+
+    % Test 3: Adding function breakpoint for module without debug_info
+    ModuleWithoutDebugInfo = ~"""
+    -module(test_function_breakpoint_no_debug_info).
+    -export([go/0]).
+    go() ->
+        ok.
+    """,
+    {ok, ModuleNoDebug, _} = edb_test_support:compile_module(Config, {source, ModuleWithoutDebugInfo}, #{
+        flags => [],
+        load_it => true
+    }),
+
+    ?assertEqual(
+        {error, no_abstract_code},
+        edb:add_function_breakpoint(ModuleNoDebug, go, 0)
     ),
 
     ok.
