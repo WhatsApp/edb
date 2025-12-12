@@ -190,9 +190,12 @@ remove_module_substitute(SubstituteModule) ->
     | {add_breakpoint, module(), line()}
     | {clear_breakpoint, module(), line()}
     | {clear_breakpoints, module()}
+    | {set_breakpoints, module(), [line()]}
+    | {add_function_breakpoint, mfa()}
+    | {clear_function_breakpoint, mfa()}
+    | {clear_function_breakpoints, module()}
     | get_breakpoints
     | {get_breakpoints, module()}
-    | {set_breakpoints, module(), [line()]}
     | {reapply_breakpoints, module()}
     | get_breakpoints_hit
     | {add_module_substitute, module(), module(), [mfa()]}
@@ -341,6 +344,12 @@ dispatch_call({clear_breakpoint, Module, Line}, _From, State0) ->
     clear_breakpoint_impl(Module, Line, State0);
 dispatch_call({set_breakpoints, Module, Lines}, _From, State0) ->
     set_breakpoints_impl(Module, Lines, State0);
+dispatch_call({add_function_breakpoint, MFA}, _From, State0) ->
+    add_function_breakpoint_impl(MFA, State0);
+dispatch_call({clear_function_breakpoints, Module}, _From, State0) ->
+    clear_function_breakpoints_impl(Module, State0);
+dispatch_call({clear_function_breakpoint, MFA}, _From, State0) ->
+    clear_function_breakpoint_impl(MFA, State0);
 dispatch_call(get_breakpoints, _From, State0) ->
     get_breakpoints_impl(State0);
 dispatch_call({get_breakpoints, Module}, _From, State0) ->
@@ -433,6 +442,8 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                             case Reason of
                                 user_line_breakpoint ->
                                     {breakpoint, Pid, MFA, {line, Line}};
+                                {user_fun_breakpoint, ActualMFA} ->
+                                    {function_breakpoint, Pid, ActualMFA, {line, Line}};
                                 step ->
                                     % Pid was already suspended when processing the step breakpoint, so
                                     % resume it here to balance the suspension count. Notice the process will
@@ -571,6 +582,46 @@ set_breakpoints_impl(Module, Lines, State0) ->
     State2 = State0#state{breakpoints = Breakpoints2},
     LineResults = [{Line, Result} || {{M, Line}, Result} <- Results, M =:= Module],
     {reply, LineResults, State2}.
+
+-spec add_function_breakpoint_impl(MFA, State0) -> {reply, ok | {error, Reason}, State1} when
+    MFA :: mfa(),
+    Reason :: edb:add_function_breakpoint_error(),
+    State0 :: state(),
+    State1 :: state().
+add_function_breakpoint_impl(MFA, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    case edb_server_break:add_user_breakpoint(MFA, Breakpoints0) of
+        {ok, Breakpoints1} ->
+            State1 = State0#state{breakpoints = Breakpoints1},
+            {reply, ok, State1};
+        {error, Reason} ->
+            {reply, {error, Reason}, State0}
+    end.
+
+-spec clear_function_breakpoints_impl(Module, State0) -> {reply, ok, State1} when
+    Module :: module(),
+    State0 :: state(),
+    State1 :: state().
+clear_function_breakpoints_impl(Module, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    FunctionBpsOnly = #{line => false, function => true},
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, FunctionBpsOnly, Breakpoints0),
+    State1 = State0#state{breakpoints = Breakpoints1},
+    {reply, ok, State1}.
+
+-spec clear_function_breakpoint_impl(MFA, State0) -> {reply, ok | {error, not_found}, State1} when
+    MFA :: mfa(),
+    State0 :: state(),
+    State1 :: state().
+clear_function_breakpoint_impl(MFA, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    case edb_server_break:clear_user_breakpoint(MFA, Breakpoints0) of
+        {ok, _, Breakpoints1} ->
+            State1 = State0#state{breakpoints = Breakpoints1},
+            {reply, ok, State1};
+        {error, Reason} ->
+            {reply, {error, Reason}, State0}
+    end.
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->

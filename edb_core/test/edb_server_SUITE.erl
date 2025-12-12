@@ -29,9 +29,12 @@
 %% Test cases
 -export([
     test_reapply_breakpoints_reapplies_breakpoints/1,
+    test_reapply_breakpoints_reapplies_function_breakpoints/1,
     test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module_does_not_support_breakpoints_on_a_line/1,
     test_add_module_substitute_transfers_existing_breakpoints_to_substitute_module/1,
     test_add_module_substitute_adds_new_breakpoints_to_substitute_module/1,
+    test_add_module_substitute_transfers_existing_function_breakpoints_to_substitute_module/1,
+    test_add_module_substitute_adds_new_function_breakpoints_to_substitute_module/1,
     test_add_module_substitute_handles_transitive_substitutes/1,
     test_add_module_substitute_transfers_stepping_breakpoints/1,
     test_additional_frames_are_added_in_step_patterns/1,
@@ -40,6 +43,7 @@
     test_error_if_module_already_has_a_substitute/1,
     test_error_if_substitute_is_already_a_substitute/1,
     test_remove_module_substitute_transfers_breakpoints_back_to_original_module/1,
+    test_remove_module_substitute_transfers_function_breakpoints_back_to_original_module/1,
     test_stepping_breakpoints_work_after_removing_substitute/1,
     test_remove_module_substitute_handles_transitive_substitutes/1,
     test_error_if_try_removing_non_existent_substitute/1,
@@ -54,9 +58,12 @@ suite() -> [
 all() ->
     [
         test_reapply_breakpoints_reapplies_breakpoints,
+        test_reapply_breakpoints_reapplies_function_breakpoints,
         test_reapply_breakpoints_does_not_reapply_any_breakpoints_if_the_reloaded_module_does_not_support_breakpoints_on_a_line,
         test_add_module_substitute_transfers_existing_breakpoints_to_substitute_module,
         test_add_module_substitute_adds_new_breakpoints_to_substitute_module,
+        test_add_module_substitute_transfers_existing_function_breakpoints_to_substitute_module,
+        test_add_module_substitute_adds_new_function_breakpoints_to_substitute_module,
         test_add_module_substitute_handles_transitive_substitutes,
         test_add_module_substitute_transfers_stepping_breakpoints,
         test_additional_frames_are_added_in_step_patterns,
@@ -65,6 +72,7 @@ all() ->
         test_error_if_module_already_has_a_substitute,
         test_error_if_substitute_is_already_a_substitute,
         test_remove_module_substitute_transfers_breakpoints_back_to_original_module,
+        test_remove_module_substitute_transfers_function_breakpoints_back_to_original_module,
         test_stepping_breakpoints_work_after_removing_substitute,
         test_remove_module_substitute_handles_transitive_substitutes,
         test_error_if_try_removing_non_existent_substitute,
@@ -193,6 +201,109 @@ test_reapply_breakpoints_reapplies_breakpoints(Config) ->
         ?assertEqual(
             [#{type => line, line => 5, module => test_reapply_module}], Breakpoints5
         ),
+        ok
+    end),
+    ok.
+
+test_reapply_breakpoints_reapplies_function_breakpoints(Config) ->
+    % Create first version of test module
+    ModuleSource1 =
+        "-module(test_reapply_module).   %L01\n"
+        "-export([test_function/1]).     %L02\n"
+        "test_function(Parent) ->        %L03\n"
+        "    A = ok,                     %L04\n"
+        "    B = A,                      %L05\n"
+        "    B,                          %L06\n"
+        "    Parent ! done_mod_1.        %L07\n",
+
+    % Create slightly modified version of the test module
+    ModuleSource2 =
+        "-module(test_reapply_module).   %L01\n"
+        "-export([test_function/1]).     %L02\n"
+        "test_function(Parent) ->        %L03\n"
+        "    A = ok,                     %L04\n"
+        "    C = A,                      %L05\n"
+        "    C,                          %L06\n"
+        "    Parent ! done_mod_2.        %L07\n",
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{node := Node, modules := #{test_reapply_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, ModuleSource1}],
+                compile_flags => [debug_info, beam_debug_info]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Set function breakpoint on test_function/1
+        ok = edb:add_function_breakpoint(test_reapply_module, test_function, 1),
+
+        % Sanity-check: Verify function breakpoint is set
+        Breakpoints1 = edb:get_breakpoints(test_reapply_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_reapply_module, function => {test_reapply_module, test_function, 1}}
+            ],
+            Breakpoints1
+        ),
+
+        {ok, test_reapply_module, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, ModuleSource2}, #{load_it => true, flags => [debug_info, beam_debug_info]}
+        ]),
+
+        % Sanity-check: edb_server still recognises the function breakpoint after reloading
+        Breakpoints2 = edb:get_breakpoints(test_reapply_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_reapply_module, function => {test_reapply_module, test_function, 1}}
+            ],
+            Breakpoints2
+        ),
+
+        % Call test_reapply_module:test_function to verify that no breakpoints are actually hit
+        Receiver = self(),
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_reapply_module, test_function, [Receiver])
+        end),
+
+        % Receive 'done_mod_2' indicating end of function reached
+        receive
+            done_mod_2 -> ok
+        after 5000 ->
+            error(timeout_waiting_for_test_process)
+        end,
+
+        % Reapply breakpoints
+        ok = peer:call(Peer, edb_server, reapply_breakpoints, [test_reapply_module]),
+
+        % Sanity-check: edb_server still recognises the function breakpoint after reapplying
+        Breakpoints3 = edb:get_breakpoints(test_reapply_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_reapply_module, function => {test_reapply_module, test_function, 1}}
+            ],
+            Breakpoints3
+        ),
+
+        % Call test_reapply_module:test_function to verify that the function breakpoint gets hit
+        _TestPid2 = erlang:spawn(fun() ->
+            peer:call(Peer, test_reapply_module, test_function, [Receiver])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Function breakpoint is hit
+        Breakpoints4Map = edb:get_breakpoints_hit(),
+        Breakpoints4 = maps:values(Breakpoints4Map),
+        ?assertEqual(
+            [#{type => function, module => test_reapply_module, function => {test_reapply_module, test_function, 1}}],
+            Breakpoints4
+        ),
+
         ok
     end),
     ok.
@@ -427,6 +538,123 @@ test_add_module_substitute_adds_new_breakpoints_to_substitute_module(Config) ->
         Breakpoints3 = maps:values(Breakpoints3Map),
         ?assertEqual(
             [#{type => line, line => 5, module => test_module}], Breakpoints3
+        ),
+        ok
+    end),
+    ok.
+
+test_add_module_substitute_transfers_existing_function_breakpoints_to_substitute_module(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{node := Node, modules := #{test_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}],
+                compile_flags => [debug_info, beam_debug_info]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Set function breakpoint on test_function/0
+        ok = edb:add_function_breakpoint(test_module, test_function, 0),
+
+        % Verify function breakpoint is set
+        Breakpoints1 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_module, function => {test_module, test_function, 0}}
+            ],
+            Breakpoints1
+        ),
+
+        % Compile and add the substitute module
+        {ok, test_module_substitute, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, SubstituteModuleSource}, #{load_it => true, flags => [debug_info, beam_debug_info]}
+        ]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Verify function breakpoint is still reported for original module
+        Breakpoints2 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_module, function => {test_module, test_function, 0}}
+            ],
+            Breakpoints2
+        ),
+
+        % Call the substitute module's test_function to verify that the function breakpoint gets hit
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_module_substitute, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Function breakpoint is hit and reported as belonging to the original module
+        Breakpoints3Map = edb:get_breakpoints_hit(),
+        Breakpoints3 = maps:values(Breakpoints3Map),
+        ?assertEqual(
+            [#{type => function, module => test_module, function => {test_module, test_function, 0}}],
+            Breakpoints3
+        ),
+        ok
+    end),
+    ok.
+
+test_add_module_substitute_adds_new_function_breakpoints_to_substitute_module(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{node := Node, modules := #{test_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}],
+                compile_flags => [debug_info, beam_debug_info]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Compile and add the substitute module
+        {ok, test_module_substitute, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, SubstituteModuleSource}, #{load_it => true, flags => [debug_info, beam_debug_info]}
+        ]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Set function breakpoint on test_function/0 after substitute is added
+        ok = edb:add_function_breakpoint(test_module, test_function, 0),
+
+        % Verify function breakpoint is set
+        Breakpoints1 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_module, function => {test_module, test_function, 0}}
+            ],
+            Breakpoints1
+        ),
+
+        % Call the substitute module's test_function to verify that the function breakpoint gets hit
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_module_substitute, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Function breakpoint is hit and reported as belonging to the original module
+        Breakpoints2Map = edb:get_breakpoints_hit(),
+        Breakpoints2 = maps:values(Breakpoints2Map),
+        ?assertEqual(
+            [#{type => function, module => test_module, function => {test_module, test_function, 0}}],
+            Breakpoints2
         ),
         ok
     end),
@@ -904,6 +1132,72 @@ test_remove_module_substitute_transfers_breakpoints_back_to_original_module(Conf
         Breakpoints3 = maps:values(Breakpoints3Map),
         ?assertEqual(
             [#{type => line, line => 4, module => test_module}], Breakpoints3
+        ),
+
+        ok
+    end),
+    ok.
+
+test_remove_module_substitute_transfers_function_breakpoints_back_to_original_module(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test modules
+        {ok, #{
+            node := Node, modules := #{test_module := _, test_module_substitute := _}, peer := Peer, cookie := Cookie
+        }} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}, {source, SubstituteModuleSource}],
+                compile_flags => [debug_info, beam_debug_info]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Set up module substitute
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Set function breakpoint on test_function/0 (which will be set on the substitute module)
+        ok = edb:add_function_breakpoint(test_module, test_function, 0),
+
+        % Sanity-check: Verify function breakpoint is set on the substitute module
+        Breakpoints1 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_module, function => {test_module, test_function, 0}}
+            ],
+            Breakpoints1
+        ),
+
+        % Remove the module substitute
+        ok = peer:call(Peer, edb_server, remove_module_substitute, [test_module_substitute]),
+
+        % Verify function breakpoint is transferred back to the original module
+        Breakpoints2 = edb:get_breakpoints(test_module),
+        ?assertEqual(
+            [
+                #{type => function, module => test_module, function => {test_module, test_function, 0}}
+            ],
+            Breakpoints2
+        ),
+
+        % Call the original module's test_function to verify that function breakpoint gets hit
+        _TestPid = erlang:spawn(fun() ->
+            peer:call(Peer, test_module, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Function breakpoint is hit
+        Breakpoints3Map = edb:get_breakpoints_hit(),
+        Breakpoints3 = maps:values(Breakpoints3Map),
+        ?assertEqual(
+            [#{type => function, module => test_module, function => {test_module, test_function, 0}}],
+            Breakpoints3
         ),
 
         ok
