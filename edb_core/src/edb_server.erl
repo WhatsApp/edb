@@ -1129,6 +1129,7 @@ suspend_all_processes(Universe, Unsuspendable, State0) ->
             Pid => []
          || Pid <- Universe,
             not MustIgnore(Pid),
+            erlang:is_process_alive(Pid),
             edb_server_process:try_suspend_process(Pid)
         },
     AllSuspended = maps:merge(AlreadySuspended, JustSuspended),
