@@ -420,7 +420,7 @@ handle_debugger_event({breakpoint, Pid, MFA, Line, Resume}, State0) ->
     Resume :: fun(() -> ok),
     State0 :: state(),
     State1 :: state().
-breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
+breakpoint_event_impl(Pid, BpMFA = {BpModule, _, _}, Line, Resume, State0) ->
     Universe = erlang:processes(),
     UnsuspendablePids = get_excluded_processes(Universe, State0),
 
@@ -431,7 +431,7 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                 State0;
             false ->
                 #state{breakpoints = BP0} = State0,
-                case edb_server_break:register_breakpoint_event(Module, Line, Pid, Resume, BP0) of
+                case edb_server_break:register_breakpoint_event(BpModule, Line, Pid, Resume, BP0) of
                     resume ->
                         ok = Resume(),
                         State0;
@@ -440,7 +440,9 @@ breakpoint_event_impl(Pid, MFA = {Module, _, _}, Line, Resume, State0) ->
                         {ok, State2} = suspend_all_processes(Universe, UnsuspendablePids, State1),
                         PausedEvent =
                             case Reason of
-                                user_line_breakpoint ->
+                                {user_line_breakpoint, Module} ->
+                                    {_BpModule, F, A} = BpMFA,
+                                    MFA = {Module, F, A},
                                     {breakpoint, Pid, MFA, {line, Line}};
                                 {user_fun_breakpoint, ActualMFA} ->
                                     {function_breakpoint, Pid, ActualMFA, {line, Line}};

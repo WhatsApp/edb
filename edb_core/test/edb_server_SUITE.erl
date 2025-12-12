@@ -51,6 +51,8 @@
 
 %% Test cases for the substitute_reporting group
 -export([test_original_module_is_reported_in_stack_frames/1]).
+-export([test_original_module_is_reported_in_paused_event_for_line_breakpoint/1]).
+-export([test_original_module_is_reported_in_paused_event_for_function_breakpoint/1]).
 
 %% Test cases for the substitute_multiplicity group
 -export([test_add_module_substitute_handles_transitive_substitutes/1]).
@@ -89,7 +91,9 @@ groups() ->
             test_stepping_breakpoints_work_after_removing_substitute
         ]},
         {substitute_reporting, [
-            test_original_module_is_reported_in_stack_frames
+            test_original_module_is_reported_in_stack_frames,
+            test_original_module_is_reported_in_paused_event_for_line_breakpoint,
+            test_original_module_is_reported_in_paused_event_for_function_breakpoint
         ]},
         {substitute_multiplicity, [
             test_add_module_substitute_handles_transitive_substitutes,
@@ -1201,6 +1205,110 @@ test_original_module_is_reported_in_stack_frames(Config) ->
         ?assertEqual({test_module, test_function, 0}, MFA),
         ?assertEqual(4, Line),
         ?assert(lists:suffix("test_module.erl", AccSource)),
+        ok
+    end),
+    ok.
+
+test_original_module_is_reported_in_paused_event_for_line_breakpoint(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{node := Node, modules := #{test_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Subscribe to events
+        {ok, Subscription} = edb:subscribe(),
+
+        % Compile and add the substitute module
+        {ok, test_module_substitute, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, SubstituteModuleSource}, #{load_it => true}
+        ]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Set breakpoint on line 4
+        ok = edb:add_breakpoint(test_module, 4),
+
+        % Call the substitute module's test_function to verify that the breakpoint gets hit
+        erlang:spawn(fun() ->
+            peer:call(Peer, test_module_substitute, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Check the paused event - MFA should report the original module
+        receive
+            {edb_event, Subscription, {paused, {breakpoint, _SomePid, {test_module, test_function, 0}, {line, 4}}}} ->
+                ok;
+            {edb_event, Subscription, Other} ->
+                error({unexpected_event, Other})
+        after 2000 ->
+            error(~"Timeout waiting for paused event")
+        end,
+
+        edb:unsubscribe(Subscription),
+        ok
+    end),
+    ok.
+
+test_original_module_is_reported_in_paused_event_for_function_breakpoint(Config) ->
+    % Create original and substitute versions of test module
+    OriginalSource = create_test_source(test_module),
+    SubstituteModuleSource = create_test_source(test_module_substitute),
+
+    edb_test_support:on_debugger_node(Config, fun() ->
+        % Start peer node with the test module
+        {ok, #{node := Node, modules := #{test_module := _}, peer := Peer, cookie := Cookie}} = edb_test_support:start_peer_node(
+            Config, #{
+                enable_debugging_mode => true,
+                modules => [{source, OriginalSource}],
+                compile_flags => [debug_info, beam_debug_info]
+            }
+        ),
+
+        ok = edb:attach(#{node => Node, cookie => Cookie}),
+
+        % Subscribe to events
+        {ok, Subscription} = edb:subscribe(),
+
+        % Compile and add the substitute module
+        {ok, test_module_substitute, _SourceFilePath} = peer:call(Peer, edb_test_support, compile_module, [
+            Config, {source, SubstituteModuleSource}, #{load_it => true, flags => [debug_info, beam_debug_info]}
+        ]),
+        ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
+
+        % Set function breakpoint on test_function/0
+        ok = edb:add_function_breakpoint(test_module, test_function, 0),
+
+        % Call the substitute module's test_function to verify that the function breakpoint gets hit
+        erlang:spawn(fun() ->
+            peer:call(Peer, test_module_substitute, test_function, [])
+        end),
+
+        % Wait for the test process to hit the breakpoint
+        {ok, paused} = edb:wait(),
+
+        % Check the paused event - MFA should report the original module
+        receive
+            {edb_event, Subscription,
+                {paused, {function_breakpoint, _SomePid, {test_module, test_function, 0}, {line, 4}}}} ->
+                ok;
+            {edb_event, Subscription, Other} ->
+                error({unexpected_event, Other})
+        after 2000 ->
+            error(~"Timeout waiting for paused event")
+        end,
+
+        edb:unsubscribe(Subscription),
         ok
     end),
     ok.
