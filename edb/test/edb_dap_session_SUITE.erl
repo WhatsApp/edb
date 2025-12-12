@@ -21,8 +21,7 @@
 % @fb-only
 -typing([eqwalizer]).
 
-% @fb-only
--include_lib("stdlib/include/assert.hrl").
+-include_lib("assert/include/assert.hrl").
 -include_lib("edb/include/edb_dap.hrl").
 
 %% CT callbacks

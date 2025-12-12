@@ -20,8 +20,7 @@
 % @fb-only
 -typing([eqwalizer]).
 
-% @fb-only
--include_lib("stdlib/include/assert.hrl").
+-include_lib("assert/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 %% Test server callbacks
