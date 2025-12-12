@@ -30,8 +30,12 @@ The (new!) Erlang debugger
 
 -export([pause/0, continue/0, wait/0]).
 
--export([add_breakpoint/2, set_breakpoints/2, clear_breakpoint/2, clear_breakpoints/1]).
--export([add_function_breakpoint/3, clear_function_breakpoint/3, clear_function_breakpoints/1]).
+-export([add_breakpoint/2, set_breakpoints/2]).
+-export([clear_breakpoint/2, clear_breakpoints/1]).
+
+-export([add_function_breakpoint/3, set_function_breakpoints/1]).
+-export([clear_function_breakpoint/3, clear_function_breakpoints/1]).
+
 -export([get_breakpoints/0, get_breakpoints/1]).
 -export([get_breakpoints_hit/0]).
 
@@ -111,6 +115,9 @@ A function-breakpoint may not be added for various reasons:
 
 -export_type([set_breakpoints_result/0]).
 -type set_breakpoints_result() :: [{line(), Result :: ok | {error, add_breakpoint_error()}}].
+
+-export_type([set_function_breakpoints_result/0]).
+-type set_function_breakpoints_result() :: [{mfa(), Result :: ok | {error, add_function_breakpoint_error()}}].
 
 -export_type([step_error/0, step_in_error/0, call_target_error/0]).
 -type step_error() ::
@@ -484,6 +491,7 @@ clear_breakpoint(Module, Line) ->
 
 -doc """
 Set breakpoints on multiple lines of a given module, on the attached node.
+Any previous breakpoint on the given module will be cleared.
 
 Notice that `Module` may get loaded as a side-effect of this call.
 """.
@@ -504,6 +512,19 @@ Set a breakpoint on a function in a loaded module on the attached node.
     Reason :: edb:add_function_breakpoint_error().
 add_function_breakpoint(Module, Function, Arity) ->
     call_server({add_function_breakpoint, {Module, Function, Arity}}).
+
+-doc """
+Set function-breakpoints on multiple functions, on the attached node.
+Functions can correspond to multiple modules. Any previous function-breakpoint,
+on any module in the node, will be cleared.
+
+Notice that modules may get loaded as a side-effect of this call.
+""".
+-spec set_function_breakpoints(Functions) -> Result when
+    Functions :: [mfa()],
+    Result :: set_function_breakpoints_result().
+set_function_breakpoints(Functions) ->
+    call_server({set_function_breakpoints, Functions}).
 
 -doc """
 Clear all previously set function breakpoints of a module on the attached node.

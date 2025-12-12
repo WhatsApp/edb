@@ -188,10 +188,11 @@ remove_module_substitute(SubstituteModule) ->
     | {remove_event_subscription, edb:event_subscription()}
     | {send_sync_event, edb:event_subscription()}
     | {add_breakpoint, module(), line()}
+    | {set_breakpoints, module(), [line()]}
     | {clear_breakpoint, module(), line()}
     | {clear_breakpoints, module()}
-    | {set_breakpoints, module(), [line()]}
     | {add_function_breakpoint, mfa()}
+    | {set_function_breakpoints, [mfa()]}
     | {clear_function_breakpoint, mfa()}
     | {clear_function_breakpoints, module()}
     | get_breakpoints
@@ -338,14 +339,16 @@ dispatch_call({send_sync_event, Subscription}, _From, State0) ->
     send_sync_event_impl(Subscription, State0);
 dispatch_call({add_breakpoint, Module, Line}, _From, State0) ->
     add_breakpoint_impl(Module, Line, State0);
+dispatch_call({set_breakpoints, Module, Lines}, _From, State0) ->
+    set_breakpoints_impl(Module, Lines, State0);
 dispatch_call({clear_breakpoints, Module}, _From, State0) ->
     clear_breakpoints_impl(Module, State0);
 dispatch_call({clear_breakpoint, Module, Line}, _From, State0) ->
     clear_breakpoint_impl(Module, Line, State0);
-dispatch_call({set_breakpoints, Module, Lines}, _From, State0) ->
-    set_breakpoints_impl(Module, Lines, State0);
 dispatch_call({add_function_breakpoint, MFA}, _From, State0) ->
     add_function_breakpoint_impl(MFA, State0);
+dispatch_call({set_function_breakpoints, MFAs}, _From, State0) ->
+    set_function_breakpoints_impl(MFAs, State0);
 dispatch_call({clear_function_breakpoints, Module}, _From, State0) ->
     clear_function_breakpoints_impl(Module, State0);
 dispatch_call({clear_function_breakpoint, MFA}, _From, State0) ->
@@ -581,9 +584,9 @@ set_breakpoints_impl(Module, Lines, State0) ->
     {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(Module, LineBpsOnly, Breakpoints0),
     BreakpointDescriptions = [{Module, Line} || Line <- Lines],
     {Results, Breakpoints2} = edb_server_break:add_user_breakpoints(BreakpointDescriptions, Breakpoints1),
-    State2 = State0#state{breakpoints = Breakpoints2},
+    State1 = State0#state{breakpoints = Breakpoints2},
     LineResults = [{Line, Result} || {{M, Line}, Result} <- Results, M =:= Module],
-    {reply, LineResults, State2}.
+    {reply, LineResults, State1}.
 
 -spec add_function_breakpoint_impl(MFA, State0) -> {reply, ok | {error, Reason}, State1} when
     MFA :: mfa(),
@@ -624,6 +627,20 @@ clear_function_breakpoint_impl(MFA, State0) ->
         {error, Reason} ->
             {reply, {error, Reason}, State0}
     end.
+
+-spec set_function_breakpoints_impl(Functions, State0) -> {reply, Result, State1} when
+    Functions :: [mfa()],
+    State0 :: state(),
+    State1 :: state(),
+    Result :: edb:set_function_breakpoints_result().
+set_function_breakpoints_impl(Functions, State0) ->
+    #state{breakpoints = Breakpoints0} = State0,
+    FunBpsOnly = #{line => false, function => true},
+    {ok, Breakpoints1} = edb_server_break:clear_user_breakpoints(FunBpsOnly, Breakpoints0),
+    {Results, Breakpoints2} = edb_server_break:add_user_breakpoints(Functions, Breakpoints1),
+    State1 = State0#state{breakpoints = Breakpoints2},
+    FunctionResults = [{MFA, Result} || {MFA = {_M, _F, _A}, Result} <- Results],
+    {reply, FunctionResults, State1}.
 
 -spec get_breakpoints_impl(state()) -> {reply, #{module() => [edb:breakpoint_info()]}, state()}.
 get_breakpoints_impl(State0) ->

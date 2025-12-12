@@ -27,7 +27,7 @@
 % User-brekapoints manipulation
 -export([add_user_breakpoint/2, add_user_breakpoints/2]).
 -export([get_user_breakpoints/1, get_user_breakpoints/2]).
--export([clear_user_breakpoint/2, clear_user_breakpoints/3]).
+-export([clear_user_breakpoint/2, clear_user_breakpoints/2, clear_user_breakpoints/3]).
 -export([clear_all_breakpoints/1]).
 -export([get_user_breakpoints_hit/1, get_user_breakpoint_hit/2]).
 -export([reapply_breakpoints/2]).
@@ -282,6 +282,23 @@ clear_user_breakpoints(Module, Types, Breakpoints0) ->
         end,
         Breakpoints0,
         get_user_breakpoints(Module, Breakpoints0)
+    ),
+    {ok, Breakpoints1}.
+
+-spec clear_user_breakpoints(Types, breakpoints()) -> {ok, breakpoints()} when
+    Types :: #{line := boolean(), function := boolean()}.
+clear_user_breakpoints(Types, Breakpoints0) ->
+    ModulesWithBreakpoints = [
+        from_vm_module(VmMod, Breakpoints0)
+     || VmMod := _ <- Breakpoints0#breakpoints.vm_breakpoints
+    ],
+    Breakpoints1 = lists:foldl(
+        fun(Module, AccBreakpoints0) ->
+            {ok, AccBreapoints1} = clear_user_breakpoints(Module, Types, AccBreakpoints0),
+            AccBreapoints1
+        end,
+        Breakpoints0,
+        ModulesWithBreakpoints
     ),
     {ok, Breakpoints1}.
 
