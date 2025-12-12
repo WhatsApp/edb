@@ -22,6 +22,8 @@
 -moduledoc false.
 
 -export([get_debug_info/2]).
+-export([fetch_abstract_code/1]).
+-export([first_line_of_fun_clauses/3]).
 -export([module_source/1]).
 
 % elp:ignore W0048 (no_dialyzer_attribute)
@@ -42,11 +44,15 @@
 -export_type([call_target/0]).
 -type call_target() ::
     % remote function
-    {M :: module() | var_name(), F :: atom() | var_name(), A :: non_neg_integer()}
+    {M :: module() | var_name(), F :: atom() | var_name(), A :: arity()}
     % local function
-    | {F :: atom() | var_name(), A :: non_neg_integer()}
+    | {F :: atom() | var_name(), A :: arity()}
     % function reference
     | var_name().
+
+-export_type([abstract_form/0, abstract_code/0]).
+-type abstract_form() :: erl_parse:abstract_form() | erl_parse:form_info().
+-type abstract_code() :: [abstract_form()].
 
 %% --------------------------------------------------------------------
 %% Debug info
@@ -89,6 +95,86 @@ get_debug_info(Module, Line) when is_atom(Module) ->
 assert_is_var_debug_info(X = {x, N}) when is_integer(N) -> X;
 assert_is_var_debug_info(Y = {y, N}) when is_integer(N) -> Y;
 assert_is_var_debug_info(V = {value, _}) -> V.
+
+%% --------------------------------------------------------------------
+%% fetch_abstract_code: fetch abstract code from module
+%% --------------------------------------------------------------------
+
+-spec fetch_abstract_code(Module) -> {ok, abstract_code()} | {error, Error} when
+    Module :: module(),
+    Error :: module_not_loaded | no_abstract_code.
+fetch_abstract_code(Module) ->
+    case code:get_object_code(Module) of
+        error ->
+            {error, module_not_loaded};
+        {Module, Binary, _Filename} ->
+            case beam_lib:chunks(Binary, [abstract_code]) of
+                {ok, {Module, [{abstract_code, {raw_abstract_v1, Forms}}]}} ->
+                    {ok, Forms};
+                {ok, {Module, [{abstract_code, no_abstract_code}]}} ->
+                    {error, no_abstract_code};
+                {error, beam_lib, _Error} ->
+                    {error, no_abstract_code}
+            end
+    end.
+
+%% --------------------------------------------------------------------
+%% first_line_of_fun_clauses: Where to set function breakpoints
+%% --------------------------------------------------------------------
+
+-spec first_line_of_fun_clauses(Module, Fun, Arity) -> {ok, [edb:line()]} | {error, Reason} when
+    Module :: module(),
+    Fun :: atom(),
+    Arity :: arity(),
+    Reason :: module_not_loaded | no_abstract_code | function_not_found.
+first_line_of_fun_clauses(Module, Name, Arity) ->
+    case fetch_abstract_code(Module) of
+        Err = {error, _} ->
+            Err;
+        {ok, AbsCode} ->
+            Candidates = [
+                Fun
+             || Fun <- AbsCode,
+                erl_syntax:type(Fun) =:= function,
+                erl_syntax:function_arity(Fun) =:= Arity,
+                erl_syntax:is_atom(erl_syntax:function_name(Fun), Name)
+            ],
+            case Candidates of
+                [] ->
+                    {error, function_not_found};
+                [Fun] ->
+                    ClauseStartLines = [form_line(Clause) || Clause <- erl_syntax:function_clauses(Fun)],
+                    case erl_debugger:breakpoints(Module) of
+                        {error, badkey} ->
+                            {error, module_not_loaded};
+                        {ok, #{{Name, Arity} := Breakpoints}} ->
+                            BreakableLines = [Line || Line := _ <- maps:iterator(Breakpoints, ordered)],
+                            {ok, first_breakable_line_per_clause(BreakableLines, ClauseStartLines)};
+                        {ok, _} ->
+                            {error, function_not_found}
+                    end
+            end
+    end.
+
+-spec first_breakable_line_per_clause(BreakableLines, ClauseStartLines) -> [edb:line()] when
+    BreakableLines :: [edb:line()],
+    ClauseStartLines :: [edb:line()].
+first_breakable_line_per_clause([], []) ->
+    [];
+first_breakable_line_per_clause([Line | RestLines], [NextClause | _] = ClauseStartLines) when Line < NextClause ->
+    first_breakable_line_per_clause(RestLines, ClauseStartLines);
+first_breakable_line_per_clause([Line | RestLines] = BreakableLines, [_NextClause | RestClauses]) ->
+    % Line >= _NextClause
+    case RestClauses of
+        [] ->
+            % We found the first line of the last clause
+            [Line];
+        [NextNextClause | _] when Line >= NextNextClause ->
+            % NextClause somehow has no breakable lines; skip it
+            first_breakable_line_per_clause(BreakableLines, RestClauses);
+        _ ->
+            [Line | first_breakable_line_per_clause(RestLines, RestClauses)]
+    end.
 
 % --------------------------------------------------------------------
 % module_source: Source location of a module
@@ -142,3 +228,12 @@ guess_module_source(Module) ->
                     undefined
             end
     end.
+
+% --------------------------------------------------------------------
+% Helpers
+% --------------------------------------------------------------------
+
+-spec form_line(Form) -> edb:line() when
+    Form :: abstract_form().
+form_line(Form) ->
+    erl_anno:line(erl_syntax:get_pos(Form)).

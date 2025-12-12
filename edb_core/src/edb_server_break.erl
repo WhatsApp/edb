@@ -117,10 +117,10 @@ create() ->
 %% --------------------------------------------------------------------
 %% User breakpoints manipulation
 %% --------------------------------------------------------------------
--spec add_user_breakpoint(BreakpointDescription, breakpoints()) ->
+-spec add_user_breakpoint(LineBreakpoint, breakpoints()) ->
     {ok, breakpoints()} | {error, edb:add_breakpoint_error()}
 when
-    BreakpointDescription :: {module(), line()}.
+    LineBreakpoint :: {module(), line()}.
 add_user_breakpoint({Module, Line}, Breakpoints0) ->
     VmModule = to_vm_module(Module, Breakpoints0),
     case try_ensure_module_loaded(VmModule) of
@@ -135,12 +135,12 @@ add_user_breakpoint({Module, Line}, Breakpoints0) ->
             {error, {badkey, Module}}
     end.
 
--spec add_user_breakpoints(BreakpointDescriptions, breakpoints()) -> {BreakpointResults, breakpoints()} when
-    BreakpointDescriptions :: [BreakpointDescription],
-    BreakpointDescription :: {module(), line()},
-    BreakpointResults :: [{BreakpointDescription, Result}],
-    Result :: ok | {error, edb:add_breakpoint_error()}.
-add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
+-spec add_user_breakpoints(DesiredBreakpoints, breakpoints()) -> {BreakpointResults, breakpoints()} when
+    DesiredBreakpoints :: [LineBreakpoint],
+    LineBreakpoint :: {module(), line()},
+    BreakpointResults :: [{LineBreakpoint, LineBreakpointResult}],
+    LineBreakpointResult :: ok | {error, edb:add_breakpoint_error()}.
+add_user_breakpoints(DesiredBreakpoints, Breakpoints0) ->
     lists:mapfoldl(
         fun(BreakpointDescription, AccBreakpointsIn) ->
             case add_user_breakpoint(BreakpointDescription, AccBreakpointsIn) of
@@ -149,7 +149,7 @@ add_user_breakpoints(BreakpointDescriptions, Breakpoints0) ->
             end
         end,
         Breakpoints0,
-        BreakpointDescriptions
+        DesiredBreakpoints
     ).
 
 -spec get_user_breakpoints(breakpoints()) -> #{module() => [edb:breakpoint_info()]}.
