@@ -15,6 +15,12 @@
 
 -module(edb_server_break).
 
+%% erlfmt:ignore
+% @fb-only: -oncall("whatsapp_server_devx").
+-compile(warn_missing_spec_all).
+
+-moduledoc false.
+
 % Creation
 -export([create/0]).
 

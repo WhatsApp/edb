@@ -17,7 +17,7 @@
 -module(edb_dap_reverse_request).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only[end= ]: -oncall("whatsapp_server_devx").
 -moduledoc """
 Behaviour for handling reverse-requests to the client
 

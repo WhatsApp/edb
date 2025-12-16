@@ -16,7 +16,7 @@
 -module(edb_dap_utils_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
 -include_lib("assert/include/assert.hrl").
@@ -42,7 +42,7 @@ all() ->
 %% erlfmt:ignore fb-only needs to be on same line
 suite() ->
     [
-        % @fb-only
+        % @fb-only: {wa_ct_log_sentinel, #{enable => true, enable_zero_error_logs_check => true}}
     ].
 
 init_per_testcase(_TestCase, Config) ->

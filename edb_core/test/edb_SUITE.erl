@@ -16,7 +16,7 @@
 -module(edb_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
 -include_lib("assert/include/assert.hrl").
@@ -124,7 +124,7 @@
 %% erlfmt:ignore
 suite() ->
     [
-        % @fb-only
+        % @fb-only: {appatic, #{enable_autoclean => true}},
         {timetrap, {minutes, 1}}
     ].
 

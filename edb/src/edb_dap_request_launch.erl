@@ -24,7 +24,7 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 """.
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only[end= ]: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_request).
@@ -160,7 +160,7 @@ prepend_to_env(Key, Val, Env) ->
             NewVal = io_lib:format("~s ~s", [Val, PrevVal]),
             Env#{Key => erlang:iolist_to_binary(NewVal)};
         _ ->
-            % @fb-only
+            % @fb-only[end= ]: % elp:ignore WA014 (no_os_getenv)
             case os:getenv(binary_to_list(Key)) of
                 false ->
                     prepend_to_env(Key, Val, Env#{Key => null});

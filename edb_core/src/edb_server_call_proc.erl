@@ -24,7 +24,7 @@
 -compile(warn_missing_spec_all).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc false.
 -compile(warn_missing_spec_all).
 

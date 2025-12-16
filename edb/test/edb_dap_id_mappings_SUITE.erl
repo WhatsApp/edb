@@ -16,7 +16,7 @@
 -module(edb_dap_id_mappings_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
 %% Test server callbacks

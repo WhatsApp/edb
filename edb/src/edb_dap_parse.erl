@@ -16,7 +16,7 @@
 -module(edb_dap_parse).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc """
 Support for parsing of request arguments, etc
 """.
