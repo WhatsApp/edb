@@ -24,7 +24,7 @@ runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protoc
 """.
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_reverse_request).

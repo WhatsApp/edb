@@ -18,7 +18,7 @@
 -module(edb_bootstrap).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc false.
 -compile(warn_missing_spec_all).
 
@@ -29,7 +29,7 @@
 }).
 
 %% erlfmt:ignore-begin
-% @fb-only
+% @fb-only[end= ]: -define(MODULES_USED_FOR_META_DEBUGGING, [waaat]).
 -define(MODULES_USED_FOR_META_DEBUGGING, []). % @oss-only
 %% erlfmt:ignore-end
 
@@ -154,7 +154,7 @@ prepare_environment_for_debugging_children_nodes(ReverseAttachCode) ->
     ReverseAttachCodeEscaped = escape_special_chars_for_erl_flags(ReverseAttachCode),
     NewFlags = lists:flatten(io_lib:format("-eval ~s", [ReverseAttachCodeEscaped])),
     CombinedFlags =
-        % @fb-only
+        % @fb-only[end= ]: % elp:ignore WA014 (no_os_getenv)
         case os:getenv("ERL_AFLAGS") of
             false ->
                 NewFlags;

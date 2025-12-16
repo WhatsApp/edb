@@ -21,7 +21,7 @@
     {applications, [
         kernel,
         stdlib,
-        % @fb-only
+        % @fb-only[end= ]: edb_dap_delegate,
         edb_core
     ]},
     {licenses, ["Apache-2.0"]},

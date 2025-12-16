@@ -18,10 +18,10 @@
 -module(edb_dap_attach_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
-% @fb-only
+% @fb-only: % elp:fixme WA003 - Open source app
 -include_lib("common_test/include/ct.hrl").
 
 %% CT callbacks

@@ -24,7 +24,7 @@ scopes requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 """.
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only[end= ]: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_request).

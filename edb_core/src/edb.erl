@@ -16,7 +16,7 @@
 -module(edb).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc """
 The (new!) Erlang debugger
 """.

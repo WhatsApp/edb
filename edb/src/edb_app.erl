@@ -16,7 +16,7 @@
 -module(edb_app).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc """
 edb public API
 """.

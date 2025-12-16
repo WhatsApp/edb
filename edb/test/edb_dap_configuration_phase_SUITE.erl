@@ -17,7 +17,7 @@
 -module(edb_dap_configuration_phase_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
 %% CT callbacks

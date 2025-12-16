@@ -16,7 +16,7 @@
 -module(edb_expr_SUITE).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -typing([eqwalizer]).
 
 -include_lib("assert/include/assert.hrl").
