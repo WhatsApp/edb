@@ -19,7 +19,7 @@
 -module(edb_gatekeeper).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -moduledoc false.

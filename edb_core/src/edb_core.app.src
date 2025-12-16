@@ -19,7 +19,7 @@
     {modules, []},
     {registered, []},
     {applications, [
-        % @fb-only
+        % @fb-only: otp_compatibility,
         kernel,
         stdlib,
         compiler,

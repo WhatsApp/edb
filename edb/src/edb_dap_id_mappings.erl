@@ -17,7 +17,7 @@
 -module(edb_dap_id_mappings).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc """
 A mapper of IDs for the debug adapter
 

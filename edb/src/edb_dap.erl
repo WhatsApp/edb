@@ -17,7 +17,7 @@
 -module(edb_dap).
 
 %% erlfmt:ignore
-% @fb-only
+% @fb-only: -oncall("whatsapp_server_devx").
 -moduledoc """
 Support for the DAP Protocol
 
