@@ -17,7 +17,6 @@
 
 %% erlfmt:ignore
 % @fb-only: -oncall("whatsapp_server_devx").
--typing([eqwalizer]).
 
 %% Test server callbacks
 -export([

@@ -24,7 +24,6 @@
 %% erlfmt:ignore
 % @fb-only: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
--typing([eqwalizer]).
 
 -behaviour(gen_server).
 

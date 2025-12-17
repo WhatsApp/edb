@@ -19,7 +19,6 @@
 
 %% erlfmt:ignore
 % @fb-only: -oncall("whatsapp_server_devx").
--typing([eqwalizer]).
 
 -include_lib("assert/include/assert.hrl").
 -include_lib("edb/include/edb_dap.hrl").

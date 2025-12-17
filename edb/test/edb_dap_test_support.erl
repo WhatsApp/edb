@@ -19,7 +19,6 @@
 %% erlfmt:ignore
 % @fb-only: -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
--typing([eqwalizer]).
 
 %% Public API
 -export([start_test_client/1]).
