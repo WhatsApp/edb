@@ -16,8 +16,7 @@
 
 -module(edb_dap_event).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc """
 DAP Events
 """.

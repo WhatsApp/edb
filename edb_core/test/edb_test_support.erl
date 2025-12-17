@@ -15,8 +15,7 @@
 
 -module(edb_test_support).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -include_lib("common_test/include/ct.hrl").

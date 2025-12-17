@@ -17,8 +17,7 @@
 
 -module(edb_dap_parse_SUITE).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 
 %% CT callbacks
 -export([

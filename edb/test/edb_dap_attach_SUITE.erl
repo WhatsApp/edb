@@ -17,8 +17,7 @@
 
 -module(edb_dap_attach_SUITE).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 
 % @fb-only: % elp:fixme WA003 - Open source app
 -include_lib("common_test/include/ct.hrl").

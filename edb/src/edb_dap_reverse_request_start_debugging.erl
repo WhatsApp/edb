@@ -23,8 +23,7 @@ The module follows the Microsoft Debug Adapter Protocol specification for
 startDebugging reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_StartDebugging
 """.
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_reverse_request).
