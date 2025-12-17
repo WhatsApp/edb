@@ -19,8 +19,7 @@ Support for creating dynamic Erlang expressions that can be executed on
 the context of a process stack-frame.
 """.
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 %% Public API

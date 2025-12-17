@@ -23,8 +23,7 @@ The module follows the Microsoft Debug Adapter Protocol specification for
 setExceptionBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetExceptionBreakpoints
 """.
 
-%% erlfmt:ignore
-% @fb-only[end= ]: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_request).

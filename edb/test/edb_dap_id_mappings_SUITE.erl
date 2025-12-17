@@ -15,8 +15,7 @@
 %%
 -module(edb_dap_id_mappings_SUITE).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 
 %% Test server callbacks
 -export([

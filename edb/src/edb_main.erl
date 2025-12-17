@@ -19,8 +19,7 @@
 The entry point for the Erlang Debugger (EDB) Escript.
 """.
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -export([main/1]).

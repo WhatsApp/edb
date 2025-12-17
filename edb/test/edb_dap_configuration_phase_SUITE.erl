@@ -16,8 +16,7 @@
 %% Tests handling of the "configuration phase" of the DAP protocol.
 -module(edb_dap_configuration_phase_SUITE).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 
 %% CT callbacks
 -export([

@@ -16,8 +16,7 @@
 
 -module(edb_dap_request).
 
-%% erlfmt:ignore
-% @fb-only[end= ]: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc """
 Behaviour for handling client requests
 

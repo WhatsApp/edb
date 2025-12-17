@@ -23,8 +23,7 @@
 -module(edb_server_call_proc).
 -compile(warn_missing_spec_all).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc false.
 -compile(warn_missing_spec_all).
 

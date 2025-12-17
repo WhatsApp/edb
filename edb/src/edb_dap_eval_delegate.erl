@@ -16,8 +16,7 @@
 
 -module(edb_dap_eval_delegate).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -moduledoc """

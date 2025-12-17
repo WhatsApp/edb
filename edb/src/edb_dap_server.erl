@@ -16,8 +16,7 @@
 
 -module(edb_dap_server).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc """
 Handling of DAP requests, responses and events
 

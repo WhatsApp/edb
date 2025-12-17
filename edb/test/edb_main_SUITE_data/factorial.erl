@@ -19,8 +19,8 @@
 
 -module(factorial).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+%% line left blank for line-numbering
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -export([fact/1]).

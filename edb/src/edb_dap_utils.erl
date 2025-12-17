@@ -16,8 +16,7 @@
 
 -module(edb_dap_utils).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc """
 DAP Request Handlers
 The actual implementation for the DAP requests.

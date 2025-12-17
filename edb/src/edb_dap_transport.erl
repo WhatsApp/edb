@@ -16,8 +16,7 @@
 
 -module(edb_dap_transport).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -moduledoc """
 Transport layer of the DAP server
 This module deals with serialization/deserialization, sequencing

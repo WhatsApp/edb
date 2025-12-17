@@ -15,8 +15,7 @@
 
 -module(edb_node_monitor).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -moduledoc false.

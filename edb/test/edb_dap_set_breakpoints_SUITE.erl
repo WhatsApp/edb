@@ -17,8 +17,7 @@
 
 -module(edb_dap_set_breakpoints_SUITE).
 
-%% erlfmt:ignore
-% @fb-only: -oncall("whatsapp_server_devx").
+-oncall("whatsapp_server_devx").
 
 -include_lib("assert/include/assert.hrl").
 
