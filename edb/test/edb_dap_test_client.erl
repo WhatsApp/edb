@@ -11,18 +11,16 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%%-------------------------------------------------------------------
-%% @doc DAP Test Client
-%%
-%%      This module is used to test the DAP server End-to-End.
-%% @end
-%%%-------------------------------------------------------------------
 %%% % @format
 
 -module(edb_dap_test_client).
 
 -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
+-moduledoc """
+DAP Test Client
+This module is used to test the DAP server End-to-End.
+""".
 
 -behaviour(gen_server).
 
