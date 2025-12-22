@@ -12,9 +12,8 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%%-------------------------------------------------------------------
-%% @doc JSON-RPC / DAP Constants, as defined in
-%%      https://www.jsonrpc.org/specification
-%% @end
+%% JSON-RPC / DAP Constants, as defined in
+%% https://www.jsonrpc.org/specification
 %%%-------------------------------------------------------------------
 %%% % @format
 %%%
