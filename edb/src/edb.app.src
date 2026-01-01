@@ -17,7 +17,6 @@
     {description, "The edb debugger"},
     {vsn, git},
     {modules, []},
-    {registered, []},
     {applications, [
         kernel,
         stdlib,
