@@ -842,52 +842,55 @@ add_module_substitute(Module, Substitute, AddedFrames, Breakpoints0) ->
                 true ->
                     {error, already_substituted};
                 false ->
-                    case maps:is_key({vm_module, Substitute}, SubstitutedModulesReverse0) of
+                    VmSubstitute = {vm_module, Substitute},
+                    case maps:is_key(VmSubstitute, SubstitutedModulesReverse0) of
                         true ->
                             {error, is_already_a_substitute};
                         false ->
+                            VmModule = {vm_module, Module},
                             case FurtherSubstitutes0 of
-                                #{{vm_module, Module} := _} ->
+                                #{VmModule := _} ->
                                     {error, already_substituted};
                                 #{} ->
-                                    {ok, Breakpoints1} = reapply_breakpoints(
-                                        {vm_module, Module},
-                                        {vm_module, Substitute},
-                                        Breakpoints0
-                                    ),
+                                    Breakpoints1 =
+                                        case reapply_breakpoints(VmModule, VmSubstitute, Breakpoints0) of
+                                            {ok, BreakpointsAfterReapplying} -> BreakpointsAfterReapplying;
+                                            {error, _} -> Breakpoints0
+                                        end,
 
-                                    {ok,
-                                        case SubstitutedModulesReverse0 of
-                                            #{{vm_module, Module} := _} ->
-                                                FurtherSubstitutes1 = FurtherSubstitutes0#{
-                                                    {vm_module, Module} => #{
-                                                        substitute => {vm_module, Substitute},
-                                                        added_frames => AddedFrames
-                                                    }
-                                                },
-                                                SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
-                                                    {vm_module, Substitute} => {vm_module, Module}
-                                                },
-                                                Breakpoints1#breakpoints{
-                                                    further_substituted_modules = FurtherSubstitutes1,
-                                                    substituted_modules_reverse = SubstitutedModulesReverse1
-                                                };
-                                            #{} ->
-                                                SubstitutedModules1 = SubstitutedModules0#{
-                                                    Module => #{
-                                                        substitute => {vm_module, Substitute},
-                                                        added_frames => AddedFrames,
-                                                        original_sources => edb_server_code:module_source(Module)
-                                                    }
-                                                },
-                                                SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
-                                                    {vm_module, Substitute} => Module
-                                                },
-                                                Breakpoints1#breakpoints{
-                                                    substituted_modules = SubstitutedModules1,
-                                                    substituted_modules_reverse = SubstitutedModulesReverse1
+                                    case SubstitutedModulesReverse0 of
+                                        #{VmModule := _} ->
+                                            FurtherSubstitutes1 = FurtherSubstitutes0#{
+                                                VmModule => #{
+                                                    substitute => VmSubstitute,
+                                                    added_frames => AddedFrames
                                                 }
-                                        end}
+                                            },
+                                            SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
+                                                VmSubstitute => VmModule
+                                            },
+                                            Breakpoints2 = Breakpoints1#breakpoints{
+                                                further_substituted_modules = FurtherSubstitutes1,
+                                                substituted_modules_reverse = SubstitutedModulesReverse1
+                                            },
+                                            {ok, Breakpoints2};
+                                        #{} ->
+                                            SubstitutedModules1 = SubstitutedModules0#{
+                                                Module => #{
+                                                    substitute => VmSubstitute,
+                                                    added_frames => AddedFrames,
+                                                    original_sources => edb_server_code:module_source(Module)
+                                                }
+                                            },
+                                            SubstitutedModulesReverse1 = SubstitutedModulesReverse0#{
+                                                VmSubstitute => Module
+                                            },
+                                            Breakpoints2 = Breakpoints1#breakpoints{
+                                                substituted_modules = SubstitutedModules1,
+                                                substituted_modules_reverse = SubstitutedModulesReverse1
+                                            },
+                                            {ok, Breakpoints2}
+                                    end
                             end
                     end
             end
@@ -962,12 +965,11 @@ remove_module_substitute(SubstituteModule, Breakpoints0) ->
                             Mod -> Mod
                         end,
                     {module, OriginalModuleAtom} = code:ensure_loaded(OriginalModuleAtom),
-                    {ok, Breakpoints2} = reapply_breakpoints(
-                        VmSubstitute,
-                        {vm_module, OriginalModuleAtom},
-                        Breakpoints1
-                    ),
-                    {ok, Breakpoints2}
+                    VmOriginalModule = {vm_module, OriginalModuleAtom},
+                    case reapply_breakpoints(VmSubstitute, VmOriginalModule, Breakpoints1) of
+                        {ok, Breakpoints2} -> {ok, Breakpoints2};
+                        {error, _} -> {ok, Breakpoints1}
+                    end
             end;
         #{} ->
             {error, not_a_substitute}
