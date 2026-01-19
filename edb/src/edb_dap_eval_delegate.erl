@@ -319,30 +319,47 @@ structure_callback(Accessor, EvalName, Window) ->
     }.
 
 -spec list_structure(List, Accessor, EvalName, Window) -> [variable()] when
-    List :: list(),
+    List :: maybe_improper_list(term(), term()),
     Accessor :: accessor(),
     EvalName :: eval_name(),
     Window :: window().
 list_structure(List, Accessor, EvalName, Window = #{start := Start}) ->
     ListWindow = slice_list(List, Window),
-    [
-        #{
-            name => integer_to_binary(Index),
-            value_rep => value_rep({value, Value}),
-            structure => structure({value, Value}, extend_accessor(Accessor, EvalName, Step, StepStr))
-        }
-     || {Index, Value} <- lists:enumerate(Start, ListWindow),
-        Step <- [fun(L) -> lists:nth(Index, L) end],
-        StepStr <- [fun(E) -> format("lists:nth(~b, ~s)", [Index, E]) end]
-    ].
+    EnumeratedElements = safe_enumerate(Start, ListWindow),
+    lists:map(
+        fun
+            ({Index, Value}) ->
+                Step = fun(L) -> lists:nth(Index, L) end,
+                StepStr = fun(E) -> format("lists:nth(~b, ~s)", [Index, E]) end,
+                #{
+                    name => integer_to_binary(Index),
+                    value_rep => value_rep({value, Value}),
+                    structure => structure({value, Value}, extend_accessor(Accessor, EvalName, Step, StepStr))
+                };
+            ({improper_tail, TailIndex, TailValue}) ->
+                Step = fun(L) -> tl(lists:nthtail(TailIndex - 2, L)) end,
+                StepStr = fun(E) -> format("tl(lists:nthtail(~b, ~s))", [TailIndex - 2, E]) end,
+                #{
+                    name => ~"|",
+                    value_rep => value_rep({value, TailValue}),
+                    structure => structure(
+                        {value, TailValue}, extend_accessor(Accessor, EvalName, Step, StepStr)
+                    )
+                }
+        end,
+        EnumeratedElements
+    ).
 
 -spec slice_list(List, Window) -> Slice when
-    List :: [A],
+    List :: maybe_improper_list(term(), term()),
     Window :: window(),
-    Slice :: [A].
-slice_list(List, #{start := 1, count := infinity}) -> List;
-slice_list(List, #{start := Start, count := infinity}) -> lists:nthtail(Start, List);
-slice_list(List, #{start := Start, count := Count}) -> lists:sublist(List, Start, Count).
+    Slice :: List.
+slice_list(List, #{start := 1, count := infinity}) ->
+    List;
+slice_list(List, #{start := Start, count := infinity}) ->
+    safe_nthtail(Start - 1, List);
+slice_list(List, #{start := Start, count := Count}) ->
+    safe_sublist(List, Start, Count).
 
 -spec tuple_structure(Tuple, Accessor, EvalName, Window) -> [variable()] when
     Tuple :: tuple(),
@@ -509,6 +526,54 @@ evaluate_callback(Expr, CompiledExpr, Fmt) ->
     }.
 
 % -----------------------------------------------------------------------------
+% (Improper) List Helpers
+% -----------------------------------------------------------------------------
+-spec safe_length(List) -> {proper | improper, non_neg_integer()} when
+    List :: maybe_improper_list(term(), term()).
+safe_length(List) -> safe_length(List, 0).
+
+-spec safe_length(List, Acc) -> {proper | improper, non_neg_integer()} when
+    List :: maybe_improper_list(term(), term()),
+    Acc :: non_neg_integer().
+safe_length([], Acc) -> {proper, Acc};
+safe_length([_ | Tail], Acc) when is_list(Tail) -> safe_length(Tail, Acc + 1);
+safe_length([_ | _Improper], Acc) -> {improper, Acc + 1}.
+
+-spec safe_enumerate(StartIndex, List) -> [{Index, A} | {improper_tail, Index, T}] when
+    StartIndex :: Index,
+    Index :: pos_integer(),
+    List :: maybe_improper_list(A, T),
+    A :: term(),
+    T :: term().
+safe_enumerate(_StartIndex, []) -> [];
+safe_enumerate(StartIndex, [H | Tl]) when is_list(Tl) -> [{StartIndex, H} | safe_enumerate(StartIndex + 1, Tl)];
+safe_enumerate(StartIndex, [H | Improper]) -> [{StartIndex, H}, {improper_tail, StartIndex + 1, Improper}].
+
+-spec safe_nthtail(N, List) -> List when
+    N :: non_neg_integer(),
+    List :: maybe_improper_list(term(), term()).
+safe_nthtail(0, List) -> List;
+safe_nthtail(_, []) -> [];
+safe_nthtail(N, [_ | T]) when is_list(T) -> safe_nthtail(N - 1, T);
+safe_nthtail(_, [_ | Tail]) -> Tail.
+
+-spec safe_sublist(List, Start, Len) -> List when
+    List :: maybe_improper_list(term(), term()),
+    Start :: pos_integer(),
+    Len :: non_neg_integer().
+safe_sublist(List, Start, Count) ->
+    Skipped = safe_nthtail(Start - 1, List),
+    safe_take(Skipped, Count).
+
+-spec safe_take(List, Len) -> List when
+    List :: maybe_improper_list(term(), term()),
+    Len :: non_neg_integer().
+safe_take(_, 0) -> [];
+safe_take([], _) -> [];
+safe_take([H | T], N) when is_list(T) -> [H | safe_take(T, N - 1)];
+safe_take([H | Tail], _) -> [H | Tail].
+
+% -----------------------------------------------------------------------------
 % Helpers
 % -----------------------------------------------------------------------------
 
@@ -553,8 +618,13 @@ format(Format, Args) ->
     ValAccessor :: accessor(),
     EvalName :: binary() | none.
 structure({value, Val = [_ | _]}, {ValAccessor, EvalName}) ->
+    Count =
+        case safe_length(Val) of
+            {proper, Len} -> Len;
+            {improper, Len} -> Len + 1
+        end,
     #{
-        count => length(Val),
+        count => Count,
         accessor => ValAccessor,
         evaluate_name => EvalName
     };
