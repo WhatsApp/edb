@@ -239,6 +239,49 @@ test_evaluate_structured_result(Config) ->
                     }
                 },
                 Variables
+            ),
+
+            % Test improper list evaluation with structured tail
+            ImproperEvalResponse = evaluate_expression(Client, TopFrameId, ~"[a, b | {1, 2}]", watch),
+            ?assertEqual(
+                #{
+                    success => true,
+                    body => #{
+                        result => ~"[a,b|{1,...}]",
+                        variablesReference => 3
+                    }
+                },
+                ImproperEvalResponse
+            ),
+
+            % Get the variablesReference to inspect the improper list structure
+            #{body := #{variablesReference := ImproperVarsRef}} = ImproperEvalResponse,
+
+            % Inspect the improper list structure - should show elements and tail with "|"
+            ImproperVariables = edb_dap_test_support:get_variables(Client, ImproperVarsRef),
+            ?assertEqual(
+                #{
+                    ~"1" => #{name => ~"1", value => ~"a", variablesReference => 0},
+                    ~"2" => #{name => ~"2", value => ~"b", variablesReference => 0},
+                    ~"|" => #{
+                        name => ~"|",
+                        value => ~"{1,2}",
+                        evaluateName => ~"tl(lists:nthtail(1, [a, b | {1, 2}]))",
+                        variablesReference => 4
+                    }
+                },
+                ImproperVariables
+            ),
+
+            % Drill into the structured improper tail
+            #{~"|" := #{variablesReference := TailVarsRef}} = ImproperVariables,
+            TailVariables = edb_dap_test_support:get_variables(Client, TailVarsRef),
+            ?assertEqual(
+                #{
+                    ~"1" => #{name => ~"1", value => ~"1", variablesReference => 0},
+                    ~"2" => #{name => ~"2", value => ~"2", variablesReference => 0}
+                },
+                TailVariables
             )
     end,
     ok.
