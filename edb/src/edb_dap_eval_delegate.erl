@@ -269,7 +269,6 @@ process_scope(Pid) ->
     Type :: process_info_item() | [process_info_item()].
 access_process_info(Pid, Types) when is_list(Types) ->
     Accessor = fun(_) ->
-        % eqwalizer:fixme label is only available in OTP 28+
         case erlang:process_info(Pid, Types) of
             undefined -> #{};
             Values -> maps:from_list(Values)
@@ -281,7 +280,6 @@ access_process_info(Pid, Types) when is_list(Types) ->
     {Accessor, EvalName};
 access_process_info(Pid, Type) when is_atom(Type) ->
     Accessor = fun(_) ->
-        % eqwalizer:fixme label is only available in OTP 28+
         case erlang:process_info(Pid, Type) of
             undefined ->
                 undefined;

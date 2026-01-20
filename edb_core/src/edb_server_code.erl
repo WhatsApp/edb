@@ -66,17 +66,14 @@
         calls := [call_target()]
     }.
 get_debug_info(Module, Line) when is_atom(Module) ->
-    try
-        % elp:ignore W0017 function available only on patched version of OTP
-        code:get_debug_info(Module)
-    of
+    try code:get_debug_info(Module) of
         none ->
             {error, no_debug_info};
         DebugInfo when is_list(DebugInfo) ->
             case lists:keyfind(Line, 1, DebugInfo) of
                 false ->
                     {error, line_not_found};
-                {Line, LineDebugInfo} ->
+                {Line, LineDebugInfo} when is_map(LineDebugInfo) ->
                     Vars =
                         #{
                             Var => assert_is_var_debug_info(Val)
