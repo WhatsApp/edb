@@ -66,10 +66,7 @@
     Reason :: not_found | no_debug_info | line_not_found,
     Result :: #{binary() => var_debug_info()}.
 get_debug_info(Module, Line) when is_atom(Module) ->
-    try
-        % elp:ignore W0017 function available only on patched version of OTP
-        code:get_debug_info(Module)
-    of
+    try code:get_debug_info(Module) of
         none ->
             {error, no_debug_info};
         DebugInfo when is_list(DebugInfo) ->
