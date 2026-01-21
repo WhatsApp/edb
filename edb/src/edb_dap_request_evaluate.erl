@@ -152,11 +152,24 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response_body()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := Expr, frameId := FrameId}) ->
-    {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
+handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := Expr}) ->
+    {FrameId1, FreeVars, EvalContext} =
+        case Args of
+            #{frameId := FrameId} ->
+                {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
+                case edb:stack_frame_vars(Pid, FrameNo, 0) of
+                    {ok, StackFrameVars} ->
+                        Vars = maps:keys(maps:get(vars, StackFrameVars, #{})),
+                        {FrameId, Vars, #{context => {Pid, FrameNo}}};
+                    not_paused ->
+                        throw({not_paused, Pid});
+                    undefined ->
+                        throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}})
+                end;
+            _ ->
+                {none, [], #{}}
+        end,
     maybe
-        {ok, StackFrameVars} ?= edb:stack_frame_vars(Pid, FrameNo, 0),
-        FreeVars = maps:keys(maps:get(vars, StackFrameVars, #{})),
         Line = maps:get(line, Args, 1),
         Col = maps:get(column, Args, 1),
         {ok, CompiledExpr} ?=
@@ -170,8 +183,7 @@ handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := E
                 _ -> format_short
             end,
         {ok, EvalResult} ?=
-            edb_dap_eval_delegate:eval(#{
-                context => {Pid, FrameNo},
+            edb_dap_eval_delegate:eval(EvalContext#{
                 function => edb_dap_eval_delegate:evaluate_callback(Expr, CompiledExpr, Fmt)
             }),
         case EvalResult of
@@ -180,15 +192,15 @@ handle(#{state := attached, client_info := ClientInfo}, Args = #{expression := E
             #{type := success, value_rep := Rep, structure := Structure} ->
                 Body = #{
                     result => Rep,
-                    variablesReference => edb_dap_request_variables:structure_variables_ref(FrameId, Structure)
+                    variablesReference => edb_dap_request_variables:structure_variables_ref(FrameId1, Structure)
                 },
                 #{response => edb_dap_request:success(maybe_add_pagination_info(ClientInfo, Structure, Body))}
         end
     else
-        not_paused -> edb_dap_request:not_paused(Pid);
-        undefined -> throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
-        {compile_error, CompileError} -> edb_dap_request:precondition_violation(format_compile_error(CompileError));
-        {eval_error, EvalError} -> throw({failed_to_evaluate, EvalError})
+        {compile_error, CompileError} ->
+            edb_dap_request:precondition_violation(format_compile_error(CompileError));
+        {eval_error, EvalError} ->
+            throw({failed_to_evaluate, EvalError})
     end.
 
 %% ------------------------------------------------------------------
