@@ -764,9 +764,11 @@ stack_frame_vars(Pid, FrameId, MaxTermSize) ->
     call_server({stack_frame_vars, Pid, FrameId, MaxTermSize}).
 
 -doc """
-The provided function will be given the requested stack-frame variables of
-the process, and the result of the evaluation, if successful, will be
-returned.
+Evaluates a function on the debuggee node.
+
+When `context` is provided, the given `function` receives the stack-frame
+variables of the specified process and frame, so they are available for evaluation.
+When `context` is instead omitted, the `function` should take no arguments.
 
 Notice that, if missing, the debuggee node will load the given function's module,
 and any other modules listed under `dependencies`, taking the object code from the
@@ -776,14 +778,20 @@ function is listed under `dependencies`.
 -spec eval(Opts) ->
     not_paused | undefined | {ok, Result} | {eval_error, eval_error()}
 when
-    Opts :: #{
-        context := {pid(), frame_id()},
-        max_term_size := non_neg_integer(),
-        timeout := timeout(),
-        function := fun((Vars :: stack_frame_vars()) -> Result),
-        dependencies => [module()]
-    }.
-eval(Opts0) ->
+    Opts ::
+        #{
+            context := {pid(), frame_id()},
+            max_term_size := non_neg_integer(),
+            timeout := timeout(),
+            function := fun((Vars :: stack_frame_vars()) -> Result),
+            dependencies => [module()]
+        }
+        | #{
+            timeout := timeout(),
+            function := fun(() -> Result),
+            dependencies => [module()]
+        }.
+eval(Opts0 = #{context := _}) ->
     {{Pid, FrameId}, Opts1} = take_arg(context, Opts0, #{
         parse => parse_pair(fun parse_pid/1, fun parse_non_neg_integer/1)
     }),
@@ -802,6 +810,23 @@ eval(Opts0) ->
         pid => Pid,
         frame_id => FrameId,
         max_term_size => MaxTermSize,
+        timeout => Timeout,
+        function => Function,
+        dependencies => Deps
+    },
+    call_server({eval, Opts}, CallTimeout);
+eval(Opts0) ->
+    {Timeout, Opts1} = take_arg(timeout, Opts0, #{parse => fun parse_timeout/1}),
+    {Function, Opts2} = take_arg(function, Opts1, #{parse => fun(F) when is_function(F, 0) -> F end}),
+    {Deps, Opts3} = take_arg(dependencies, Opts2, #{parse => parse_list(fun parse_atom/1), default => []}),
+    ok = no_more_args(Opts3),
+
+    CallTimeout =
+        case Timeout of
+            infinity -> infinity;
+            _ -> max(5_000, 2 * Timeout)
+        end,
+    Opts = #{
         timeout => Timeout,
         function => Function,
         dependencies => Deps

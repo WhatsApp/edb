@@ -226,6 +226,11 @@ remove_module_substitute(SubstituteModule) ->
         timeout := timeout(),
         function := fun((Vars :: edb:stack_frame_vars()) -> Result),
         dependencies := [module()]
+    }
+    | #{
+        timeout := timeout(),
+        function := fun(() -> Result),
+        dependencies := [module()]
     }.
 
 %%--------------------------------------------------------------------
@@ -1037,8 +1042,8 @@ get_stack_frame_vars(Pid, FrameId, MaxTermSize, State) ->
     Response :: not_paused | undefined | {ok, Result} | {eval_error, edb:eval_error()},
     State0 :: state(),
     State1 :: state().
-eval_impl(Opts, CallerPid, State0) ->
-    #{pid := Pid, frame_id := FrameId, max_term_size := MaxTermSize, dependencies := Deps} = Opts,
+eval_impl(Opts = #{pid := Pid, frame_id := FrameId, max_term_size := MaxTermSize}, CallerPid, State0) ->
+    #{dependencies := Deps} = Opts,
     Result =
         case get_stack_frame_vars(Pid, FrameId, MaxTermSize, State0) of
             {ok, StackFrameVars} ->
@@ -1051,6 +1056,18 @@ eval_impl(Opts, CallerPid, State0) ->
                 end;
             NotOk ->
                 NotOk
+        end,
+    {reply, Result, State0};
+eval_impl(Opts, CallerPid, State0) ->
+    #{function := F, timeout := Timeout, dependencies := Deps} = Opts,
+    {FMod, _, _} = erlang:fun_info_mfa(F),
+    WrappedF = fun(_) -> F() end,
+    Result =
+        case edb_server_eval:eval(WrappedF, unused, node(CallerPid), Timeout, [FMod | Deps]) of
+            {failed_to_load_module, _, _} = LoadFailure ->
+                ?MODULE:raise(error, LoadFailure);
+            EvalResult ->
+                EvalResult
         end,
     {reply, Result, State0}.
 
