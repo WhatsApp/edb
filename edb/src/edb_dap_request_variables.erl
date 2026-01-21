@@ -251,11 +251,11 @@ handle(_UnexpectedState, _) ->
     edb_dap_request:reaction(response_body())
 when
     ClientInfo :: edb_dap_server:client_info(),
-    FrameId :: edb_dap_id_mappings:id(),
+    FrameId :: edb_dap_id_mappings:id() | none,
     Accessor :: edb_dap_eval_delegate:accessor(),
     EvalName :: edb_dap_eval_delegate:eval_name(),
     Window :: edb_dap_eval_delegate:window().
-handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window) ->
+handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window) when is_integer(FrameId) ->
     {ok, #{pid := Pid, frame_no := FrameNo}} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId),
     EvalResult = edb_dap_eval_delegate:eval(#{
         context => {Pid, FrameNo},
@@ -266,6 +266,17 @@ handle_structure(ClientInfo, FrameId, Accessor, EvalName, Window) ->
             edb_dap_request:not_paused(Pid);
         undefined ->
             throw({failed_to_resolve_scope, #{pid => Pid, frame_no => FrameNo}});
+        {ok, RawVars} ->
+            Vars = make_variables(ClientInfo, FrameId, RawVars),
+            #{response => edb_dap_request:success(#{variables => Vars})};
+        {eval_error, Error} ->
+            throw({failed_to_eval_structure, Error})
+    end;
+handle_structure(ClientInfo, FrameId = none, Accessor, EvalName, Window) ->
+    EvalResult = edb_dap_eval_delegate:eval(#{
+        function => edb_dap_eval_delegate:structure_callback(Accessor, EvalName, Window)
+    }),
+    case EvalResult of
         {ok, RawVars} ->
             Vars = make_variables(ClientInfo, FrameId, RawVars),
             #{response => edb_dap_request:success(#{variables => Vars})};
@@ -290,7 +301,7 @@ scope_variables_ref(ClientInfo, FrameId, #{type := Type, variables := RawVars}) 
     }).
 
 -spec structure_variables_ref(FrameId, Structure) -> variables_reference() when
-    FrameId :: edb_dap_id_mappings:id(),
+    FrameId :: edb_dap_id_mappings:id() | none,
     Structure :: none | edb_dap_eval_delegate:structure().
 structure_variables_ref(_FrameId, none) ->
     0;
@@ -306,7 +317,7 @@ structure_variables_ref(FrameId, Structure) ->
 %% ------------------------------------------------------------------
 -spec make_variables(ClientInfo, FrameId, RawVars) -> [variable()] when
     ClientInfo :: edb_dap_server:client_info(),
-    FrameId :: edb_dap_id_mappings:id(),
+    FrameId :: edb_dap_id_mappings:id() | none,
     RawVars :: [edb_dap_eval_delegate:variable()].
 make_variables(ClientInfo, FrameId, RawVars) ->
     [

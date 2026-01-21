@@ -35,6 +35,7 @@
 -export([test_evaluate_compile_error/1]).
 -export([test_evaluate_structured_result/1]).
 -export([test_evaluate_clipboard_context_returns_value_in_full/1]).
+-export([test_evaluate_without_frame_id/1]).
 
 all() ->
     [
@@ -43,7 +44,8 @@ all() ->
         test_evaluate_exception,
         test_evaluate_compile_error,
         test_evaluate_structured_result,
-        test_evaluate_clipboard_context_returns_value_in_full
+        test_evaluate_clipboard_context_returns_value_in_full,
+        test_evaluate_without_frame_id
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -329,6 +331,45 @@ test_evaluate_clipboard_context_returns_value_in_full(Config) ->
                 ClipboardResponse
             )
     end,
+    ok.
+
+test_evaluate_without_frame_id(Config) ->
+    {ok, Client, #{peer := _Peer, modules := #{}}} =
+        edb_dap_test_support:start_session_via_launch(Config, #{modules => []}),
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
+
+    Response = edb_dap_test_client:evaluate(Client, #{
+        expression => ~"[1, 2, {3, 4}]",
+        context => repl
+    }),
+    ?assertMatch(
+        #{
+            success := true,
+            body := #{result := ~"[1,2,{3,...}]", variablesReference := VarsRef}
+        } when VarsRef > 0,
+        Response
+    ),
+
+    #{body := #{variablesReference := VarsRef}} = Response,
+    Variables = edb_dap_test_support:get_variables(Client, VarsRef),
+    ?assertMatch(
+        #{
+            ~"1" := #{name := ~"1", value := ~"1", variablesReference := 0},
+            ~"2" := #{name := ~"2", value := ~"2", variablesReference := 0},
+            ~"3" := #{name := ~"3", value := ~"{3,4}", variablesReference := NestedRef}
+        } when NestedRef > 0,
+        Variables
+    ),
+
+    #{~"3" := #{variablesReference := NestedVarsRef}} = Variables,
+    NestedVariables = edb_dap_test_support:get_variables(Client, NestedVarsRef),
+    ?assertEqual(
+        #{
+            ~"1" => #{name => ~"1", value => ~"3", variablesReference => 0},
+            ~"2" => #{name => ~"2", value => ~"4", variablesReference => 0}
+        },
+        NestedVariables
+    ),
     ok.
 
 %%--------------------------------------------------------------------

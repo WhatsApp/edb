@@ -109,22 +109,35 @@ be assumed to be running on the debuggee.
 -spec eval(Opts) ->
     not_paused | undefined | {ok, Result} | {eval_error, edb:eval_error()}
 when
-    Opts :: #{
-        context := {pid(), edb:frame_id()},
-        max_term_size => non_neg_integer(),
-        timeout => timeout(),
-        function := callback(Result)
-    }.
-eval(Opts0) ->
+    Opts ::
+        #{
+            context := {pid(), edb:frame_id()},
+            max_term_size => non_neg_integer(),
+            timeout => timeout(),
+            function := callback(Result)
+        }
+        | #{
+            timeout => timeout(),
+            function := callback(Result)
+        }.
+eval(Opts0 = #{context := _}) ->
     #{function := #{function := Fun, deps := Deps}} = Opts0,
-    Opts =
+    Opts1 =
         Opts0#{
-            function => Fun,
+            function := Fun,
             dependencies => Deps,
             max_term_size => maps:get(max_term_size, Opts0, 1_000_000_000),
             timeout => maps:get(timeout, Opts0, 5_000)
         },
-    edb:eval(Opts).
+    edb:eval(Opts1);
+eval(Opts0) ->
+    #{function := #{function := Fun, deps := Deps}} = Opts0,
+    Opts1 = #{
+        function => fun() -> Fun(#{}) end,
+        dependencies => Deps,
+        timeout => maps:get(timeout, Opts0, 5_000)
+    },
+    edb:eval(Opts1).
 
 % -----------------------------------------------------------------------------
 % Callback for the "scopes" request
