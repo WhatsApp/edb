@@ -117,14 +117,14 @@ when
     }.
 eval(Opts0) ->
     #{function := #{function := Fun, deps := Deps}} = Opts0,
-    Opts1 = Opts0#{function => Fun, dependencies => Deps},
-    Defaults = #{
-        max_term_size => 1_000_000_000,
-        timeout => 5_000
-    },
-    Opts2 = maps:merge(Defaults, Opts1),
-    % eqwalizer:fixme spec of maps:merge() loses info
-    edb:eval(Opts2).
+    Opts =
+        Opts0#{
+            function => Fun,
+            dependencies => Deps,
+            max_term_size => maps:get(max_term_size, Opts0, 1_000_000_000),
+            timeout => maps:get(timeout, Opts0, 5_000)
+        },
+    edb:eval(Opts).
 
 % -----------------------------------------------------------------------------
 % Callback for the "scopes" request
