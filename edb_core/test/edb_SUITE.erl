@@ -118,6 +118,7 @@
 -export([test_eval_honors_timeout/1]).
 -export([test_eval_reports_exceptions/1]).
 -export([test_eval_reports_being_killed/1]).
+-export([test_eval_without_context/1]).
 
 %% erlfmt:ignore
 suite() ->
@@ -223,7 +224,8 @@ groups() ->
             test_eval_evaluates,
             test_eval_honors_timeout,
             test_eval_reports_exceptions,
-            test_eval_reports_being_killed
+            test_eval_reports_being_killed,
+            test_eval_without_context
         ]}
     ].
 
@@ -3893,6 +3895,30 @@ test_eval_reports_being_killed(Config) ->
     ?assertMatch(
         {eval_error, {killed, go_home}},
         edb:eval(Opts#{function => F})
+    ),
+    ok.
+
+test_eval_without_context(Config) ->
+    Module = ?FUNCTION_NAME,
+    ModuleSource = ~"""
+    -module(test_eval_without_context).
+    -export([double/1]).
+    double(X) -> X * 2.
+    """,
+    {ok, Module, _} = edb_test_support:compile_module(Config, {source, ModuleSource}, #{
+        flags => [beam_debug_info]
+    }),
+
+    F1 = fun() -> 1 + 2 * 3 end,
+    ?assertEqual(
+        {ok, 7},
+        edb:eval(#{timeout => 5_000, function => F1})
+    ),
+
+    F2 = fun() -> Module:double(21) end,
+    ?assertEqual(
+        {ok, 42},
+        edb:eval(#{timeout => 5_000, function => F2, dependencies => [Module]})
     ),
     ok.
 
