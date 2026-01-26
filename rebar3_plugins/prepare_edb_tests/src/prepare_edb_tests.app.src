@@ -1,0 +1,7 @@
+{application, prepare_edb_tests, [
+    {description, "Rebar3 plugin to copy the edb binary to test data directories"},
+    {vsn, "0.1.0"},
+    {applications, [kernel, stdlib]},
+    {env, []},
+    {modules, []}
+]}.
