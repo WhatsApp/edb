@@ -336,9 +336,9 @@ fold_process_info(ProcInfo, Acc, Fields) ->
                     true ->
                         group_leader_app(GL);
                     {true, Precomputed} when is_map(Precomputed) ->
-                        case maps:find(GL, Precomputed) of
-                            Found = {ok, _} -> Found;
-                            error -> undefined
+                        case Precomputed of
+                            #{GL := PrecomputedApp} -> {ok, PrecomputedApp};
+                            #{} -> undefined
                         end
                 end,
             case MaybeApp of
