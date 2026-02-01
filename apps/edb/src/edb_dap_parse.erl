@@ -92,7 +92,7 @@ boolean() ->
 
 -spec non_neg_integer() -> parser(non_neg_integer()).
 non_neg_integer() ->
-    fun(N) when is_integer(N) andalso N >= 0 -> {ok, N} end.
+    fun(N) when is_integer(N), N >= 0 -> {ok, N} end.
 
 -spec number() -> parser(number()).
 number() ->
