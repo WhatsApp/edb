@@ -118,7 +118,7 @@ process_info(Pid, Fields) ->
 -type raw_status() :: running | paused | {breakpoint, edb:breakpoint_info()}.
 -type process_info_fields() ::
     #{
-        application => boolean() | {true, precomputed_group_leader_to_app_map()},
+        application => false | {true, precomputed_group_leader_to_app_map()},
         current_bp => raw_status(),
         current_fun => boolean(),
         current_loc => boolean(),
@@ -333,8 +333,6 @@ fold_process_info(ProcInfo, Acc, Fields) ->
                 case WantsApp of
                     false ->
                         undefined;
-                    true ->
-                        group_leader_app(GL);
                     {true, Precomputed} when is_map(Precomputed) ->
                         case Precomputed of
                             #{GL := PrecomputedApp} -> {ok, PrecomputedApp};
@@ -369,13 +367,6 @@ fold_process_info(ProcInfo, Acc, Fields) ->
             Acc#{message_queue_len => N};
         _ ->
             Acc
-    end.
-
--spec group_leader_app(GL :: pid()) -> undefined | {ok, atom()}.
-group_leader_app(GL) ->
-    case ets:match(ac_tab, {{application_master, '$1'}, GL}) of
-        [[AppName]] -> {ok, AppName};
-        _ -> undefined
     end.
 
 -spec group_leader_to_app() -> #{pid() => atom()}.
