@@ -100,7 +100,6 @@ test_fails_if_initialized_twice(Config) ->
     Response1 = edb_dap_test_client:initialize(Client, #{adapterID => AdapterID}),
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
-    AdapterID = atom_to_binary(?MODULE),
     Response2 = edb_dap_test_client:initialize(Client, #{adapterID => AdapterID}),
     ?assertMatch(
         #{
