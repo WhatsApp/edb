@@ -68,7 +68,7 @@ dap_handler(_Args) ->
     "[", time, "] ", "[", level, "] ", msg, " [", mfa, " L", line, "] ", pid, "\n"
 ]).
 -define(LOG_LEVEL, info).
--define(LOG_MAX_NO_BYTES, 10 * 1000 * 1000).
+-define(LOG_MAX_NO_BYTES, (10 * 1000 * 1000)).
 -define(LOG_MAX_NO_FILES, 5).
 
 -spec configure_dap_logging() -> ok.
