@@ -79,9 +79,9 @@ frame(Message) ->
 -spec unframe(frame()) -> request() | response().
 unframe({_Length, Body}) ->
     %% Convert binary keys to atoms
-    %% Also convert binary values to atom if the key is the special <<"type">>
+    %% Also convert binary values to atom if the key is the special ~"type"
     Push = fun
-        (<<"type">>, Value, Acc) ->
+        (~"type", Value, Acc) ->
             [{type, binary_to_atom(Value)} | Acc];
         (Key, Value, Acc) ->
             [{binary_to_atom(Key), Value} | Acc]
@@ -100,7 +100,7 @@ decode_frames(Data) ->
 
 -spec decode_frames(binary(), [frame()]) -> {[frame()], binary()}.
 decode_frames(Data, Messages) ->
-    case binary:split(Data, <<"\r\n\r\n">>) of
+    case binary:split(Data, ~"\r\n\r\n") of
         [<<"Content-Length: ", BinLength/binary>>, Rest] when is_binary(Rest) ->
             Length = binary_to_integer(BinLength),
             case byte_size(Rest) < Length of

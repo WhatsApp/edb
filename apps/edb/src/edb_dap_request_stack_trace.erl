@@ -179,7 +179,7 @@ stack_frame(#{node := Node}, Pid, #{id := Id, mfa := 'unknown'}) ->
             ErrClass:ErrMsg -> {ErrClass, ErrMsg}
         end,
     ?LOG_WARNING("Unknown MFA for ~p frame ~p. Info:~p", [Pid, Id, Info]),
-    #{id => FrameId, name => <<"???">>, line => 0, column => 0}.
+    #{id => FrameId, name => ~"???", line => 0, column => 0}.
 
 -spec source(edb_dap_server:state(), binary()) -> edb_dap:source().
 source(#{cwd := Cwd}, FilePath0) ->
