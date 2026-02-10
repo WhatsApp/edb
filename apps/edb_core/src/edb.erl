@@ -860,7 +860,6 @@ call_server(Request, Timeout) ->
     Args :: [term()].
 rpc_attached_node(M, F, Args) ->
     try
-        % elp:ignore W0014 (cross_node_eval) - Debugging tool, expected.
         erpc:call(attached_node(), M, F, Args)
     catch
         error:{erpc, noconnection} ->

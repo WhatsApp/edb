@@ -140,7 +140,6 @@ load_module_if_necessary(Module, SourceNode) ->
         {file, _} ->
             ok;
         false ->
-            % elp:ignore W0014 (cross_node_eval) -- allowed on debugger
             try erpc:call(SourceNode, ?MODULE, get_object_code, [Module]) of
                 not_found ->
                     {error, not_found};

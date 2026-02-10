@@ -618,10 +618,8 @@ when
     PauseAction :: pause | keep_running.
 bootstrap_edb(Node, Subscribers, ReverseAttachCode, PauseAction) ->
     {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
-    % elp:ignore W0014 - Debugging tool, expected.
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
-            % elp:ignore W0014 - Debugging tool, expected.
             erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [
                 node(), Subscribers, ReverseAttachCode, PauseAction
             ]);

@@ -172,7 +172,6 @@ stack_frame(State, Pid, #{id := Id, mfa := {M, F, A}, source := FilePath, line :
 stack_frame(#{node := Node}, Pid, #{id := Id, mfa := 'unknown'}) ->
     FrameId = edb_dap_id_mappings:pid_frame_to_frame_id(#{pid => Pid, frame_no => Id}),
     Info =
-        % elp:ignore W0014 (cross_node_eval) -- debugging support @fb-only
         try erpc:call(Node, erlang, process_info, [Pid, [current_stacktrace, current_function, registered_name]]) of
             ProcessInfo -> ProcessInfo
         catch

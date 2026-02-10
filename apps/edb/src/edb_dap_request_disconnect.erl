@@ -176,7 +176,6 @@ try_async(Fun, Timeout) ->
 -spec kill_node(Node) -> ok when Node :: node().
 kill_node(Node) ->
     try
-        % elp:ignore W0014 -- debugger relies on dist
         erpc:call(Node, erlang, halt, [0])
     catch
         _:_ -> ok

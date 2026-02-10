@@ -159,7 +159,6 @@ prepend_to_env(Key, Val, Env) ->
             NewVal = io_lib:format("~s ~s", [Val, PrevVal]),
             Env#{Key => erlang:iolist_to_binary(NewVal)};
         _ ->
-            % @fb-only[end= ]: % elp:ignore WA014 (no_os_getenv)
             case os:getenv(binary_to_list(Key)) of
                 false ->
                     prepend_to_env(Key, Val, Env#{Key => null});

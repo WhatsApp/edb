@@ -131,7 +131,6 @@ paused_impl(#{state := S}, Event) ->
 reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
     State1 = maps:without([shell_process_id], State0),
 
-    % elp:ignore W0014 -- debugger relies on dist
     ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
 
     AttachType0 = maps:with([shell_process_id], State0),

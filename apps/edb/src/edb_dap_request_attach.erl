@@ -81,7 +81,6 @@ handle(State0 = #{state := initialized}, Args) ->
             Cwd = maps:get(cwd, Config),
             StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
             Node = maps:get(node, Config),
-            % elp:ignore W0014 -- debugger relies on dist
             ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
             {ok, Subscription} = edb:subscribe(),
             State1 = State0#{

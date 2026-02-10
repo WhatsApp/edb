@@ -97,7 +97,6 @@ inject_edb_modules(Debugger) ->
 -spec get_object_code(Debugger) -> [injectable_module()] when
     Debugger :: module().
 get_object_code(Debugger) ->
-    % elp:ignore W0014 -- debugger relies on dist
     erpc:call(Debugger, fun get_object_code__debugger_side/0).
 
 -spec load_module(Module, Binary, Filename) -> ok when
@@ -153,7 +152,6 @@ prepare_environment_for_debugging_children_nodes(ReverseAttachCode) ->
     ReverseAttachCodeEscaped = escape_special_chars_for_erl_flags(ReverseAttachCode),
     NewFlags = lists:flatten(io_lib:format("-eval ~s", [ReverseAttachCodeEscaped])),
     CombinedFlags =
-        % @fb-only[end= ]: % elp:ignore WA014 (no_os_getenv)
         case os:getenv("ERL_AFLAGS") of
             false ->
                 NewFlags;
