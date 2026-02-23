@@ -220,18 +220,16 @@ set_breakpoints(Args = #{source := #{path := Path}}) ->
 
     LineResults = edb:set_breakpoints(Module, SourceBreakpointLines),
 
-    Breakpoints = lists:map(
-        fun({Line, Result}) ->
-            case Result of
-                ok ->
-                    #{line => Line, verified => true};
-                {error, Reason} ->
-                    Message = format_breakpoint_error(Reason),
-                    #{line => Line, verified => false, message => Message, reason => failed}
-            end
-        end,
-        LineResults
-    ),
+    Breakpoints = [
+        case Result of
+            ok ->
+                #{line => Line, verified => true};
+            {error, Reason} ->
+                Message = format_breakpoint_error(Reason),
+                #{line => Line, verified => false, message => Message, reason => failed}
+        end
+     || {Line, Result} <:- LineResults
+    ],
     #{response => edb_dap_request:success(#{breakpoints => Breakpoints})}.
 
 -spec format_breakpoint_error(Error) -> binary() when
