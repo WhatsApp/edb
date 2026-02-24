@@ -120,7 +120,8 @@ test_structured_variables(Config) ->
     {ok, Client, #{peer := Peer, node := Node, cookie := Cookie, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
-                {source, [~"""
+                {source, [
+                    ~"""
                     -module(foo).                                               %L01\n
                     -export([go/4]).                                            %L02\n
                     go(L, X, B, I) ->                                           %L03\n
@@ -128,7 +129,8 @@ test_structured_variables(Config) ->
                         F = fun(_A) -> length(L) == length(M) orelse ok end,    %L05\n
                         persistent_term:put(fun_repr, io_lib:format("~p", [F])),%L06\n
                         {L ++ M, X, B, F, I}.                                   %L07\n
-                """]}
+                """
+                ]}
             ]
         }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
@@ -322,12 +324,14 @@ test_structured_variables_with_pagination(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, InitArguments, #{
             modules => [
-                {source, [~"""
+                {source, [
+                    ~"""
                     -module(foo).            %L01\n
                     -export([go/5]).         %L02\n
                     go(L, T, M, B, I) ->     %L03\n
                         {L, T, M, B, I}.     %L04\n
-                """]}
+                """
+                ]}
             ]
         }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 4}]}]),

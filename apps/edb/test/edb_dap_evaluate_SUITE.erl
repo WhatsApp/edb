@@ -193,13 +193,15 @@ test_evaluate_structured_result(Config) ->
     {ok, Client, #{peer := Peer, modules := #{foo := FooSrc}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{
             modules => [
-                {source, [~"""
+                {source, [
+                    ~"""
                     -module(foo).            %L01\n
                     -export([go/2]).         %L02\n
                     go(L, X) ->              %L03\n
                         M = [4, [], {6, 7}], %L04\n
                         {L ++ M, X}.         %L05\n
-                """]}
+                """
+                ]}
             ]
         }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 5}]}]),

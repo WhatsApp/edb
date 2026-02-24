@@ -106,14 +106,17 @@ compile_expr(Expr, Opts = #{free_vars := FreeVars}) ->
                 body_start => {StartLine, StartCol},
                 body => Expr,
                 footer => [
-                    io_lib:format(~"""
+                    io_lib:format(
+                        ~"""
                     ;
                     ~s(Args) when is_map(Args) ->
                         Expected = ~p,
                         Vars = maps:with(Expected, maps:get(vars, Args, #{})),
                         Unavailable = maps:filter(fun(_, {value, _}) -> false; (_, _) -> true end, Vars),
                         erlang:raise(error, {unavailable_values, Unavailable}, []).
-                    """, [Entrypoint, CommonFreeVars])
+                    """,
+                        [Entrypoint, CommonFreeVars]
+                    )
                 ]
             },
             compile(ModuleSource)

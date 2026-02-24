@@ -1484,7 +1484,8 @@ test_set_breakpoints_returns_result_per_line(_Config) ->
     ok.
 
 test_set_breakpoints_loads_the_module_if_necessary(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(some_module).
     -export([go/0]).
     go() ->
@@ -1517,7 +1518,8 @@ test_set_breakpoints_loads_the_module_if_necessary(Config) ->
     ok.
 
 test_set_breakpoints_fails_if_module_loading_is_stuck(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(some_module_stucked_loading).
     -on_load(hang_forever/0).
     hang_forever() ->
@@ -1544,7 +1546,8 @@ test_set_breakpoints_fails_if_module_loading_is_stuck(Config) ->
 %% ------------------------------------------------------------------
 
 test_function_breakpoint_single_clause(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_function_breakpoint_single_clause).
     -export([go/1]).
     go(TC) ->
@@ -1603,7 +1606,8 @@ test_function_breakpoint_single_clause(Config) ->
     ok.
 
 test_function_breakpoint_three_clauses(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_function_breakpoint_three_clauses).
     -export([go/1]).
     go(first) ->
@@ -1711,7 +1715,8 @@ test_function_breakpoint_three_clauses(Config) ->
     ok.
 
 test_function_and_line_breakpoint_interaction(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_function_and_line_breakpoint_interaction).
     -export([go/1]).
     go(x) ->
@@ -1813,7 +1818,8 @@ test_function_and_line_breakpoint_interaction(Config) ->
     ok.
 
 test_clear_function_breakpoints(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_clear_function_breakpoints).
     -export([foo/0, bar/0]).
     foo() ->
@@ -1899,7 +1905,8 @@ test_function_breakpoint_errors(Config) ->
     ),
 
     % Test 2: Adding function breakpoint for non-existent function in existing module
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_function_breakpoint_errors).
     -export([existing_function/0]).
     existing_function() ->
@@ -1916,7 +1923,8 @@ test_function_breakpoint_errors(Config) ->
     ),
 
     % Test 3: Adding function breakpoint for module without debug_info
-    ModuleWithoutDebugInfo = ~"""
+    ModuleWithoutDebugInfo =
+        ~"""
     -module(test_function_breakpoint_no_debug_info).
     -export([go/0]).
     go() ->
@@ -1935,14 +1943,16 @@ test_function_breakpoint_errors(Config) ->
     ok.
 
 test_set_function_breakpoints_sets_function_breakpoints(Config) ->
-    Module1Source = ~"""
+    Module1Source =
+        ~"""
     -module(test_set_function_breakpoints_sets_function_breakpoints_1).
     -export([foo/0, bar/0, baz/0]).
     foo() -> ok.
     bar() -> ok.
     baz() -> ok.
     """,
-    Module2Source = ~"""
+    Module2Source =
+        ~"""
     -module(test_set_function_breakpoints_sets_function_breakpoints_2).
     -export([alpha/0, beta/0]).
     alpha() -> ok.
@@ -1999,12 +2009,14 @@ test_set_function_breakpoints_sets_function_breakpoints(Config) ->
     ok.
 
 test_set_function_breakpoints_returns_result_per_function(Config) ->
-    Module1Source = ~"""
+    Module1Source =
+        ~"""
     -module(test_set_function_breakpoints_returns_result_per_function_1).
     -export([existing_function/0]).
     existing_function() -> ok.
     """,
-    Module2Source = ~"""
+    Module2Source =
+        ~"""
     -module(test_set_function_breakpoints_returns_result_per_function_2).
     -export([another_function/0]).
     another_function() -> ok.
@@ -2055,7 +2067,8 @@ test_set_function_breakpoints_returns_result_per_function(Config) ->
     ok.
 
 test_set_function_breakpoints_loads_the_module_if_necessary(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(some_module_for_function_bp).
     -export([go/0]).
     go() ->
@@ -2088,7 +2101,8 @@ test_set_function_breakpoints_loads_the_module_if_necessary(Config) ->
     ok.
 
 test_set_function_breakpoints_fails_if_module_loading_is_stuck(Config) ->
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(some_module_stucked_loading_for_function_bp).
     -on_load(hang_forever/0).
     -export([run/0]).
@@ -2914,7 +2928,8 @@ test_step_in_fails_if_non_fun_target(_Config) ->
     ok.
 
 test_step_in_fails_if_fun_not_found(Config) ->
-    Source = ~"""
+    Source =
+        ~"""
     -module(foo).                            %L1
     -export([go/0]).                         %L2
     go() ->                                  %L3
@@ -2941,13 +2956,15 @@ test_step_in_fails_if_fun_not_found(Config) ->
 
 test_step_in_loads_module_if_necessary(Config) ->
     % Compile these modules but don't load them
-    BlahSource = ~"""
+    BlahSource =
+        ~"""
     -module(blah).
     -export([go/0]).
     go() ->
         lazy_module:run().
     """,
-    LazyModuleSource = ~"""
+    LazyModuleSource =
+        ~"""
     -module(lazy_module).
     -export([run/0]).
     run() ->
@@ -2990,13 +3007,15 @@ test_step_in_loads_module_if_necessary(Config) ->
     ok.
 
 test_step_in_fails_if_module_loading_is_stuck(Config) ->
-    CallerSource = ~"""
+    CallerSource =
+        ~"""
     -module(caller_module).
     -export([go/0]).
     go() ->
         stuck_module:run().
     """,
-    StuckModuleSource = ~"""
+    StuckModuleSource =
+        ~"""
     -module(stuck_module).
     -export([run/0]).
     -on_load(hang_forever/0).
@@ -3759,7 +3778,8 @@ test_pid_string_info(_Config) ->
 %% ------------------------------------------------------------------
 test_eval_evaluates(Config) ->
     Module = ?FUNCTION_NAME,
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_eval_evaluates).           %L01
     -export([go/1]).                    %L02
     go(X) ->                            %L03
@@ -3806,7 +3826,8 @@ test_eval_evaluates(Config) ->
 
 test_eval_honors_timeout(Config) ->
     Module = ?FUNCTION_NAME,
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_eval_honors_timeout).      %L01
     -export([go/0]).                        %L02
     go() -> ok.                             %L03
@@ -3841,7 +3862,8 @@ test_eval_honors_timeout(Config) ->
 
 test_eval_reports_exceptions(Config) ->
     Module = ?FUNCTION_NAME,
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_eval_reports_exceptions).       %L01
     -export([go/0]).                             %L02
     go() -> ok.                                  %L03
@@ -3880,7 +3902,8 @@ test_eval_reports_exceptions(Config) ->
 
 test_eval_reports_being_killed(Config) ->
     Module = ?FUNCTION_NAME,
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_eval_reports_being_killed).     %L01
     -export([go/0]).                             %L02
     go() -> ok.                                  %L03
@@ -3912,7 +3935,8 @@ test_eval_reports_being_killed(Config) ->
 
 test_eval_without_context(Config) ->
     Module = ?FUNCTION_NAME,
-    ModuleSource = ~"""
+    ModuleSource =
+        ~"""
     -module(test_eval_without_context).
     -export([double/1]).
     double(X) -> X * 2.
