@@ -130,14 +130,16 @@ stack_frame_vars(Pid, FrameId, MaxTermSize, RawFrames, Opts) ->
                                 #{};
                             {ok, #{vars := VarsDebugInfo}} ->
                                 #{
-                                    vars => maps:map(
-                                        fun
-                                            (_, {x, N}) -> lists:nth(N + 1, maps:get(xregs, XRegs));
-                                            (_, {y, N}) -> lists:nth(N + 1, maps:get(yregs, YRegs));
-                                            (_, V = {value, _}) -> V
-                                        end,
-                                        VarsDebugInfo
-                                    )
+                                    vars =>
+                                        #{
+                                            VarName =>
+                                                case VarInfo of
+                                                    {x, N} -> lists:nth(N + 1, maps:get(xregs, XRegs));
+                                                    {y, N} -> lists:nth(N + 1, maps:get(yregs, YRegs));
+                                                    {value, _} -> VarInfo
+                                                end
+                                         || VarName := VarInfo <- VarsDebugInfo
+                                        }
                                 }
                         end;
                     _ ->
