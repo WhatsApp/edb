@@ -1,0 +1,16 @@
+name: path-test
+
+on: pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add otp-bin to PATH
+        run: echo "$(pwd)/otp-bin/bin" >> $GITHUB_PATH
+
+      - name: Check npm version
+        run: npm --version
