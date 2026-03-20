@@ -23,13 +23,11 @@
 %% Public API
 -export([
     is_element/2,
-    take_element/2,
     union/2, union/1,
     intersection/2,
     subtract/2,
     to_map/2,
-    map_subtract_keys/2,
-    is_empty/1
+    map_subtract_keys/2
 ]).
 
 -export_type([set/1]).
@@ -38,17 +36,6 @@
 %% Map-based sets
 %% -------------------------------------------------------------------
 -type set(A) :: #{A => term()}.
-
--spec is_empty(set(_)) -> boolean().
-is_empty(Set) ->
-    maps:size(Set) =:= 0.
-
--spec take_element(A, #{A => []}) -> {found, #{A => []}} | not_found.
-take_element(X, Set) ->
-    case maps:take(X, Set) of
-        {_, Set1} -> {found, Set1};
-        error -> not_found
-    end.
 
 -spec is_element(X :: A, Set :: set(A)) -> boolean().
 is_element(X, Set) ->

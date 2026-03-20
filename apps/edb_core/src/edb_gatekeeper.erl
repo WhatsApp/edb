@@ -26,7 +26,7 @@
 -behavior(gen_server).
 
 %% Public API
--export([new/0, new/1]).
+-export([new/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2]).
@@ -42,15 +42,10 @@
 %% -------------------------------------------------------------------
 %% Public API
 %% -------------------------------------------------------------------
--spec new() -> {ok, Id, CallGatekeeperCode} when
-    Id :: id(),
-    CallGatekeeperCode :: binary().
 -spec new(Options) -> {ok, Id, CallGatekeeperCode} when
     Options :: #{multi_node_enabled => boolean()},
     Id :: id(),
     CallGatekeeperCode :: binary().
-new() ->
-    new(#{}).
 new(Options) when node() /= 'nonode@nohost' ->
     Id = erlang:unique_integer([positive]),
     GatekeeperName = binary_to_atom(list_to_binary(io_lib:format("edb-~p", [Id]))),
