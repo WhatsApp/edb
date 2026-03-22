@@ -287,9 +287,7 @@ access_process_info(Pid, Types) when is_list(Types) ->
             Values -> maps:from_list(Values)
         end
     end,
-    EvalName = format("maps:from_list(erlang:process_info(erlang:list_to_pid(\"~p\"), ~w))", [
-        Pid, Types
-    ]),
+    EvalName = format("maps:from_list(erlang:process_info(erlang:list_to_pid(\"~p\"), ~w))", [Pid, Types]),
     {Accessor, EvalName};
 access_process_info(Pid, Type) when is_atom(Type) ->
     Accessor = fun(_) ->

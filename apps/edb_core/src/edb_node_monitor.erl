@@ -620,9 +620,7 @@ bootstrap_edb(Node, Subscribers, ReverseAttachCode, PauseAction) ->
     {Module, Binary, Filename} = code:get_object_code(edb_bootstrap),
     case erpc:call(Node, code, load_binary, [Module, Filename, Binary]) of
         {module, edb_bootstrap} ->
-            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [
-                node(), Subscribers, ReverseAttachCode, PauseAction
-            ]);
+            erpc:call(Node, edb_bootstrap, bootstrap_debuggee, [node(), Subscribers, ReverseAttachCode, PauseAction]);
         {error, badfile} ->
             {error, {module_injection_failed, edb_bootstrap, incompatible_beam}}
     end.

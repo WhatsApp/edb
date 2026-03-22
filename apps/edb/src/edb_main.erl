@@ -64,9 +64,7 @@ dap_handler(_Args) ->
             ok
     end.
 
--define(LOG_FORMAT, [
-    "[", time, "] ", "[", level, "] ", msg, " [", mfa, " L", line, "] ", pid, "\n"
-]).
+-define(LOG_FORMAT, ["[", time, "] ", "[", level, "] ", msg, " [", mfa, " L", line, "] ", pid, "\n"]).
 -define(LOG_LEVEL, info).
 -define(LOG_MAX_NO_BYTES, (10 * 1000 * 1000)).
 -define(LOG_MAX_NO_FILES, 5).
