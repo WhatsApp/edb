@@ -248,6 +248,21 @@ handle_edb_event(UnexpectedEvent, State0) ->
 handle_debuggee_port_event({data, Data}, _State) ->
     OutputEvent = edb_dap_event:output(#{output => Data, category => stdout}),
     #{actions => [{event, OutputEvent}]};
+handle_debuggee_port_event({exit_status, Status}, #{state := launching}) ->
+    OutputMsg = io_lib:format(
+        "Process exited with status ~b before connecting to the debugger\n", [Status]
+    ),
+    #{
+        new_state => #{state => terminating},
+        actions => [
+            {event,
+                edb_dap_event:output(#{
+                    output => erlang:iolist_to_binary(OutputMsg), category => console
+                })},
+            {event, edb_dap_event:exited(Status)},
+            {event, edb_dap_event:terminated()}
+        ]
+    };
 handle_debuggee_port_event({exit_status, _Status}, _State) ->
     #{};
 handle_debuggee_port_event(UnexpectedEvent, _State) ->

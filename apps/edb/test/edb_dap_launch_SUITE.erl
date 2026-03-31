@@ -39,6 +39,7 @@
     test_can_return_the_code_to_inject_in_an_env_var/1,
     test_it_honors_the_timeout/1,
     test_run_command_not_found/1,
+    test_run_process_exits_before_attach/1,
     test_run_launches_and_attaches/1,
     test_run_honors_timeout/1,
     test_run_passes_env/1,
@@ -55,6 +56,7 @@ all() ->
         test_can_return_the_code_to_inject_in_an_env_var,
         test_it_honors_the_timeout,
         test_run_command_not_found,
+        test_run_process_exits_before_attach,
         test_run_launches_and_attaches,
         test_run_honors_timeout,
         test_run_passes_env,
@@ -344,6 +346,40 @@ test_run_command_not_found(Config) ->
         }
     }),
     ?assertEqual(ExpectedFormat, ActualFormat),
+
+    {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
+    ok.
+
+test_run_process_exits_before_attach(Config) ->
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode"
+    }),
+
+    False =
+        case os:find_executable("false") of
+            false -> error(false_not_found);
+            Path -> list_to_binary(Path)
+        end,
+
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        run => #{
+            cwd => ~"/tmp",
+            args => [False]
+        },
+        config => #{
+            nameDomain => shortnames,
+            timeout => 30
+        }
+    }),
+
+    {ok, [#{event := ~"output", body := #{output := OutputMsg}}]} =
+        edb_dap_test_client:wait_for_event(~"output", Client),
+    ?assertEqual(~"Process exited with status 1 before connecting to the debugger\n", OutputMsg),
+
+    {ok, [#{event := ~"exited", body := #{exitCode := ExitCode}}]} =
+        edb_dap_test_client:wait_for_event(~"exited", Client),
+    ?assertEqual(1, ExitCode),
 
     {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
     ok.
