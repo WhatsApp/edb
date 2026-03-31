@@ -39,7 +39,8 @@
     test_it_honors_the_timeout/1,
     test_run_launches_and_attaches/1,
     test_run_honors_timeout/1,
-    test_run_passes_env/1
+    test_run_passes_env/1,
+    test_run_captures_output/1
 ]).
 
 all() ->
@@ -53,7 +54,8 @@ all() ->
         test_it_honors_the_timeout,
         test_run_launches_and_attaches,
         test_run_honors_timeout,
-        test_run_passes_env
+        test_run_passes_env,
+        test_run_captures_output
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -373,5 +375,19 @@ test_run_passes_env(Config) ->
         #{success := true, body := #{result := ~"\"hello_from_edb_test\""}},
         Response
     ),
+
+    ok.
+
+test_run_captures_output(Config) ->
+    {ok, Client, _Node} = edb_dap_test_support:start_session_via_launch_run(Config, #{}),
+
+    % By the time we get the "initialized" event, the Erlang banner has already
+    % been printed to stdout, so output events should be buffered.
+    % Note: stderr currently arrives as `stdout` category due to stderr_to_stdout
+    % merging in open_port — separate stderr support is a future enhancement.
+    {ok, OutputEvents} = edb_dap_test_client:wait_for_event(~"output", Client),
+    OutputTexts = [Out || #{body := #{output := Out}} <- OutputEvents],
+    Concatenated = erlang:iolist_to_binary(OutputTexts),
+    ?assert(binary:match(Concatenated, ~"Erlang/OTP") =/= nomatch),
 
     ok.

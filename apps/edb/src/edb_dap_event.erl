@@ -25,6 +25,7 @@ DAP Events
 -export([
     exited/1,
     initialized/0,
+    output/1,
     stopped/1,
     terminated/0
 ]).
@@ -42,6 +43,7 @@ DAP Events
 -export_type([event/0, event/1]).
 
 -export_type([exited_body/0]).
+-export_type([output_body/0]).
 -export_type([stopped_body/0]).
 -export_type([terminated_body/0]).
 
@@ -65,6 +67,57 @@ exited(ExitCode) ->
 -spec initialized() -> event().
 initialized() ->
     #{event => ~"initialized"}.
+
+%%%---------------------------------------------------------------------------------
+%%% Output event
+%%%---------------------------------------------------------------------------------
+%% https://microsoft.github.io/debug-adapter-protocol/specification#Events_Output
+
+-type output_body() :: #{
+    % The output category. If not specified or if the category is
+    % not understood by the client, `console` is assumed.
+    category => console | important | stdout | stderr | telemetry | binary(),
+
+    % The output to report.
+    output := binary(),
+
+    % Support for keeping an output log organized by grouping related messages.
+    % Values:
+    %   'start': Start a new group in expanded mode. Subsequent output events are
+    %     members of the group and should be shown indented. The `output` attribute
+    %     becomes the name of the group and is not indented.
+    %   'startCollapsed': Start a new group in collapsed mode. Subsequent output
+    %     events are members of the group and should be shown indented (as soon as
+    %     the group is expanded). The `output` attribute becomes the name of the
+    %     group and is not indented.
+    %   'end': End the current group and decrease the indentation of subsequent
+    %     output events.
+    group => 'start' | 'startCollapsed' | 'end',
+
+    % If an attribute `variablesReference` exists and its value is > 0, the
+    % output contains objects which can be retrieved by passing the value to the
+    % `variables` request as long as execution remains suspended. See 'Lifetime
+    % of Object References' in the Overview section for details.
+    variablesReference => number(),
+
+    % The source location where the output was produced.
+    source => edb_dap:body(),
+
+    % The source location's line where the output was produced.
+    line => number(),
+
+    % The position of the first character of the output produced in the source
+    % location's line.
+    column => number(),
+
+    % Additional data to report. For the `telemetry` category the data is sent
+    % to telemetry, for the other categories the data is shown in JSON format.
+    data => edb_dap:body()
+}.
+
+-spec output(Body) -> event(Body) when Body :: output_body().
+output(Body) ->
+    #{event => ~"output", body => Body}.
 
 %%%---------------------------------------------------------------------------------
 %%% Stopped event

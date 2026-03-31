@@ -213,31 +213,46 @@ handle_cast(terminate, State) ->
     {stop, normal, State}.
 
 -spec handle_info(Event, state()) -> {noreply, state()} when
-    Event ::
-        edb:event_envelope(edb:event())
-        | {port(), {data, binary()}}
-        | {port(), {exit_status, integer()}}.
-handle_info(Event = {edb_event, _, _}, State) ->
-    handle_edb_event(Event, State);
-handle_info({Port, {data, _Data}}, State = #{port := Port}) when is_port(Port) ->
-    {noreply, State};
-handle_info({Port, {exit_status, _Status}}, State = #{port := Port}) when is_port(Port) ->
-    {noreply, State};
-handle_info(Unexpected, State) ->
-    ?LOG_WARNING("Unexpected message: ~p", [Unexpected]),
-    {noreply, State}.
+    Event :: edb:event_envelope(edb:event()) | {port(), debuggee_port_event()}.
+handle_info(Event, State0) ->
+    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun handle_info_impl/2, Event, State0),
+    State1 = react(Reaction, State0),
+    {noreply, State1}.
 
--spec handle_edb_event(Event, state()) -> {noreply, state()} when
+-spec handle_info_impl(Event, state()) -> reaction() when
+    Event :: edb:event_envelope(edb:event()) | {port(), debuggee_port_event()}.
+handle_info_impl(Event = {edb_event, _, _}, State) ->
+    handle_edb_event(Event, State);
+handle_info_impl({Port, PortEvent}, State = #{port := Port}) when is_port(Port) ->
+    handle_debuggee_port_event(PortEvent, State);
+handle_info_impl(Unexpected, _State) ->
+    ?LOG_WARNING("Unexpected message: ~p", [Unexpected]),
+    #{}.
+
+-spec handle_edb_event(Event, state()) -> reaction() when
     Event :: edb:event_envelope(edb:event()).
 handle_edb_event({edb_event, Subscription, Event}, State0 = #{subscription := Subscription}) ->
     ?LOG_DEBUG("Handle event: ~p", [Event]),
-    Reaction = ?REACTING_TO_UNEXPECTED_ERRORS(fun edb_dap_internal_events:handle_edb_event/2, Event, State0),
-    State1 = react(Reaction, State0),
-    {noreply, State1};
+    edb_dap_internal_events:handle_edb_event(Event, State0);
 handle_edb_event(UnexpectedEvent, State0) ->
     ExpectedSubscription = maps:get(subscription, State0, undefined),
     ?LOG_WARNING("Skipping unexpected event ~tp -- expected subscription: ~tp", [UnexpectedEvent, ExpectedSubscription]),
-    {noreply, State0}.
+    #{}.
+
+-type debuggee_port_event() ::
+    {data, binary()}
+    | {exit_status, integer()}.
+
+-spec handle_debuggee_port_event(Event, state()) -> reaction() when
+    Event :: debuggee_port_event().
+handle_debuggee_port_event({data, Data}, _State) ->
+    OutputEvent = edb_dap_event:output(#{output => Data, category => stdout}),
+    #{actions => [{event, OutputEvent}]};
+handle_debuggee_port_event({exit_status, _Status}, _State) ->
+    #{};
+handle_debuggee_port_event(UnexpectedEvent, _State) ->
+    ?LOG_WARNING("Skipping unexpected port event ~tp", [UnexpectedEvent]),
+    #{}.
 
 -spec react(Reaction, state()) -> state() when
     Reaction :: reaction().
