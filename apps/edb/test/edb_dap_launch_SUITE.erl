@@ -20,6 +20,7 @@
 -oncall("whatsapp_server_devx").
 
 -include_lib("assert/include/assert.hrl").
+-include_lib("edb/include/edb_dap.hrl").
 
 %% CT callbacks
 -export([
@@ -37,6 +38,7 @@
     test_can_inject_code_automatically/1,
     test_can_return_the_code_to_inject_in_an_env_var/1,
     test_it_honors_the_timeout/1,
+    test_run_command_not_found/1,
     test_run_launches_and_attaches/1,
     test_run_honors_timeout/1,
     test_run_passes_env/1,
@@ -52,6 +54,7 @@ all() ->
         test_can_inject_code_automatically,
         test_can_return_the_code_to_inject_in_an_env_var,
         test_it_honors_the_timeout,
+        test_run_command_not_found,
         test_run_launches_and_attaches,
         test_run_honors_timeout,
         test_run_passes_env,
@@ -314,6 +317,34 @@ test_it_honors_the_timeout(Config) ->
     edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
 
     % We DONT start the debuggee, so the DAP server should send us a "terminated" event
+    {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
+    ok.
+
+test_run_command_not_found(Config) ->
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode"
+    }),
+
+    NonExistentCmd = ~"/no/such/command_that_does_not_exist",
+    ExpectedFormat = erlang:iolist_to_binary(
+        io_lib:format("Could not launch ~s: ~s", [NonExistentCmd, file:format_error(enoent)])
+    ),
+    #{
+        success := false,
+        body := #{error := #{id := ?ERROR_PRECONDITION_VIOLATION, format := ActualFormat}}
+    } = edb_dap_test_client:launch(Client, #{
+        run => #{
+            cwd => ~"/tmp",
+            args => [NonExistentCmd]
+        },
+        config => #{
+            nameDomain => shortnames,
+            timeout => 5
+        }
+    }),
+    ?assertEqual(ExpectedFormat, ActualFormat),
+
     {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
     ok.
 

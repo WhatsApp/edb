@@ -28,6 +28,8 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 
 -behaviour(edb_dap_request).
 
+-include_lib("edb/include/edb_dap.hrl").
+
 -export([parse_arguments/1, handle/2]).
 
 -define(DEFAULT_ATTACH_TIMEOUT_IN_SECS, 60).
@@ -223,25 +225,46 @@ do_run(Run, Config, State0 = #{state := initialized}) ->
 
     #{cwd := Cwd, args := [Cmd | CmdArgs]} = Run,
     PortEnv = env_to_port_env(Env),
-    Port = open_port({spawn_executable, Cmd}, [
-        {args, CmdArgs},
-        {cd, Cwd},
-        {env, PortEnv},
-        binary,
-        exit_status,
-        stderr_to_stdout,
-        hide
-    ]),
-    #{
-        new_state => State0#{
-            state => launching,
-            port => Port,
-            reverse_attach_ref => ReverseAttachRef,
-            cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
-            subscription => Subscription
-        },
-        response => edb_dap_request:success()
-    }.
+    try
+        open_port({spawn_executable, Cmd}, [
+            {args, CmdArgs},
+            {cd, Cwd},
+            {env, PortEnv},
+            binary,
+            exit_status,
+            stderr_to_stdout,
+            hide
+        ])
+    of
+        Port ->
+            #{
+                new_state => State0#{
+                    state => launching,
+                    port => Port,
+                    reverse_attach_ref => ReverseAttachRef,
+                    cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
+                    subscription => Subscription
+                },
+                response => edb_dap_request:success()
+            }
+    catch
+        error:Reason when is_atom(Reason) ->
+            #{
+                error =>
+                    {user_error, ?ERROR_PRECONDITION_VIOLATION,
+                        io_lib:format("Could not launch ~s: ~s", [Cmd, file:format_error(Reason)])},
+                new_state => #{state => terminating},
+                actions => [{event, edb_dap_event:terminated()}]
+            };
+        Class:Reason ->
+            #{
+                error =>
+                    {user_error, ?ERROR_PRECONDITION_VIOLATION,
+                        io_lib:format("Unexpected error launching ~s: ~p:~p", [Cmd, Class, Reason])},
+                new_state => #{state => terminating},
+                actions => [{event, edb_dap_event:terminated()}]
+            }
+    end.
 
 -spec env_to_port_env(Env) -> PortEnv when
     Env :: #{binary() => binary() | null},
