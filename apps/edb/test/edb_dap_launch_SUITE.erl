@@ -36,7 +36,10 @@
     test_checks_client_supports_argsCanBeInterpretedByShell/1,
     test_can_inject_code_automatically/1,
     test_can_return_the_code_to_inject_in_an_env_var/1,
-    test_it_honors_the_timeout/1
+    test_it_honors_the_timeout/1,
+    test_run_launches_and_attaches/1,
+    test_run_honors_timeout/1,
+    test_run_passes_env/1
 ]).
 
 all() ->
@@ -47,7 +50,10 @@ all() ->
         test_checks_client_supports_argsCanBeInterpretedByShell,
         test_can_inject_code_automatically,
         test_can_return_the_code_to_inject_in_an_env_var,
-        test_it_honors_the_timeout
+        test_it_honors_the_timeout,
+        test_run_launches_and_attaches,
+        test_run_honors_timeout,
+        test_run_passes_env
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -307,4 +313,65 @@ test_it_honors_the_timeout(Config) ->
 
     % We DONT start the debuggee, so the DAP server should send us a "terminated" event
     {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
+    ok.
+
+test_run_launches_and_attaches(Config) ->
+    {ok, Client, _Node} = edb_dap_test_support:start_session_via_launch_run(Config, #{}),
+
+    % Skip the configuration phase
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
+
+    % Sanity-check: we get some processes
+    #{success := true, body := #{threads := [_ | _]}} = edb_dap_test_client:threads(Client),
+
+    ok.
+
+test_run_honors_timeout(Config) ->
+    {ok, Client} = edb_dap_test_support:start_test_client(Config),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => ~"edb for BSCode"
+    }),
+
+    Sleep =
+        case os:find_executable("sleep") of
+            false -> error(sleep_not_found);
+            Path -> list_to_binary(Path)
+        end,
+
+    % Launch a non-Erlang process that will never connect back
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        run => #{
+            cwd => ~"/tmp",
+            args => [Sleep, ~"60"]
+        },
+        config => #{
+            nameDomain => shortnames,
+            timeout => 1
+        }
+    }),
+
+    % The DAP server should send a "terminated" event due to timeout
+    {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
+    ok.
+
+test_run_passes_env(Config) ->
+    TestEnvVar = ~"EDB_TEST_CUSTOM_VAR",
+    TestEnvValue = ~"hello_from_edb_test",
+
+    {ok, Client, _Node} = edb_dap_test_support:start_session_via_launch_run(Config, #{
+        env => #{TestEnvVar => TestEnvValue}
+    }),
+
+    #{success := true} = edb_dap_test_client:configuration_done(Client),
+
+    % Verify the launched node has the custom env var via DAP evaluate
+    Response = edb_dap_test_client:evaluate(Client, #{
+        expression => ~"os:getenv(\"EDB_TEST_CUSTOM_VAR\")",
+        context => repl
+    }),
+    ?assertMatch(
+        #{success := true, body := #{result := ~"\"hello_from_edb_test\""}},
+        Response
+    ),
+
     ok.

@@ -118,4 +118,86 @@ test_validate(_Config) ->
     ?assertEqual(
         {ok, ExpectedMaximal},
         edb_dap_request_launch:parse_arguments(Maximal)
+    ),
+
+    %% run: minimal
+    RunMinimal = #{
+        run => #{
+            cwd => ~"/blah",
+            args => [~"erl"]
+        },
+        config => #{
+            nameDomain => ~"shortnames"
+        }
+    },
+    ExpectedRunMinimal = #{
+        run => #{
+            cwd => ~"/blah",
+            args => [~"erl"]
+        },
+        config => #{
+            nameDomain => shortnames
+        }
+    },
+    ?assertEqual(
+        {ok, ExpectedRunMinimal},
+        edb_dap_request_launch:parse_arguments(RunMinimal)
+    ),
+
+    %% run: maximal
+    RunMaximal = #{
+        run => #{
+            cwd => ~"/foo/bar",
+            args => [~"erl", ~"-name", ~"debuggee@localhost"],
+            env => #{
+                ~"MY_VAR" => ~"my_value",
+                ~"UNSET_VAR" => null
+            }
+        },
+        config => #{
+            nameDomain => ~"longnames",
+            nodeInitCodeInEnvVar => ~"EDB_DAP_INIT_CODE",
+            timeout => 300,
+            stripSourcePrefix => ~"blah/blah"
+        }
+    },
+    ExpectedRunMaximal = #{
+        run => #{
+            cwd => ~"/foo/bar",
+            args => [~"erl", ~"-name", ~"debuggee@localhost"],
+            env => #{
+                ~"MY_VAR" => ~"my_value",
+                ~"UNSET_VAR" => null
+            }
+        },
+        config => #{
+            nameDomain => longnames,
+            nodeInitCodeInEnvVar => ~"EDB_DAP_INIT_CODE",
+            timeout => 300,
+            stripSourcePrefix => ~"blah/blah"
+        }
+    },
+    ?assertEqual(
+        {ok, ExpectedRunMaximal},
+        edb_dap_request_launch:parse_arguments(RunMaximal)
+    ),
+
+    %% Error: both run and runInTerminal
+    BothPresent = #{
+        run => #{cwd => ~"/tmp", args => [~"erl"]},
+        runInTerminal => #{cwd => ~"/tmp", args => [~"erl"]},
+        config => #{nameDomain => ~"shortnames"}
+    },
+    ?assertMatch(
+        {error, ~"'run' and 'runInTerminal' are mutually exclusive"},
+        edb_dap_request_launch:parse_arguments(BothPresent)
+    ),
+
+    %% Error: neither run nor runInTerminal
+    NeitherPresent = #{
+        config => #{nameDomain => ~"shortnames"}
+    },
+    ?assertMatch(
+        {error, ~"either 'run' or 'runInTerminal' must be specified"},
+        edb_dap_request_launch:parse_arguments(NeitherPresent)
     ).

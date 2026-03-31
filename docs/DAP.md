@@ -75,11 +75,11 @@ A typical launch request looks like this:
 }
 ```
 
-For launching, `edb` currently only supports IDEs that can handle the
-"run-in-terminal" capabality, in which `edb` can tell the IDE what command to use
-to start the program to be debugged.
+`edb` supports two ways to launch a new node: `runInTerminal` (the IDE starts the
+debuggee) and `run` (EDB starts the debuggee itself via `open_port()`). Exactly one
+of `runInTerminal` or `run` must be specified.
 
-##### `runInTerminal` (required)
+##### `runInTerminal`
 
 Options here follow those of the ["runInTerminal" reverse-request](https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_RunInTerminal) in the
 DAP specification
@@ -92,6 +92,34 @@ DAP specification
 | `args` | string[] | required | Command line arguments to start the Erlang node |
 | `env` | object | optional | Environment variables to set for the Erlang node |
 | `argsCanBeInterpretedByShell` | boolean | optional | Whether args can be interpreted by the shell |
+
+##### `run`
+
+Use this when the IDE does not support the `runInTerminal` reverse-request, or when
+you don't need a terminal. EDB spawns the debuggee process directly.
+
+```json
+{
+  "type": "erlang-edb",
+  "request": "launch",
+  "name": "Launch Erlang Application",
+  "run": {
+    "cwd": "${workspaceFolder}",
+    "args": ["erl", "-name", "debuggee@localhost"]
+  },
+  "config": {
+    "nameDomain": "longnames",
+    "stripSourcePrefix": "${workspaceFolder}/",
+    "timeout": 60
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cwd` | string | required | Working directory for the Erlang node |
+| `args` | string[] | required | Command line arguments to start the Erlang node (first element is the executable) |
+| `env` | object | optional | Environment variables to set for the Erlang node |
 
 ##### `config` (required)
 
@@ -110,7 +138,7 @@ given `config.timeout` expires. In some settings, relying on `ERL_AFLAGS` may no
 be an option and `edb` can instead store the command the new node needs to execute in
 the environment variable provided in `nodeInitCodeInEnvVar` and it is then the user's
 responsibility to ensure that the launched node runs this command at an appropriate
-phase (typically, by including this environment variable somewhere in the given `runInTerminal.args`)
+phase (typically, by including this environment variable somewhere in the given `runInTerminal.args` or `run.args`)
 
 ## Important Notes
 

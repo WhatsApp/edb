@@ -73,6 +73,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         % A `launch` request was received and we are waiting for the debuggee node to be up
         state := launching,
         client_info := client_info(),
+        port := port() | none,
         shell_process_id => number(),
         reverse_attach_ref := reference(),
         cwd := binary(),
@@ -86,6 +87,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         state := configuring,
         type := attach_type(),
         client_info := client_info(),
+        port := port() | none,
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
@@ -96,6 +98,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         state := attached,
         type := attach_type(),
         client_info := client_info(),
+        port := port() | none,
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
@@ -210,9 +213,16 @@ handle_cast(terminate, State) ->
     {stop, normal, State}.
 
 -spec handle_info(Event, state()) -> {noreply, state()} when
-    Event :: edb:event_envelope(edb:event()).
+    Event ::
+        edb:event_envelope(edb:event())
+        | {port(), {data, binary()}}
+        | {port(), {exit_status, integer()}}.
 handle_info(Event = {edb_event, _, _}, State) ->
     handle_edb_event(Event, State);
+handle_info({Port, {data, _Data}}, State = #{port := Port}) when is_port(Port) ->
+    {noreply, State};
+handle_info({Port, {exit_status, _Status}}, State = #{port := Port}) when is_port(Port) ->
+    {noreply, State};
 handle_info(Unexpected, State) ->
     ?LOG_WARNING("Unexpected message: ~p", [Unexpected]),
     {noreply, State}.

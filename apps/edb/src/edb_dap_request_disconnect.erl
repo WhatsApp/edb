@@ -107,7 +107,8 @@ handle(State, Args) ->
     | #{
         node := node(),
         process_id := number(),
-        shell_process_id => number()
+        shell_process_id => number(),
+        port => port() | none
     }.
 
 -spec shouldTerminateDebuggee(State, Args) -> boolean() when
@@ -123,9 +124,9 @@ shouldTerminateDebuggee(_, _) ->
 -spec get_victims(State) -> Victims when
     State :: edb_dap_server:state(),
     Victims :: victims().
-get_victims(#{node := Node, type := AttachType}) ->
+get_victims(#{node := Node, type := AttachType, port := Port}) ->
     Victims0 = maps:with([process_id, shell_process_id], AttachType),
-    Victims1 = Victims0#{node => Node},
+    Victims1 = Victims0#{node => Node, port => Port},
     Victims1;
 get_victims(_State) ->
     none.
@@ -154,6 +155,17 @@ kill_victims(Victims = #{node := Node, process_id := ProcessId}) ->
             end,
             try_async(fun() -> kill_os_process(ShellProcessId, force) end, 1_000);
         #{} ->
+            ok
+    end,
+
+    case Victims of
+        #{port := Port} when Port =/= none ->
+            try
+                erlang:port_close(Port)
+            catch
+                _:_ -> ok
+            end;
+        _ ->
             ok
     end,
     ok.

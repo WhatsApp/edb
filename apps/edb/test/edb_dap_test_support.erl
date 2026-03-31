@@ -22,6 +22,7 @@
 %% Public API
 -export([start_test_client/1]).
 -export([start_session_via_attach/4, start_session_via_launch/2, start_session_via_launch/3]).
+-export([start_session_via_launch_run/2]).
 -export([set_breakpoints/3]).
 -export([spawn_and_wait_for_bp/3, wait_for_bp/1]).
 -export([configure/2]).
@@ -128,6 +129,63 @@ start_session_via_launch(Config, InitArguments, StartPeerOpts) ->
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
     {ok, Client, PeerInfo}.
+
+-spec start_session_via_launch_run(Config, StartPeerOpts) -> {ok, Client, Node} when
+    Config :: ct_suite:ct_config(),
+    StartPeerOpts :: #{env => #{binary() => binary()}},
+    Client :: client(),
+    Node :: node().
+start_session_via_launch_run(Config, StartPeerOpts) ->
+    {ok, Client} = start_test_client(Config),
+
+    AdapterID = atom_to_binary(?MODULE),
+    #{success := true} = edb_dap_test_client:initialize(Client, #{
+        adapterID => AdapterID
+    }),
+
+    Node = edb_test_support:random_node(~"debuggee"),
+    [NodeName, _NodeHost] = string:split(atom_to_list(Node), "@"),
+
+    Cookie =
+        case erlang:get_cookie() of
+            nocookie -> nocookie;
+            C -> C
+        end,
+
+    Erl =
+        case os:find_executable("erl") of
+            false -> error(erl_not_found);
+            Path -> list_to_binary(Path)
+        end,
+
+    Cwd = edb_test_support:random_srcdir(Config),
+
+    CookieArgs =
+        case Cookie of
+            nocookie -> [];
+            _ -> [~"-setcookie", atom_to_binary(Cookie)]
+        end,
+    RunArgs =
+        [Erl, ~"-sname", list_to_binary(NodeName)] ++
+            CookieArgs ++
+            [~"-connect_all", ~"false", ~"+S2", ~"+Q65535"],
+
+    UserEnv = maps:get(env, StartPeerOpts, #{}),
+    Run0 = #{cwd => Cwd, args => RunArgs},
+    Run1 =
+        case map_size(UserEnv) of
+            0 -> Run0;
+            _ -> Run0#{env => UserEnv}
+        end,
+
+    #{success := true} = edb_dap_test_client:launch(Client, #{
+        run => Run1,
+        config => #{nameDomain => shortnames, timeout => 20}
+    }),
+
+    {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
+
+    {ok, Client, Node}.
 
 -spec configure(Client, [BreakpointSpec]) -> ok when
     Client :: client(),

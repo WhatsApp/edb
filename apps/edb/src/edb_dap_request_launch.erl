@@ -39,12 +39,16 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 %%% Notice that, since launching is debugger/runtime specific, the arguments for this request are
 %%% not part of the DAP specification itself.
 
--export_type([arguments/0, run_in_terminal/0, config/0]).
--type arguments() :: #{
-    runInTerminal := run_in_terminal(),
-    config := config()
-}.
+-export_type([arguments/0, run/0, run_in_terminal/0, config/0]).
+-type arguments() ::
+    #{runInTerminal := run_in_terminal(), config := config()}
+    | #{run := run(), config := config()}.
 
+-type run() :: #{
+    cwd := binary(),
+    args := [binary()],
+    env => #{binary() => binary() | null}
+}.
 -type run_in_terminal() :: edb_dap_reverse_request_run_in_terminal:arguments().
 -type config() :: #{
     nameDomain := shortnames | longnames,
@@ -56,19 +60,31 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
     #{
-        runInTerminal => #{
-            kind => {optional, edb_dap_parse:atoms([integrated, external])},
-            title => {optional, edb_dap_parse:binary()},
-            cwd => edb_dap_parse:binary(),
-            args => edb_dap_parse:nonempty_list(edb_dap_parse:binary()),
-            env =>
-                {optional,
-                    edb_dap_parse:map(
-                        edb_dap_parse:binary(),
-                        edb_dap_parse:choice([edb_dap_parse:null(), edb_dap_parse:binary()])
-                    )},
-            argsCanBeInterpretedByShell => {optional, edb_dap_parse:boolean()}
-        },
+        runInTerminal =>
+            {optional, #{
+                kind => {optional, edb_dap_parse:atoms([integrated, external])},
+                title => {optional, edb_dap_parse:binary()},
+                cwd => edb_dap_parse:binary(),
+                args => edb_dap_parse:nonempty_list(edb_dap_parse:binary()),
+                env =>
+                    {optional,
+                        edb_dap_parse:map(
+                            edb_dap_parse:binary(),
+                            edb_dap_parse:choice([edb_dap_parse:null(), edb_dap_parse:binary()])
+                        )},
+                argsCanBeInterpretedByShell => {optional, edb_dap_parse:boolean()}
+            }},
+        run =>
+            {optional, #{
+                cwd => edb_dap_parse:binary(),
+                args => edb_dap_parse:nonempty_list(edb_dap_parse:binary()),
+                env =>
+                    {optional,
+                        edb_dap_parse:map(
+                            edb_dap_parse:binary(),
+                            edb_dap_parse:choice([edb_dap_parse:null(), edb_dap_parse:binary()])
+                        )}
+            }},
         config =>
             #{
                 nameDomain => edb_dap_parse:atoms([shortnames, longnames]),
@@ -81,10 +97,24 @@ arguments_template() ->
 %% ------------------------------------------------------------------
 %% Behaviour implementation
 %% ------------------------------------------------------------------
--spec parse_arguments(edb_dap:arguments()) -> {ok, config()} | {error, Reason :: binary()}.
+-spec parse_arguments(edb_dap:arguments()) -> {ok, arguments()} | {error, Reason :: binary()}.
 parse_arguments(Args) ->
     Template = arguments_template(),
-    edb_dap_parse:parse(Template, Args, allow_unknown).
+    case edb_dap_parse:parse(Template, Args, allow_unknown) of
+        {ok, Parsed} ->
+            case Parsed of
+                #{run := _, runInTerminal := _} ->
+                    {error, ~"'run' and 'runInTerminal' are mutually exclusive"};
+                #{run := _, config := _} ->
+                    {ok, Parsed};
+                #{runInTerminal := _, config := _} ->
+                    {ok, Parsed};
+                _ ->
+                    {error, ~"either 'run' or 'runInTerminal' must be specified"}
+            end;
+        Error ->
+            Error
+    end.
 
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
@@ -106,17 +136,26 @@ handle(
     do_run_in_terminal(RunInTerminal, Config, State);
 handle(#{state := initialized, client_info := ClientInfo}, #{runInTerminal := _}) ->
     unsupported_by_client(~"runInTerminal", ClientInfo);
+handle(State = #{state := initialized}, Args = #{run := Run}) ->
+    #{config := Config} = Args,
+    do_run(Run, Config, State);
 handle(_InvalidState, _Args) ->
     edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec do_run_in_terminal(RunInTerminal, Config, State) -> edb_dap_request:reaction() when
-    RunInTerminal :: run_in_terminal(),
+-type launch_setup() :: #{
+    env := #{binary() => binary() | null},
+    reverse_attach_ref := reference(),
+    subscription := edb:event_subscription(),
+    strip_source_prefix := binary()
+}.
+
+-spec prepare_launch(Config, UserEnv) -> launch_setup() when
     Config :: config(),
-    State :: edb_dap_server:state().
-do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
+    UserEnv :: #{binary() => binary() | null}.
+prepare_launch(Config, UserEnv) ->
     #{nameDomain := NameDomain} = Config,
     AttachTimeoutInSecs = maps:get(timeout, Config, ?DEFAULT_ATTACH_TIMEOUT_IN_SECS),
 
@@ -129,10 +168,31 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
 
     StripSourcePrefix = maps:get(stripSourcePrefix, Config, ~""),
 
-    Env0 = maps:get(env, RunInTerminal0, #{}),
+    Env0 = UserEnv,
     Env1 = update_code_to_inject_info_in_env(CodeToInject, Config, Env0),
     Env2 = prepend_to_env(~"ERL_AFLAGS", ~"+D", Env1),
-    RunInTerminal1 = RunInTerminal0#{env => Env2},
+
+    #{
+        env => Env2,
+        reverse_attach_ref => ReverseAttachRef,
+        subscription => Subscription,
+        strip_source_prefix => StripSourcePrefix
+    }.
+
+-spec do_run_in_terminal(RunInTerminal, Config, State) -> edb_dap_request:reaction() when
+    RunInTerminal :: run_in_terminal(),
+    Config :: config(),
+    State :: edb_dap_server:state().
+do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
+    Env0 = maps:get(env, RunInTerminal0, #{}),
+    #{
+        env := Env1,
+        reverse_attach_ref := ReverseAttachRef,
+        subscription := Subscription,
+        strip_source_prefix := StripSourcePrefix
+    } = prepare_launch(Config, Env0),
+
+    RunInTerminal1 = RunInTerminal0#{env => Env1},
 
     Cwd = maps:get(cwd, RunInTerminal1),
     RunInTerminalRequest = edb_dap_reverse_request_run_in_terminal:make_request(RunInTerminal1),
@@ -140,12 +200,60 @@ do_run_in_terminal(RunInTerminal0, Config, State0 = #{state := initialized}) ->
         actions => [{reverse_request, RunInTerminalRequest}],
         new_state => State0#{
             state => launching,
+            port => none,
             reverse_attach_ref => ReverseAttachRef,
             cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
             subscription => Subscription
         },
         response => edb_dap_request:success()
     }.
+
+-spec do_run(Run, Config, State) -> edb_dap_request:reaction() when
+    Run :: run(),
+    Config :: config(),
+    State :: edb_dap_server:state().
+do_run(Run, Config, State0 = #{state := initialized}) ->
+    Env0 = maps:get(env, Run, #{}),
+    #{
+        env := Env,
+        reverse_attach_ref := ReverseAttachRef,
+        subscription := Subscription,
+        strip_source_prefix := StripSourcePrefix
+    } = prepare_launch(Config, Env0),
+
+    #{cwd := Cwd, args := [Cmd | CmdArgs]} = Run,
+    PortEnv = env_to_port_env(Env),
+    Port = open_port({spawn_executable, Cmd}, [
+        {args, CmdArgs},
+        {cd, Cwd},
+        {env, PortEnv},
+        binary,
+        exit_status,
+        stderr_to_stdout,
+        hide
+    ]),
+    #{
+        new_state => State0#{
+            state => launching,
+            port => Port,
+            reverse_attach_ref => ReverseAttachRef,
+            cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
+            subscription => Subscription
+        },
+        response => edb_dap_request:success()
+    }.
+
+-spec env_to_port_env(Env) -> PortEnv when
+    Env :: #{binary() => binary() | null},
+    PortEnv :: [{string(), string() | false}].
+env_to_port_env(Env) ->
+    [
+        case V of
+            null -> {binary_to_list(K), false};
+            _ -> {binary_to_list(K), binary_to_list(V)}
+        end
+     || K := V <- Env
+    ].
 
 -spec prepend_to_env(Key, Val, Env) -> Env when
     Key :: binary(),
