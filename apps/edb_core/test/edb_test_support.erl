@@ -108,7 +108,7 @@ compile_module(CtConfig, ModuleSpec, Opts0) ->
 compile_module_1(_CtConfig, {filepath, FilePath}, Opts) ->
     compile_module_2(FilePath, Opts);
 compile_module_1(CtConfig, {filename, FileName}, Opts) ->
-    DataDir = ?config(data_dir, CtConfig),
+    DataDir = proplists:get_value(data_dir, CtConfig),
     FilePath = filename:join(DataDir, FileName),
     {ok, Contents} = file:read_file(FilePath),
     compile_module_1(CtConfig, {source, Contents}, Opts);
@@ -189,7 +189,7 @@ random_node_name(Prefix) ->
     CtConfig :: ct_suite:ct_config(),
     Dir :: binary().
 random_srcdir(CtConfig) ->
-    PrivDir = ?config(priv_dir, CtConfig),
+    PrivDir = proplists:get_value(priv_dir, CtConfig),
     UniqName = lists:concat([os:getpid(), "-", erlang:unique_integer([positive])]),
     WorkDir = filename:join(PrivDir, UniqName),
     SrcDir = filename:join(WorkDir, "src"),
@@ -565,7 +565,7 @@ start_debugger_node(Config0) ->
 -spec on_debugger_node(Config, fun(() -> Result)) -> Result when
     Config :: ct_suite:ct_config().
 on_debugger_node(Config, Fun) ->
-    Peer = ?config(debugger_peer_key(), Config),
+    Peer = proplists:get_value(debugger_peer_key(), Config),
     peer:call(Peer, erlang, apply, [Fun, []], infinity).
 
 -spec debugger_peer_key() -> debugger_peer.

@@ -50,7 +50,7 @@ end_per_testcase(_TestCase, _Config) ->
     ok.
 
 escript_executable(Config) ->
-    DataDir = ?config(data_dir, Config),
+    DataDir = proplists:get_value(data_dir, Config),
     Escript = filename:join([DataDir, ?EDB]),
     ?assert(filelib:is_file(Escript), "Escript should exists"),
     {ok, FileInfo} = file:read_file_info(Escript),

@@ -152,7 +152,7 @@ test_validates_input(Config) ->
 %%--------------------------------------------------------------------
 -spec cwd(ct_suite:ct_config()) -> binary().
 cwd(Config) ->
-    PrivDir = ?config(priv_dir, Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
     case unicode:characters_to_binary(PrivDir) of
         Cwd when is_binary(Cwd) -> Cwd
     end.

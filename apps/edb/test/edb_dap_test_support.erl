@@ -43,7 +43,7 @@
 
 -spec start_test_client(Config :: ct_suite:ct_config()) -> {ok, client()}.
 start_test_client(Config) ->
-    DataDir = ?config(data_dir, Config),
+    DataDir = proplists:get_value(data_dir, Config),
     Executable = filename:join([DataDir, "edb"]),
     Args = ["dap"],
     edb_dap_test_client:start_link(Executable, Args).
