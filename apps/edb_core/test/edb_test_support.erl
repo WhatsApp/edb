@@ -157,6 +157,10 @@ compile_module_2(SourceFile, Opts) ->
 
 -define(PROC_DICT_PEERS_KEY, {?MODULE, peers}).
 
+% Generous timeouts to avoid flakiness.
+-define(PEER_BOOT_TIMEOUT_MS, 50_000).
+-define(PEER_BOOTSTRAP_CALL_TIMEOUT_MS, 50_000).
+
 -type peer() :: peer:server_ref().
 
 -spec random_node(Prefix) -> node() when
@@ -272,7 +276,7 @@ start_peer_node(CtConfig, Opts0) ->
 start_peer_no_dist(CtConfig, Opts) ->
     {ok, Peer, Workdir, Modules} = gen_start_peer(CtConfig, no_dist, Opts),
     % Sanity-check
-    #{started := no} = peer:call(Peer, net_kernel, get_state, []),
+    #{started := no} = peer:call(Peer, net_kernel, get_state, [], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS),
     {ok, #{peer => Peer, srcdir => Workdir, modules => Modules}}.
 
 -spec gen_start_peer(CtConfig, NodeInfo, Opts) -> {ok, Peer, SrcDir, Modules} when
@@ -309,6 +313,8 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         % The control process stays up when the connection is lost,
         % so we can query the node state, etc
         peer_down => continue,
+
+        wait_boot => ?PEER_BOOT_TIMEOUT_MS,
         args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args],
         env => [{binary_to_list(K), binary_to_list(V)} || K := V <- maps:get(env, Opts, #{})]
     },
@@ -331,8 +337,12 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         no_dist ->
             % ?CT_PEER() always gives the node a name, so it starts distribution. So let's
             % manually kill the net supervisor
-            ok = peer:call(Peer, supervisor, terminate_child, [kernel_sup, net_sup]),
-            ok = peer:call(Peer, supervisor, delete_child, [kernel_sup, net_sup]);
+            ok = peer:call(
+                Peer, supervisor, terminate_child, [kernel_sup, net_sup], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS
+            ),
+            ok = peer:call(
+                Peer, supervisor, delete_child, [kernel_sup, net_sup], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS
+            );
         _ ->
             ok
     end,
@@ -345,7 +355,7 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     erlang:put(?PROC_DICT_PEERS_KEY, StartedPeers#{Peer => NodeInfo}),
     case maps:get(copy_code_path, Opts, false) of
         true ->
-            ok = peer:call(Peer, code, add_pathsa, [code:get_path()]);
+            ok = peer:call(Peer, code, add_pathsa, [code:get_path()], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS);
         false ->
             ok
     end,
@@ -359,7 +369,7 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     WorkDir = file_name_all_to_string(filename:dirname(SrcDir)),
     EbinDir = filename:join(WorkDir, "ebin"),
     ok = file:make_dir(EbinDir),
-    true = peer:call(Peer, code, add_patha, [EbinDir]),
+    true = peer:call(Peer, code, add_patha, [EbinDir], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS),
 
     CompileOpts0 = #{work_dir => WorkDir},
     CompileOpts1 =

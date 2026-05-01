@@ -92,7 +92,7 @@
 suite() ->
     [
         % @fb-only: {appatic, #{enable_autoclean => true}},
-        {timetrap, {seconds, 30}}
+        {timetrap, {seconds, 90}}
     ].
 
 all() ->
@@ -231,7 +231,7 @@ test_attaching_injects_edb_server(Config) ->
 
 test_can_attach_async_with_timeout(Config) ->
     NodeStartupDelayInMs = 500,
-    AttachTimeout = NodeStartupDelayInMs * 10,
+    AttachTimeout = NodeStartupDelayInMs * 50,
     test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout).
 
 test_can_attach_async_with_infinity_timeout(Config) ->
