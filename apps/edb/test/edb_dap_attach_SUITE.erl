@@ -19,7 +19,6 @@
 
 -oncall("whatsapp_server_devx").
 
-% @fb-only: % elp:fixme WA003 - Open source app
 -include_lib("common_test/include/ct.hrl").
 
 %% CT callbacks
