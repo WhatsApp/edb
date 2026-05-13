@@ -215,11 +215,11 @@ access_reg(Type, Index) ->
 
 -spec process_scope(Pid) -> scope() when Pid :: pid().
 process_scope(Pid) ->
-    ProcessInfo = [
-        {pid, Pid}
-        % eqwalizer:fixme label is only available in OTP 28+
-        | erlang:process_info(Pid, [registered_name, label, messages, dictionary, memory])
-    ],
+    ProcessInfo =
+        case erlang:process_info(Pid, [registered_name, label, messages, dictionary, memory]) of
+            undefined -> [{pid, Pid}];
+            Items -> [{pid, Pid} | Items]
+        end,
     ProcessInfoVars = lists:filtermap(
         fun
             ({pid, PidVal}) ->
