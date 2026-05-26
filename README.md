@@ -76,38 +76,16 @@ are building from source and targetting OTP 28.0 or 28.1, use the `otp-28.0` bra
 Moreover, a version of `rebar3` built with Erlang/OTP 26 or higher is required. You can find instructions on how to build `rebar3`
 from source [here](https://rebar3.org/docs/getting-started/#installing-from-source).
 
-### Building the custom version of OTP
-For convenience, a patched version of Erlang/OTP is checked in
-as a git submodule.
+### Installing Erlang/OTP
 
-You can build and install the modified version of Erlang/OTP by doing:
-
-```
-$ git submodule update --init
-$ pushd otp
-$ ./configure --prefix $(pwd)/../otp-bin
-$ make -j$(nproc)
-$ make -j$(nproc) install
-$ popd
-```
-
-**Note:** on Mac you may need to provide a custom installation path
-for OpenSSl. Just replace the above configuration step with:
-
-```
-$ ./configure --prefix $(pwd)/../otp-bin --with-ssl=$(brew --prefix openssl)
-```
-
-Then simply add the installation dir to your `$PATH`:
-
-```
-$ export PATH=$(pwd)/otp-bin/bin:$PATH
-```
+`edb` requires a stock build of Erlang/OTP 29 or later. Install it using your
+preferred method, e.g. [kerl](https://github.com/kerl/kerl),
+[asdf](https://github.com/asdf-vm/asdf-erlang), or your system package manager.
 
 Verify the Erlang installation:
 
 ```
-$ which erl # Should point to the newly built version of Erlang/OTP
+$ erl -version # Should report OTP 29 or later
 ```
 
 ### Building edb itself
