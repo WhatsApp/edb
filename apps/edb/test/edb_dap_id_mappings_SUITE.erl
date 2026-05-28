@@ -17,6 +17,8 @@
 
 -oncall("whatsapp_server_devx").
 
+-include_lib("assert/include/assert.hrl").
+
 %% Test server callbacks
 -export([
     all/0
@@ -54,10 +56,10 @@ test_it_works(_Config) ->
         Pid4 := 4 = ThreadId4
     } = edb_dap_id_mappings:pids_to_thread_ids([Pid1, Pid2, Pid3, Pid4]),
 
-    ThreadId1 = edb_dap_id_mappings:pid_to_thread_id(Pid1),
-    ThreadId2 = edb_dap_id_mappings:pid_to_thread_id(Pid2),
-    ThreadId3 = edb_dap_id_mappings:pid_to_thread_id(Pid3),
-    ThreadId4 = edb_dap_id_mappings:pid_to_thread_id(Pid4),
+    ?assertEqual(ThreadId1, edb_dap_id_mappings:pid_to_thread_id(Pid1)),
+    ?assertEqual(ThreadId2, edb_dap_id_mappings:pid_to_thread_id(Pid2)),
+    ?assertEqual(ThreadId3, edb_dap_id_mappings:pid_to_thread_id(Pid3)),
+    ?assertEqual(ThreadId4, edb_dap_id_mappings:pid_to_thread_id(Pid4)),
 
     % Looks up by ThreadId
     {ok, Pid1} = edb_dap_id_mappings:thread_id_to_pid(ThreadId1),
@@ -72,10 +74,10 @@ test_it_works(_Config) ->
     FrameId3 = 3 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame3),
     FrameId4 = 4 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame4),
 
-    FrameId1 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame1),
-    FrameId2 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame2),
-    FrameId3 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame3),
-    FrameId4 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame4),
+    ?assertEqual(FrameId1, edb_dap_id_mappings:pid_frame_to_frame_id(Frame1)),
+    ?assertEqual(FrameId2, edb_dap_id_mappings:pid_frame_to_frame_id(Frame2)),
+    ?assertEqual(FrameId3, edb_dap_id_mappings:pid_frame_to_frame_id(Frame3)),
+    ?assertEqual(FrameId4, edb_dap_id_mappings:pid_frame_to_frame_id(Frame4)),
 
     % Looks up by FrameId
     {ok, Frame1} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId1),
@@ -88,7 +90,7 @@ test_it_works(_Config) ->
     edb_dap_id_mappings:reset(),
     {ok, Pid1} = edb_dap_id_mappings:thread_id_to_pid(ThreadId1),
     {error, not_found} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId1),
-    FrameId1 = 1 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame1),
+    ?assertEqual(FrameId1, edb_dap_id_mappings:pid_frame_to_frame_id(Frame1)),
     {ok, Frame1} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId1),
 
     ok = gen_server:stop(edb_dap_thread_id_mappings),
