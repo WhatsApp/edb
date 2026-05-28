@@ -1,64 +1,22 @@
 # edb
 
-A modern step-debugger for Erlang, that freezes the whole node when a process hits a breakpoint,
-allowing for the inspection of every process running inside it. It is IDE agnostic and can be used from any IDE that
-[implements the Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/implementors/tools/).
+A modern step-debugger for Erlang. When a process hits a breakpoint, `edb` freezes the whole node so you can inspect every process running inside it. It is IDE agnostic and works with any IDE that [implements the Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/implementors/tools/).
 
-It requires OTP 28 or later. For more technical details, see our [paper](https://dl.acm.org/doi/pdf/10.1145/3759161.3763047) in
-the Erlang 2025 Workshop.
+It requires OTP 29 or later. For more technical details, see our [paper](https://dl.acm.org/doi/pdf/10.1145/3759161.3763047) in the Erlang 2025 Workshop.
 
-> [!IMPORTANT]
-> `edb` requires new debugging extensions exposed by OTP, so the development of both go hand in hand.
-> The `main` branch of `edb` currently expects some extensions that have not yet been merged. If you
-> are expecting to use `edb` on OTP 28.0 or 28.1, please use the `otp-28.0` branch of `edb` instead.
+## Getting Started
 
-## Set it up
+The quickest path to debugging an Erlang project with `edb` is from VS Code, using any extension that ships with a prebuilt `edb`, but most IDEs are supported.
 
-Instructions differ depending on the IDE.
+### 1. Configure your IDE
 
-### VSCode
+If using VSCode, install the [Erlang Language Platform](https://marketplace.visualstudio.com/items?itemName=erlang-language-platform.erlang-language-platform) extension from the VS Code marketplace. It ships with a prebuilt `edb` and provides code-lenses to debug Common Test cases. For other IDEs see [below](#using-edb-from-other-ides).
 
-On VSCode you need a debugging extension for Erlang that includes `edb`. Then see [this guide](https://code.visualstudio.com/docs/debugtest/debugging)
-and the `edb` [DAP guide](docs/DAP.md).
+### 2. Configure your rebar3 project
 
-* The [Erlang Language Platform](https://marketplace.visualstudio.com/items?itemName=erlang-language-platform.erlang-language-platform) extension
-  provides a prebuilt version of `edb` and code-lenses to debug Common-Test testcases.
+`edb` needs three compile options: `debug_info`, `beam_debug_info`, and `beam_debug_stack`. The first two add the symbol information needed to display variable names on a paused process. `beam_debug_stack` additionally preserves the values of variables that are no longer live, which is more useful for debugging but increases stack usage. In modules where the increased stack usage is problematic, it can be disabled by adding `-compile(no_beam_debug_stack).`
 
-### Emacs
-
-* Build `edb` from source (see [below](#building-from-source))
-* Pick an emacs DAP client, such as [dape](https://github.com/svaante/dape) or [dap-mode](https://github.com/emacs-lsp/dap-mode)
-* See the `edb` [DAP guide](docs/DAP.md)
-
-### vim/neovim
-
-* Build `edb` from source (see [below](#building-from-source))
-* Pick a DAP client, such as [vimspector](https://github.com/puremourning/vimspector) or [nvim-dap](https://github.com/mfussenegger/nvim-dap)
-* See the `edb` [DAP guide](docs/DAP.md)
-
-
-### IntelliJ
-
-* Build `edb` from source (see [below](#building-from-source))
-* Setup the [lsp4j](https://github.com/redhat-developer/lsp4ij) plugin
-* See the `edb` [DAP guide](docs/DAP.md)
-
-### zed
-
-* Build `edb` from source (see [below](#building-from-source))
-* zed has native DAP support
-* See the `edb` [DAP guide](docs/DAP.md)
-
-## Configure a rebar3 project
-
-Before we can debug a [rebar3](https://rebar3.org/) project with `edb`, we need to ensure that we build the code using the `debug_info` option, but also `beam_debug_info` and
-`beam_debug_stack` options. The former adds debug symbol information needed to be able display variable names on a paused process; the latter
-preserves the values of variables that are no longer live, which is more useful for debugging, but increases the stack usage. In modules
-where the increased stack usage is problematic, it can be disabled by adding `-compile(no_beam_debug_stack).`
-
-Since we want to only use the debugger during development and we don't want to affect production, these changes can be limited to the `test` profile.
-
-Open the `rebar.config` file for the project and ensure one of these options is included as part of `erl_opts`.
+Since the debugger is a development-only tool, restrict the options to the `test` profile in your `rebar.config`:
 
 ```
 {profiles, [
@@ -68,27 +26,66 @@ Open the `rebar.config` file for the project and ensure one of these options is 
 ]}.
 ```
 
+### 3. Add a launch configuration
+
+Create `.vscode/launch.json` in your project. The example below covers the two common entry points: launching a `rebar3 shell` under the debugger, or attaching to an already-running node.
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "erlang-edb",
+      "request": "launch",
+      "name": "Launch rebar3 shell",
+      "runInTerminal": {
+        "kind": "integrated",
+        "title": "rebar3 shell",
+        "cwd": "${workspaceFolder}",
+        "args": [
+          "sh",
+          "-c",
+          "exec $0 \"$@\" --eval=\"$EDB_DAP_DEBUGGEE_INIT\"",
+          "rebar3",
+          "as",
+          "test",
+          "shell"
+        ]
+      },
+      "config": {
+        "nameDomain": "shortnames",
+        "nodeInitCodeInEnvVar": "EDB_DAP_DEBUGGEE_INIT",
+        "timeout": 300
+      },
+    },
+    {
+      "name": "Attach to node devel@localhost",
+      "type": "erlang-edb",
+      "request": "attach",
+      "config": {
+        "node": "devel@localhost",
+        "cookie": "my-cookie",
+        "cwd": "${workspaceFolder}"
+      }
+    }
+  ]
+}
+```
+
+Set a breakpoint, pick a configuration from the **Run and Debug** view, and press F5.
+
+## Using edb from other IDEs
+
+`edb` speaks DAP, so any DAP-compatible IDE can drive it. For non-VSCode setups, build `edb` from source (see [below](#building-from-source)) and follow the [DAP guide](docs/DAP.md):
+
+* **Emacs**: pick a DAP client such as [dape](https://github.com/svaante/dape) or [dap-mode](https://github.com/emacs-lsp/dap-mode).
+* **vim/neovim**: pick a DAP client such as [vimspector](https://github.com/puremourning/vimspector) or [nvim-dap](https://github.com/mfussenegger/nvim-dap).
+* **IntelliJ**: set up the [lsp4j](https://github.com/redhat-developer/lsp4ij) plugin.
+* **zed**: uses its native DAP support.
+
 ## Building from source
-`edb` requires debugging extensions available since OTP 28.0, and more extensions are in the process of being
-added. Because the `main` branch of `edb` always assumes that these additional extensions are present, if you
-are building from source and targetting OTP 28.0 or 28.1, use the `otp-28.0` branch of `edb` instead.
 
-Moreover, a version of `rebar3` built with Erlang/OTP 26 or higher is required. You can find instructions on how to build `rebar3`
-from source [here](https://rebar3.org/docs/getting-started/#installing-from-source).
-
-### Installing Erlang/OTP
-
-`edb` requires a stock build of Erlang/OTP 29 or later. Install it using your
-preferred method, e.g. [kerl](https://github.com/kerl/kerl),
-[asdf](https://github.com/asdf-vm/asdf-erlang), or your system package manager.
-
-Verify the Erlang installation:
-
-```
-$ erl -version # Should report OTP 29 or later
-```
-
-### Building edb itself
+A version of `rebar3` built with Erlang/OTP 26 or higher is required. You can find instructions on how to build `rebar3` from source [here](https://rebar3.org/docs/getting-started/#installing-from-source).
 
 ```
 $ rebar3 escriptize
@@ -100,12 +97,11 @@ The produced `edb` escript will be available in:
 _build/default/bin/edb
 ```
 
-
 ## Troubleshooting
 
 ### DAP Logs
 
-When starting `edb` as a DAP debugger, it logs useful information that can help you understanding whether `edb` is communicating correctly with a client (tipically, the IDE).
+When starting `edb` as a DAP debugger, it logs useful information that can help you understand whether `edb` is communicating correctly with a client (typically, the IDE).
 
 To find the location of the EDB DAP logs on your machine, open an Erlang shell and run:
 
