@@ -64,7 +64,6 @@ escript_dap(Config) ->
     {ok, Client, #{peer := Peer, modules := #{Module := SourcePath}}} =
         edb_dap_test_support:start_session_via_launch(Config, #{modules => [{filename, "factorial.erl"}]}),
 
-    Module = factorial,
     ok = edb_dap_test_support:configure(Client, [{SourcePath, [{line, 32}]}]),
 
     Response3 = edb_dap_test_client:threads(Client),
