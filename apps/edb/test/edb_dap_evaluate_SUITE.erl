@@ -307,7 +307,7 @@ test_evaluate_clipboard_context_returns_value_in_full(Config) ->
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
     case ST of
         [#{id := TopFrameId} | _] ->
-            % Sanity-check: wth 'watch' context truncates the result
+            % Sanity-check: with 'watch' context truncates the result
             WatchResponse = evaluate_expression(Client, TopFrameId, ~"LongList", watch),
             ?assertEqual(
                 #{

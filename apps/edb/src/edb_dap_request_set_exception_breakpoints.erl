@@ -113,7 +113,7 @@ setExceptionBreakpoints requests: https://microsoft.github.io/debug-adapter-prot
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
     #{
-        %% NB. We don't curretly support exception breakpoints,
+        %% NB. We don't currently support exception breakpoints,
         %% but they are part of the configuration protocol, so
         %% we expect to receive a message to with no filters
         %% as "configurationDone"
