@@ -1082,7 +1082,7 @@ test_terminating_detaches(Config) ->
         ok = edb:terminate(),
         ?assertError(not_attached, edb:attached_node()),
 
-        % No errrors if we re-attach
+        % No errors if we re-attach
         edb:attach(#{node => Node, cookie => Cookie}),
         ?assertMatch(Node, edb:attached_node()),
 

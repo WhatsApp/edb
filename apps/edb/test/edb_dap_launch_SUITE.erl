@@ -318,7 +318,7 @@ test_it_honors_the_timeout(Config) ->
     {ok, [RunInTerminalReq]} = edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
     edb_dap_test_client:respond_success(Client, RunInTerminalReq, #{}),
 
-    % We DONT start the debuggee, so the DAP server should send us a "terminated" event
+    % We DON'T start the debuggee, so the DAP server should send us a "terminated" event
     {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
     ok.
 

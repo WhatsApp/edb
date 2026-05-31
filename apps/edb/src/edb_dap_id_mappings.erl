@@ -23,11 +23,11 @@ A mapper of IDs for the debug adapter
 The DAP protocol expects numeric ids for threads, frames, scopes, etc. These ids
 are represented as number() in the JSON specification, and are expected to fit
 in a 64-bit float. Some ids like thread_ids are expected to be unique across the
-debugging session, while others (frame-ids, etc), need be unique only between
+debugging session, while others (frame-ids, etc), need to be unique only between
 pauses. The specification recommends adapters to reset them on `continue` requests.
 For more details see https://microsoft.github.io/debug-adapter-protocol/overview
 
-This module implements the mapping fo PIDs to thread-ids, etc, generically.
+This module implements the mapping of PIDs to thread-ids, etc, generically.
 """.
 -compile(warn_missing_spec_all).
 

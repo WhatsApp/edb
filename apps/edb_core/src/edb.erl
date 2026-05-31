@@ -81,7 +81,7 @@ A breakpoint may not be added for various reasons:
   * `unsupported`: The node does not support line-breakpoint instrumentations
      (likely for not being started with the `+D` emulator flag).
   * `{badkey, Module}`: The given module does not exist or can't be loaded.
-  * `{unsupported, Module}`: The module was loaded without suppor for line-breakpoints.
+  * `{unsupported, Module}`: The module was loaded without support for line-breakpoints.
   * `{badkey, Line}`: The line is not relevant; it could refer to a comment, not exist in
      the module source, and so on.
   * `{unsupported, Line}`: It is not possible to set a breakpoint in the given line;
@@ -100,7 +100,7 @@ A breakpoint may not be added for various reasons:
 A function-breakpoint may not be added for various reasons:
   * `unsupported`: The node does not support line-breakpoint instrumentations
      (likely for not being started with the `+D` emulator flag).
-  * `{unsupported, Module}`: The module was loaded without suppor for line-breakpoints.
+  * `{unsupported, Module}`: The module was loaded without support for line-breakpoints.
   * `no_abstract_code`: The module was not compiled with the `debug_info` option.
   * `{badkey, MFA}`: The given function (or module) does not exist.
   * `timeout_loading_module`: The module could not be loaded in time, possibly because a user process loading it is suspended.
@@ -688,7 +688,7 @@ Processes can be specified in the following ways:
 
 E.g. a spec like:
 ```
-[Pid1, {appication, foo}, {application, bar}, {except, Pid2}, {except, Pid3}]
+[Pid1, {application, foo}, {application, bar}, {except, Pid2}, {except, Pid3}]
 ```
 will exclude `Pid1` and all processes in applications `foo` and `bar`; however
 `Pid2` and `Pid3` are guaranteed not to be excluded, whether they are part
