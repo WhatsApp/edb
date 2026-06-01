@@ -43,5 +43,17 @@ call_local_closure() ->
     end,
     F(42).
 
+call_dynamic_module(Mod) ->
+    Mod:foo(42).
+
+call_dynamic_function(Fun) ->
+    ?MODULE:Fun(42).
+
+call_dynamic_mfa(Mod, Fun) ->
+    Mod:Fun(42).
+
+call_erlang_apply(M, F) ->
+    erlang:apply(M, F, [42]).
+
 bar(Y) ->
     Y * 2.

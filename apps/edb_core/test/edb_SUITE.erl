@@ -90,6 +90,10 @@
 -export([test_step_in_try_statement/1]).
 -export([test_step_in_binop/1]).
 -export([test_step_in_local_closure/1]).
+-export([test_step_in_on_dynamic_module/1]).
+-export([test_step_in_on_dynamic_function/1]).
+-export([test_step_in_on_dynamic_mfa/1]).
+-export([test_step_in_on_erlang_apply/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 -export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
@@ -195,6 +199,11 @@ groups() ->
             test_step_in_try_statement,
             test_step_in_binop,
             test_step_in_local_closure,
+
+            test_step_in_on_dynamic_module,
+            test_step_in_on_dynamic_function,
+            test_step_in_on_dynamic_mfa,
+            test_step_in_on_erlang_apply,
 
             test_step_in_fails_if_non_fun_target,
             test_step_in_fails_if_fun_not_found,
@@ -2909,6 +2918,30 @@ test_step_in_local_closure(_Config) ->
     LineCallingClosure = 44,
     {ok, #{mfa := {test_step_in, _, 1}, line := 42}} = gen_test_step_in(Fun, LineCallingClosure).
 
+test_step_in_on_dynamic_module(_Config) ->
+    Fun = call_dynamic_module,
+    Args = [test_step_in],
+    LineCallingFoo = 47,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo).
+
+test_step_in_on_dynamic_function(_Config) ->
+    Fun = call_dynamic_function,
+    Args = [foo],
+    LineCallingFoo = 50,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo).
+
+test_step_in_on_dynamic_mfa(_Config) ->
+    Fun = call_dynamic_mfa,
+    Args = [test_step_in, foo],
+    LineCallingFoo = 53,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo).
+
+test_step_in_on_erlang_apply(_Config) ->
+    Fun = call_erlang_apply,
+    Args = [test_step_in, foo],
+    LineCallingFoo = 56,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo).
+
 test_step_in_fails_if_non_fun_target(_Config) ->
     M = test_step_in,
     Fun = call_static_local,
@@ -3053,22 +3086,31 @@ test_step_in_fails_if_module_loading_is_stuck(Config) ->
 
 -spec gen_test_step_in_success_calling_foo0(Fun :: atom(), LineCallingFoo :: edb:line()) -> ok.
 gen_test_step_in_success_calling_foo0(Fun, LineCallingFoo) ->
-    {ok, #{mfa := {test_step_in, foo, 1}, line := 6}} = gen_test_step_in(Fun, LineCallingFoo),
+    gen_test_step_in_success_calling_foo0(Fun, [], LineCallingFoo).
+
+-spec gen_test_step_in_success_calling_foo0(Fun :: atom(), Args :: [term()], LineCallingFoo :: edb:line()) -> ok.
+gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo) ->
+    {ok, #{mfa := {test_step_in, foo, 1}, line := 6}} = gen_test_step_in(Fun, Args, LineCallingFoo),
     ok.
 
 -spec gen_test_step_in(Fun :: atom(), LineOfCall :: edb:line()) -> {ok, edb:stack_frame()}.
 gen_test_step_in(Fun, LineOfCall) ->
+    gen_test_step_in(Fun, [], LineOfCall).
+
+-spec gen_test_step_in(Fun :: atom(), Args :: [term()], LineOfCall :: edb:line()) -> {ok, edb:stack_frame()}.
+gen_test_step_in(Fun, Args, LineOfCall) ->
     M = test_step_in,
 
     % Add a breakpoint before the call to foo/1
     ok = edb:add_breakpoint(M, LineOfCall),
 
     % Spawn a process that will hit this breakpoint
-    Pid = erlang:spawn(M, Fun, []),
+    Pid = erlang:spawn(M, Fun, Args),
     {ok, paused} = edb:wait(),
 
     % Sanity check, we are on the expected breakpoint
-    {ok, [#{mfa := {M, Fun, 0}, line := LineOfCall}]} = edb:stack_frames(Pid),
+    Arity = length(Args),
+    {ok, [#{mfa := {M, Fun, Arity}, line := LineOfCall}]} = edb:stack_frames(Pid),
 
     % Remove the breakpoint, as we only want to stop due to stepping
     ok = edb:clear_breakpoint(M, LineOfCall),

@@ -610,12 +610,33 @@ fetch_local_vars(Pid, TopFrameId, FullRawFrames) ->
     Vars :: #{binary() => edb:value()},
     VmMod :: vm_module(),
     Target :: edb_server_code:call_target().
-try_resolve_mfa(_Vars, _, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
+try_resolve_mfa(_Vars, _VmMod, MFA = {M, F, A}) when is_atom(M), is_atom(F), is_integer(A) ->
     {true, MFA};
-try_resolve_mfa(_Vars, {vm_module, M}, {F, A}) when is_atom(F) ->
+try_resolve_mfa(_Vars, {vm_module, M}, {F, A}) when is_atom(F), is_integer(A) ->
     {true, {M, F, A}};
-try_resolve_mfa(_Vars, _, _) ->
+try_resolve_mfa(Vars, VmMod, {Mv, F, A}) when is_binary(Mv), is_integer(A) ->
+    case lookup_atom_var(Mv, Vars) of
+        {ok, M} -> try_resolve_mfa(Vars, VmMod, {M, F, A});
+        error -> false
+    end;
+try_resolve_mfa(Vars, VmMod, {M, Fv, A}) when is_atom(M), is_binary(Fv), is_integer(A) ->
+    case lookup_atom_var(Fv, Vars) of
+        {ok, F} -> try_resolve_mfa(Vars, VmMod, {M, F, A});
+        error -> false
+    end;
+try_resolve_mfa(_Vars, _VmMod, _Target) ->
     false.
+
+-spec lookup_atom_var(VarName, Vars) -> {ok, atom()} | error when
+    VarName :: binary(),
+    Vars :: #{binary() => edb:value()}.
+lookup_atom_var(VarName, Vars) ->
+    case Vars of
+        #{VarName := {value, V}} when is_atom(V) ->
+            {ok, V};
+        #{} ->
+            error
+    end.
 
 %% --------------------------------------------------------------------
 %% Execution control
