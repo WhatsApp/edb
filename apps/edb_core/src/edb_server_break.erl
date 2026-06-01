@@ -75,6 +75,7 @@
     | timeout_loading_module.
 
 -export_type([breakpoints/0, vm_module/0]).
+
 -record(breakpoints, {
     %% TODO(T198738599): we should somehow keep track of the identity
     %% of the module instance on which the breakpoint
@@ -354,11 +355,14 @@ prepare_for_stepping(StepType, Pid, Breakpoints0) ->
     Pid :: pid(),
     Error :: edb:step_in_error().
 prepare_for_stepping_in(Pid, Breakpoints0) ->
-    case edb_server_stack_frames:raw_user_stack_frames(Pid) of
+    case edb_server_stack_frames:raw_stack_frames(Pid) of
         not_paused ->
             {error, not_paused};
-        [TopFrame | _] = StackFrames ->
-            case get_targets_for_step_in(TopFrame) of
+        FullRawFrames ->
+            [TopFrame | _] = StackFrames = edb_server_stack_frames:user_frames_only(FullRawFrames),
+            {TopFrameId, _, _} = TopFrame,
+            Vars = fetch_local_vars(Pid, TopFrameId, FullRawFrames),
+            case get_targets_for_step_in(Vars, TopFrame) of
                 {error, _} = Error ->
                     Error;
                 {ok, TargetMFAs} ->
@@ -562,9 +566,14 @@ add_step(Pid, Patterns, VmModule, Line, Breakpoints0) ->
             no_breakpoint_set
     end.
 
--spec get_targets_for_step_in(TopFrame) -> {ok, nonempty_list(mfa())} | {error, edb:step_in_error()} when
+-spec get_targets_for_step_in(Vars, TopFrame) ->
+    {ok, nonempty_list(mfa())} | {error, edb:step_in_error()}
+when
+    Vars :: #{binary() => edb:value()},
     TopFrame :: erl_debugger:stack_frame().
-get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_integer(Line) ->
+get_targets_for_step_in(Vars, {_TopFrameId, #{function := {M, _, _}, line := Line}, _}) when
+    is_integer(Line)
+->
     case edb_server_code:get_debug_info(M, Line) of
         {error, not_found} ->
             {error, {call_target, {module_not_found, M}}};
@@ -573,23 +582,39 @@ get_targets_for_step_in({_, #{function := {M, _, _}, line := Line}, _}) when is_
         {error, no_debug_info} ->
             {error, {cannot_breakpoint, M}};
         {ok, #{calls := Calls0}} ->
-            Calls1 = lists:filtermap(fun(Target) -> try_resolve_mfa({vm_module, M}, Target) end, Calls0),
+            Calls1 = lists:filtermap(fun(Target) -> try_resolve_mfa(Vars, {vm_module, M}, Target) end, Calls0),
             case Calls1 of
                 [] -> {error, {call_target, not_found}};
                 _ -> {ok, Calls1}
             end
     end;
-get_targets_for_step_in(_TopFrame) ->
+get_targets_for_step_in(_Vars, _TopFrame) ->
     edb_server:invariant_violation(stepping_from_unbreakable_frame).
 
--spec try_resolve_mfa(VmMod, Target) -> false | {true, mfa()} when
+-spec fetch_local_vars(Pid, TopFrameId, FullRawFrames) -> Vars when
+    Pid :: pid(),
+    TopFrameId :: edb:frame_id(),
+    FullRawFrames :: [erl_debugger:stack_frame()],
+    Vars :: #{binary() => edb:value()}.
+fetch_local_vars(Pid, TopFrameId, FullRawFrames) ->
+    MaxTermSize = 16384,
+    Opts = #{resolve_local_vars => true},
+    Result = edb_server_stack_frames:stack_frame_vars(Pid, TopFrameId, MaxTermSize, FullRawFrames, Opts),
+    case Result of
+        {ok, #{vars := Vars}} -> Vars;
+        {ok, _} -> #{};
+        undefined -> #{}
+    end.
+
+-spec try_resolve_mfa(Vars, VmMod, Target) -> false | {true, mfa()} when
+    Vars :: #{binary() => edb:value()},
     VmMod :: vm_module(),
     Target :: edb_server_code:call_target().
-try_resolve_mfa(_, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
+try_resolve_mfa(_Vars, _, MFA = {M, F, _}) when is_atom(M), is_atom(F) ->
     {true, MFA};
-try_resolve_mfa({vm_module, M}, {F, A}) when is_atom(F) ->
+try_resolve_mfa(_Vars, {vm_module, M}, {F, A}) when is_atom(F) ->
     {true, {M, F, A}};
-try_resolve_mfa(_, _) ->
+try_resolve_mfa(_Vars, _, _) ->
     false.
 
 %% --------------------------------------------------------------------
