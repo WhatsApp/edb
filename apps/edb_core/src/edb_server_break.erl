@@ -624,6 +624,17 @@ try_resolve_mfa(Vars, VmMod, {M, Fv, A}) when is_atom(M), is_binary(Fv), is_inte
         {ok, F} -> try_resolve_mfa(Vars, VmMod, {M, F, A});
         error -> false
     end;
+try_resolve_mfa(Vars, _VmMod, Fv) when is_binary(Fv) ->
+    case Vars of
+        #{Fv := {value, FunVal}} when is_function(FunVal) ->
+            try erlang:fun_info_mfa(FunVal) of
+                {M, F, A} -> {true, {M, F, A}}
+            catch
+                _:_ -> false
+            end;
+        #{} ->
+            false
+    end;
 try_resolve_mfa(_Vars, _VmMod, _Target) ->
     false.
 

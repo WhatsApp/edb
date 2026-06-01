@@ -94,6 +94,10 @@
 -export([test_step_in_on_dynamic_function/1]).
 -export([test_step_in_on_dynamic_mfa/1]).
 -export([test_step_in_on_erlang_apply/1]).
+-export([test_step_in_on_external_fun_var/1]).
+-export([test_step_in_on_local_fun_var/1]).
+-export([test_step_in_on_closure_var/1]).
+-export([test_step_in_fails_if_var_not_a_fun/1]).
 -export([test_step_in_fails_if_non_fun_target/1]).
 -export([test_step_in_fails_if_fun_not_found/1]).
 -export([test_step_in_loads_module_if_necessary/1]).
@@ -205,6 +209,11 @@ groups() ->
             test_step_in_on_dynamic_mfa,
             test_step_in_on_erlang_apply,
 
+            test_step_in_on_external_fun_var,
+            test_step_in_on_local_fun_var,
+            test_step_in_on_closure_var,
+
+            test_step_in_fails_if_var_not_a_fun,
             test_step_in_fails_if_non_fun_target,
             test_step_in_fails_if_fun_not_found,
 
@@ -2941,6 +2950,46 @@ test_step_in_on_erlang_apply(_Config) ->
     Args = [test_step_in, foo],
     LineCallingFoo = 56,
     gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingFoo).
+
+test_step_in_on_external_fun_var(_Config) ->
+    Fun = call_fun_var,
+    Args = [test_step_in:make_external_fun()],
+    LineCallingF = 59,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingF).
+
+test_step_in_on_local_fun_var(_Config) ->
+    Fun = call_fun_var,
+    Args = [test_step_in:make_local_fun()],
+    LineCallingF = 59,
+    gen_test_step_in_success_calling_foo0(Fun, Args, LineCallingF).
+
+test_step_in_on_closure_var(_Config) ->
+    Fun = call_fun_var,
+    Args = [test_step_in:make_closure()],
+    LineCallingF = 59,
+    % Closures step into the synthesized closure function (not foo/1 directly),
+    % so we check landing in the closure body — which itself calls foo(X).
+    {ok, #{mfa := {test_step_in, _, 1}, line := 66}} = gen_test_step_in(Fun, Args, LineCallingF).
+
+test_step_in_fails_if_var_not_a_fun(_Config) ->
+    M = test_step_in,
+    Fun = call_fun_var,
+    Args = [test_step_in:make_not_a_fun()],
+    LineCallingF = 59,
+
+    % Add a breakpoint before `F(42)`
+    ok = edb:add_breakpoint(M, LineCallingF),
+
+    % Spawn a process that will hit this breakpoint
+    Pid = erlang:spawn(M, Fun, Args),
+    {ok, paused} = edb:wait(),
+
+    % Sanity check, we are on the expected breakpoint
+    {ok, [#{mfa := {M, Fun, 1}, line := LineCallingF}]} = edb:stack_frames(Pid),
+
+    % F is bound to an atom — no call target can be resolved
+    ?assertEqual({error, {call_target, not_found}}, edb:step_in(Pid)),
+    ok.
 
 test_step_in_fails_if_non_fun_target(_Config) ->
     M = test_step_in,

@@ -55,5 +55,17 @@ call_dynamic_mfa(Mod, Fun) ->
 call_erlang_apply(M, F) ->
     erlang:apply(M, F, [42]).
 
+call_fun_var(F) ->
+    catch F(42),
+    ok.
+
+make_external_fun() -> fun ?MODULE:foo/1.
+make_local_fun() -> fun foo/1.
+make_closure() ->
+    fun(X) ->
+        foo(X)
+    end.
+make_not_a_fun() -> not_a_fun_atom.
+
 bar(Y) ->
     Y * 2.
