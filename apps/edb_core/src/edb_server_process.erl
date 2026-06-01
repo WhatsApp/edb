@@ -36,7 +36,7 @@
 %% Types
 %% ------------------------------------------------------------------
 
-%% The original erlang:process_info_item/0 and erlang:proces_info_result_item/0
+%% The original erlang:process_info_item/0 and erlang:process_info_result_item/0
 %% types are not exported
 -type erlang_process_info_item() ::
     current_location
