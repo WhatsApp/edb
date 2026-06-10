@@ -72,7 +72,7 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction() when
     State :: edb_dap_server:state(),
     Args :: config().
-handle(State0 = #{state := initialized}, Args) ->
+handle(State0 = #{state := initialized, dap_language := DapLanguage}, Args) ->
     #{config := Config} = Args,
     AttachArgs = maps:without([cwd, stripSourcePrefix], Config),
     case edb:attach(AttachArgs) of
@@ -83,6 +83,7 @@ handle(State0 = #{state := initialized}, Args) ->
             Node = maps:get(node, Config),
             ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
             {ok, Subscription} = edb:subscribe(),
+            DapLanguageState = DapLanguage:init(),
             State1 = State0#{
                 state => configuring,
                 type => #{
@@ -93,6 +94,7 @@ handle(State0 = #{state := initialized}, Args) ->
                 node => Node,
                 reverse_attach_ref => undefined,
                 cwd => edb_dap_utils:strip_suffix(Cwd, StripSourcePrefix),
+                dap_language_state => DapLanguageState,
                 subscription => Subscription
             },
             #{

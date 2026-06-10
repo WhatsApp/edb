@@ -183,10 +183,10 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(capabilities()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := started}, ClientInfo) ->
+handle(State0 = #{state := started}, ClientInfo) ->
     #{
         response => edb_dap_request:success(capabilities()),
-        new_state => #{state => initialized, client_info => ClientInfo}
+        new_state => State0#{state => initialized, client_info => ClientInfo}
     };
 handle(_InvalidState, _Args) ->
     edb_dap_request:unexpected_request().

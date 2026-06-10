@@ -128,10 +128,11 @@ paused_impl(#{state := S}, Event) ->
     Result :: edb:reverse_attachment_event(),
     State :: edb_dap_server:state(),
     Reaction :: reaction().
-reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
+reverse_attach_impl({attached, Node}, State0 = #{state := launching, dap_language := DapLanguage}) ->
     State1 = maps:without([shell_process_id], State0),
 
     ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
+    DapLanguageState = DapLanguage:init(),
 
     AttachType0 = maps:with([shell_process_id], State0),
     AttachType1 = AttachType0#{request => launch, process_id => ProcessId},
@@ -140,7 +141,8 @@ reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
         new_state => State1#{
             state => configuring,
             type => AttachType1,
-            node => Node
+            node => Node,
+            dap_language_state => DapLanguageState
         }
     };
 reverse_attach_impl({error, Node, {bootstrap_failed, BootstrapFailure}}, #{state := launching}) ->

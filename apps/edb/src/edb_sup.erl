@@ -24,15 +24,23 @@ edb top level supervisor.
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/0, start_link/1]).
 
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
 
+-type options() :: #{
+    dap_language => module()
+}.
+
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    start_link(#{}).
+
+-spec start_link(options()) -> supervisor:startlink_ret().
+start_link(Options) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Options]).
 
 %% sup_flags() = #{strategy => strategy(),         % optional
 %%                 intensity => non_neg_integer(), % optional
@@ -43,8 +51,8 @@ start_link() ->
 %%                  shutdown => shutdown(), % optional
 %%                  type => worker(),       % optional
 %%                  modules => modules()}   % optional
--spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
-init([]) ->
+-spec init([options()]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
+init([Options]) ->
     SupFlags = #{
         strategy => rest_for_one,
         intensity => 5,
@@ -66,7 +74,7 @@ init([]) ->
             },
             #{
                 id => edb_dap_server,
-                start => {edb_dap_server, start_link, []},
+                start => {edb_dap_server, start_link, [maps:with([dap_language], Options)]},
                 restart => transient
             },
             #{

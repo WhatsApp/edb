@@ -11,31 +11,24 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%%-------------------------------------------------------------------
-%% % @format
--module(edb_app).
+
+%%% % @format
+
+-module(edb_dap_language).
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-edb public API
+Language-specific hooks for the DAP adapter.
 """.
 -compile(warn_missing_spec_all).
 
--behaviour(application).
+-export_type([state/0]).
 
--export([start/2, stop/1]).
+-type state() :: dynamic().
 
--spec start(application:start_type(), term()) -> {ok, pid()}.
-start(_StartType, _StartArgs) ->
-    Options =
-        case application:get_env(edb, dap_language) of
-            {ok, DapLanguage} ->
-                #{dap_language => DapLanguage};
-            undefined ->
-                #{}
-        end,
-    {ok, _Sup} = edb_sup:start_link(Options).
-
--spec stop(term()) -> ok.
-stop(_State) ->
-    ok.
+-callback init() -> dynamic().
+-callback source_to_modules(Path, Lines, State) -> {Modules, State} when
+    Path :: binary(),
+    Lines :: [edb:line()],
+    Modules :: [module()],
+    State :: dynamic().
