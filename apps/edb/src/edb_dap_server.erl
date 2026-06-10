@@ -77,6 +77,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         shell_process_id => number(),
         reverse_attach_ref := reference(),
         cwd := binary(),
+        source_modules => #{binary() => [module()]},
         subscription := edb:event_subscription()
     }
     | #{
@@ -91,6 +92,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
+        source_modules => #{binary() => [module()]},
         subscription := edb:event_subscription()
     }
     | #{
@@ -102,6 +104,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
+        source_modules => #{binary() => [module()]},
         subscription := edb:event_subscription()
     }
     | #{

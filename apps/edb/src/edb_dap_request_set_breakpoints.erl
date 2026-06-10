@@ -200,25 +200,25 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(#{state := configuring}, Args) ->
-    set_breakpoints(Args);
-handle(#{state := attached}, Args) ->
-    set_breakpoints(Args);
+handle(State = #{state := configuring}, Args) ->
+    set_breakpoints(State, Args);
+handle(State = #{state := attached}, Args) ->
+    set_breakpoints(State, Args);
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec set_breakpoints(Args) -> edb_dap_request:reaction(response()) when
+-spec set_breakpoints(State, Args) -> edb_dap_request:reaction(response()) when
+    State :: edb_dap_server:state(),
     Args :: arguments().
-set_breakpoints(Args = #{source := #{path := Path}}) ->
-    Module = binary_to_atom(filename:basename(Path, ".erl")),
-
+set_breakpoints(State0, Args = #{source := #{path := Path}}) ->
     SourceBreakpoints = maps:get(breakpoints, Args, []),
     SourceBreakpointLines = [Line || #{line := Line} <- SourceBreakpoints],
+    {Modules, State1} = source_path_to_modules(Path, SourceBreakpointLines, State0),
 
-    LineResults = edb:set_breakpoints(Module, SourceBreakpointLines),
+    LineResults = set_breakpoints_in_modules(Modules, SourceBreakpointLines),
 
     Breakpoints = [
         case Result of
@@ -230,7 +230,91 @@ set_breakpoints(Args = #{source := #{path := Path}}) ->
         end
      || {Line, Result} <:- LineResults
     ],
-    #{response => edb_dap_request:success(#{breakpoints => Breakpoints})}.
+    #{
+        response => edb_dap_request:success(#{breakpoints => Breakpoints}),
+        new_state => State1
+    }.
+
+-spec source_path_to_modules(Path, Lines, State) -> {Modules, edb_dap_server:state()} when
+    Path :: binary(),
+    Lines :: [edb:line()],
+    Modules :: [module()],
+    State :: edb_dap_server:state().
+source_path_to_modules(Path, Lines, State) ->
+    SourceModules = maps:get(source_modules, State, #{}),
+    CachedModules = maps:get(Path, SourceModules, []),
+    ConfiguredModules =
+        case {Lines, CachedModules} of
+            {[], [_ | _]} -> [];
+            _ -> configured_source_path_to_modules(Path)
+        end,
+    Modules =
+        case {Lines, CachedModules, ConfiguredModules} of
+            {[], [_ | _] = Modules0, _} ->
+                Modules0;
+            {_, _, [_ | _] = Modules0} ->
+                Modules0;
+            {_, [_ | _] = Modules0, _} ->
+                Modules0;
+            _ ->
+                Extension = filename:extension(Path),
+                ModuleName = filename:basename(Path, Extension),
+                [binary_to_atom(unicode:characters_to_binary(ModuleName))]
+        end,
+    State1 =
+        case {Lines, ConfiguredModules} of
+            {[], _} ->
+                State#{source_modules => maps:remove(Path, SourceModules)};
+            {_, [_ | _]} ->
+                State#{source_modules => SourceModules#{Path => Modules}};
+            _ ->
+                State
+        end,
+    {Modules, State1}.
+
+-spec configured_source_path_to_modules(Path :: binary()) -> [module()].
+configured_source_path_to_modules(Path) ->
+    Eval = fun() ->
+        case application:get_env(edb, file_to_module_cb, undefined) of
+            {eval, Fun} when is_function(Fun, 1) ->
+                Fun(Path);
+            _ ->
+                []
+        end
+    end,
+    case edb:eval(#{function => Eval, timeout => 5_000}) of
+        {ok, Modules} -> Modules;
+        _ -> []
+    end.
+
+-spec set_breakpoints_in_modules(Modules, Lines) -> edb:set_breakpoints_result() when
+    Modules :: [module()],
+    Lines :: [edb:line()].
+set_breakpoints_in_modules([Module], Lines) ->
+    edb:set_breakpoints(Module, Lines);
+set_breakpoints_in_modules(Modules, Lines) ->
+    ResultsByModule = [edb:set_breakpoints(Module, Lines) || Module <- Modules],
+    [{Line, merge_line_results(Line, ResultsByModule)} || Line <- Lines].
+
+-spec merge_line_results(Line, ResultsByModule) -> ok | {error, edb:add_breakpoint_error()} when
+    Line :: edb:line(),
+    ResultsByModule :: [edb:set_breakpoints_result()].
+merge_line_results(Line, ResultsByModule) ->
+    LineResults = [
+        Result
+     || ModuleResults <- ResultsByModule,
+        {ResultLine, Result} <- ModuleResults,
+        ResultLine =:= Line
+    ],
+    case lists:member(ok, LineResults) of
+        true ->
+            ok;
+        false ->
+            case LineResults of
+                [{error, Reason} | _] -> {error, Reason};
+                [] -> {error, {badkey, Line}}
+            end
+    end.
 
 -spec format_breakpoint_error(Error) -> binary() when
     Error :: edb:add_breakpoint_error().
