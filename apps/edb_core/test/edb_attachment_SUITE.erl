@@ -578,7 +578,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
         {ok, resumed} = edb:continue(),
 
         ActualNode = peer:call(Peer, erlang, node, []),
-        ?assertEqual(ActualNode, edb:attached_node()),
+        ?assertEqual(edb:attached_node(), ActualNode),
         ok
     end).
 
@@ -605,7 +605,7 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
         {ok, resumed} = edb:continue(),
 
         ActualNode = peer:call(Peer, erlang, node, []),
-        ?assertEqual(ActualNode, edb:attached_node()),
+        ?assertEqual(edb:attached_node(), ActualNode),
         ok
     end).
 
