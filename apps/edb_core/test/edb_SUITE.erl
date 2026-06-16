@@ -1526,7 +1526,7 @@ test_set_breakpoints_loads_the_module_if_necessary(Config) ->
 
     code:delete(Module),
 
-    % We fail if the the module can't be loaded
+    % We fail if the module can't be loaded
     NonExistentModule = some_non_existent_module,
     ?assertEqual(
         [{4, {error, {badkey, NonExistentModule}}}],
