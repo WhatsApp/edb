@@ -38,7 +38,7 @@ stepOut requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 -type arguments() :: #{
     %  Specifies the thread for which to resume execution for one step-out (of the
     %  given granularity).
-    threadId := number(),
+    threadId := integer(),
 
     %  If this flag is true, all other suspended threads are not resumed.
     singleThread => boolean(),

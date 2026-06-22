@@ -68,11 +68,11 @@ runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protoc
 -type response_body() :: #{
     %% The process ID. The value should be less than or equal to 2147483647 * (2^31-1).
     %% NB. Currently not sent by VS Code. See https://github.com/microsoft/vscode/issues/61640#issuecomment-432696354
-    processId => number(),
+    processId => integer(),
 
     %% The process ID of the terminal shell. The value should be less than or
     %% equal to 2147483647 (2^31-1).
-    shellProcessId => number()
+    shellProcessId => integer()
 }.
 
 -export_type([arguments/0, response_body/0]).
