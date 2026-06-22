@@ -158,7 +158,7 @@ decode_frames(Data, Messages) ->
 %%% Basic Types (used by requests and responses)
 %%%---------------------------------------------------------------------------------
 
--type thread_id() :: number().
+-type thread_id() :: integer().
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_Source
 -type source() :: #{

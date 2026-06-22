@@ -276,7 +276,7 @@ get_stack_trace(Client, ThreadId) ->
 
 -spec get_scopes(Client, FrameId) -> #{ScopeName => Scope} when
     Client :: client(),
-    FrameId :: number(),
+    FrameId :: integer(),
     ScopeName :: binary(),
     Scope :: edb_dap_request_scopes:scope().
 get_scopes(Client, FrameId) ->
@@ -292,7 +292,7 @@ get_scopes(Client, FrameId) ->
 
 -spec get_variables(Client, VarRef) -> #{VarName => VarInfo} when
     Client :: client(),
-    VarRef :: number(),
+    VarRef :: integer(),
     VarName :: binary(),
     VarInfo :: edb_dap_request_variables:variable().
 get_variables(Client, VarRef) ->

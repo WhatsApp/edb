@@ -112,12 +112,12 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
 -type sourceBreakpoint() :: #{
     %% The source line of the breakpoint or logpoint.
-    line := number(),
+    line := integer(),
 
     %% Start position within source line of the breakpoint or logpoint. It is
     %% measured in UTF-16 code units and the client capability `columnsStartAt1`
     %% determines whether it is 0- or 1-based.
-    column => number(),
+    column => integer(),
 
     %% The expression for conditional breakpoints.
     %% It is only honored by a debug adapter if the corresponding capability

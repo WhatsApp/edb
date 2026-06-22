@@ -88,25 +88,25 @@ stackTrace requests: https://microsoft.github.io/debug-adapter-protocol/specific
     % An identifier for the stack frame. It must be unique across all threads.
     % This id can be used to retrieve the scopes of the frame with the `scopes`
     % request or to restart the execution of a stack frame.
-    id := number(),
+    id := integer(),
     % The name of the stack frame, typically a method name.
     name := binary(),
     % The source of the frame.
     source => edb_dap:source(),
     % The line within the source of the frame. If the source attribute is missing
     % or doesn't exist, `line` is 0 and should be ignored by the client.
-    line := number(),
+    line := integer(),
     % Start position of the range covered by the stack frame. It is measured in
     % UTF-16 code units and the client capability `columnsStartAt1` determines
     % whether it is 0- or 1-based. If attribute `source` is missing or doesn't
     % exist, `column` is 0 and should be ignored by the client.
-    column := number(),
+    column := integer(),
     % The end line of the range covered by the stack frame.
-    endLine => number(),
+    endLine => integer(),
     % End position of the range covered by the stack frame. It is measured in
     % UTF-16 code units and the client capability `columnsStartAt1` determines
     % whether it is 0- or 1-based.
-    endColumn => number(),
+    endColumn => integer(),
     % Indicates whether this frame can be restarted with the `restartFrame`
     % request. Clients should only use this if the debug adapter supports the
     % `restart` request and the corresponding capability `supportsRestartFrame`

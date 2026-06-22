@@ -37,7 +37,7 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
 %% Types
 %% ------------------------------------------------------------------
 
--type variables_reference() :: number().
+-type variables_reference() :: integer().
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
 -type arguments() :: #{
@@ -51,12 +51,12 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
     % The index of the first variable to return; if omitted children start at 0.
     % The attribute is only honored by a debug adapter if the corresponding
     % capability `supportsVariablePaging` is true.
-    start => number(),
+    start => integer(),
     % The number of variables to return. If count is missing or 0, all variables
     % are returned.
     % The attribute is only honored by a debug adapter if the corresponding
     % capability `supportsVariablePaging` is true.
-    count => number(),
+    count => integer(),
     % Specifies details on how to format the Variable values.
     % The attribute is only honored by a debug adapter if the corresponding
     % capability `supportsValueFormattingOptions` is true.

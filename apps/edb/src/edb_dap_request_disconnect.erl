@@ -106,8 +106,8 @@ handle(State, Args) ->
     none
     | #{
         node := node(),
-        process_id := number(),
-        shell_process_id => number(),
+        process_id := integer(),
+        shell_process_id => integer(),
         port => port() | none
     }.
 
@@ -195,7 +195,7 @@ kill_node(Node) ->
     ok.
 
 -spec kill_os_process(ProcessId, force | dont_force) -> ok when
-    ProcessId :: number().
+    ProcessId :: integer().
 kill_os_process(ProcessId, ForceOrNot) ->
     case os:type() of
         {unix, _} -> kill_unix_process(ProcessId, ForceOrNot);
@@ -203,7 +203,7 @@ kill_os_process(ProcessId, ForceOrNot) ->
     end.
 
 -spec kill_unix_process(ProcessId, ForceOrNot) -> ok when
-    ProcessId :: number(),
+    ProcessId :: integer(),
     ForceOrNot :: force | dont_force.
 kill_unix_process(ProcessId, force) ->
     os:cmd("kill -9 " ++ integer_to_list(ProcessId)),
@@ -213,7 +213,7 @@ kill_unix_process(ProcessId, dont_force) ->
     ok.
 
 -spec kill_win_process(ProcessId, ForceOrNot) -> ok when
-    ProcessId :: number(),
+    ProcessId :: integer(),
     ForceOrNot :: force | dont_force.
 kill_win_process(ProcessId, force) ->
     os:cmd("taskkill /F /PID " ++ integer_to_list(ProcessId)),

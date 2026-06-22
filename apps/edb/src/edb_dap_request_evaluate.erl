@@ -40,19 +40,19 @@ evaluate requests: https://microsoft.github.io/debug-adapter-protocol/specificat
 
     % Evaluate the expression in the scope of this stack frame. If not specified,
     % the expression is evaluated in the global scope.
-    frameId => number(),
+    frameId => integer(),
 
     % The contextual line where the expression should be evaluated. In the
     % 'hover' context, this should be set to the start of the expression being
     % hovered.
-    line => number(),
+    line => integer(),
 
     % The contextual column where the expression should be evaluated. This may be
     % provided if `line` is also provided.
     %
     % It is measured in UTF-16 code units and the client capability
     % `columnsStartAt1` determines whether it is 0- or 1-based.
-    column => number(),
+    column => integer(),
 
     % The contextual source in which the `line` is found. This must be provided
     % if `line` is provided.
@@ -95,19 +95,19 @@ evaluate requests: https://microsoft.github.io/debug-adapter-protocol/specificat
     % children can be retrieved by passing `variablesReference` to the
     % `variables` request as long as execution remains suspended. See 'Lifetime
     % of Object References' in the Overview section for details.
-    variablesReference := number(),
+    variablesReference := integer(),
 
     % The number of named child variables.
     % The client can use this information to present the variables in a paged
     % UI and fetch them in chunks.
     % The value should be less than or equal to 2147483647 (2^31-1).
-    namedVariables => number(),
+    namedVariables => integer(),
 
     % The number of indexed child variables.
     % The client can use this information to present the variables in a paged
     % UI and fetch them in chunks.
     % The value should be less than or equal to 2147483647 (2^31-1).
-    indexedVariables => number(),
+    indexedVariables => integer(),
 
     % A memory reference to a location appropriate for this result.
     % For pointer type eval results, this is generally a reference to the
@@ -124,7 +124,7 @@ evaluate requests: https://microsoft.github.io/debug-adapter-protocol/specificat
     %
     % This reference shares the same lifetime as the `variablesReference`. See
     % 'Lifetime of Object References' in the Overview section for details.
-    valueLocationReference => number()
+    valueLocationReference => integer()
 }.
 
 -export_type([arguments/0, response_body/0]).

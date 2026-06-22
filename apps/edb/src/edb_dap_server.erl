@@ -51,12 +51,12 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
 -type attach_type() ::
     #{
         request := attach,
-        process_id := number()
+        process_id := integer()
     }
     | #{
         request := launch,
-        process_id := number(),
-        shell_process_id => number()
+        process_id := integer(),
+        shell_process_id => integer()
     }.
 
 -type state() ::
@@ -74,7 +74,7 @@ For details see https://microsoft.github.io/debug-adapter-protocol/specification
         state := launching,
         client_info := client_info(),
         port := port() | none,
-        shell_process_id => number(),
+        shell_process_id => integer(),
         reverse_attach_ref := reference(),
         cwd := binary(),
         subscription := edb:event_subscription()

@@ -380,7 +380,7 @@ test_evaluate_without_frame_id(Config) ->
 
 -spec evaluate_expression(Client, FrameId, Expression, Context) -> Result when
     Client :: edb_dap_test_support:client(),
-    FrameId :: number(),
+    FrameId :: integer(),
     Expression :: binary(),
     Context :: atom(),
     Result :: #{success := boolean(), body := edb_dap_request_evaluate:response_body()}.

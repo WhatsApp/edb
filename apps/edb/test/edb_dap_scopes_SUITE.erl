@@ -831,7 +831,7 @@ inspect(Inspector, Module, Fun, Args) ->
 % -----------------------------------------------------------------------------
 -spec get_variables_page(Client, VarRef, Window) -> [edb_dap_request_variables:variable()] when
     Client :: edb_dap_test_support:client(),
-    VarRef :: number(),
+    VarRef :: integer(),
     Window :: #{start => non_neg_integer(), count => non_neg_integer()}.
 get_variables_page(Client, VarRef, Window) ->
     Args0 = #{variablesReference => VarRef},
@@ -858,7 +858,7 @@ get_variables_page(Client, VarRef, Window) ->
 
 -spec assertEvaluateNameIsCorrect(Client, FrameId, edb_dap_request_variables:variable(), binary()) -> ok when
     Client :: edb_dap_test_support:client(),
-    FrameId :: number().
+    FrameId :: integer().
 assertEvaluateNameIsCorrect(Client, FrameId, EvalName, Expected) ->
     assertEvaluateNameIsCorrect(Client, FrameId, EvalName, Expected, fun(X) -> X end).
 
@@ -866,7 +866,7 @@ assertEvaluateNameIsCorrect(Client, FrameId, EvalName, Expected) ->
     ok
 when
     Client :: edb_dap_test_support:client(),
-    FrameId :: number(),
+    FrameId :: integer(),
     Comparator :: fun((binary()) -> binary() | dynamic()).
 assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expected, Comparator) ->
     Response = edb_dap_test_client:evaluate(Client, #{
@@ -881,7 +881,7 @@ assertEvaluateNameIsCorrect(Client, FrameId, #{evaluateName := EvalName}, Expect
 
 -spec get_process_vars(Client, FrameId) -> #{binary() => edb_dap_request_variables:variable()} when
     Client :: edb_dap_test_support:client(),
-    FrameId :: number().
+    FrameId :: integer().
 get_process_vars(Client, FrameId) ->
     Scopes = edb_dap_test_support:get_scopes(Client, FrameId),
     ProcessScopeVarsRef = maps:get(variablesReference, maps:get(~"Process", Scopes)),

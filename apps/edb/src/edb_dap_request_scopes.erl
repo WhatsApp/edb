@@ -38,7 +38,7 @@ scopes requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 -type arguments() :: #{
     % Retrieve the scopes for the stack frame identified by `frameId`. The
     % `frameId` must have been obtained in the current suspended state.
-    frameId := number()
+    frameId := integer()
 }.
 
 -type response_body() ::
@@ -65,7 +65,7 @@ scopes requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
     % The variables of this scope can be retrieved by passing the value of
     % `variablesReference` to the `variables` request as long as execution
     % remains suspended.
-    variablesReference := number(),
+    variablesReference := integer(),
     % The number of named variables in this scope.
     % The client can use this information to present the variables in a paged UI
     % and fetch them in chunks.
