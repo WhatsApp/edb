@@ -112,14 +112,14 @@ test_fails_if_initialized_twice(Config) ->
     ).
 
 test_fails_if_invalid_launch_config(Config) ->
-    % Use a lower level API to be able to pass an invalid configuration
+    % Use a lower-level API to pass an invalid configuration.
     {ok, Client} = edb_dap_test_support:start_test_client(Config),
 
     AdapterID = atom_to_binary(?MODULE),
     Response1 = edb_dap_test_client:initialize(Client, #{adapterID => AdapterID}),
     ?assertMatch(#{request_seq := 1, type := response, success := true}, Response1),
 
-    % eqwalizer:ignore: Testing behaviour on invalid input
+    % eqwalizer:ignore: Tests behavior with invalid input.
     Response2 = edb_dap_test_client:launch(Client, #{
         invalid => ~"invalid"
     }),

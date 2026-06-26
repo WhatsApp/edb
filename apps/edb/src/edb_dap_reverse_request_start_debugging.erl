@@ -34,7 +34,7 @@ startDebugging reverse requests: https://microsoft.github.io/debug-adapter-proto
 %% Types
 %% ------------------------------------------------------------------
 
-% https://microsoft.github.io/debug-adapter-protocol//specification.html#Reverse_Requests_StartDebugging
+% https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_StartDebugging
 -type arguments() ::
     #{
         request := attach,

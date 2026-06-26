@@ -245,13 +245,13 @@ test_can_inject_code_automatically(Config) ->
     {ok, _PeerInfo} = edb_test_support:start_peer_node(Config, #{
         env => #{atom_to_binary(K) => V || K := V <- Env}
     }),
-    % As the debuggee is up and ran the InitCode, the DAP server should send us an "initialized" event
+    % After the debuggee runs the init code, the DAP server sends an "initialized" event.
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
-    % Let's skip the configuration phase
+    % Skip the configuration phase.
     #{success := true} = edb_dap_test_client:configuration_done(Client),
 
-    % Sanity-check: we get some processes
+    % Sanity-check that processes are available.
     #{success := true, body := #{threads := [_ | _]}} = edb_dap_test_client:threads(Client),
 
     ok.
@@ -284,13 +284,13 @@ test_can_return_the_code_to_inject_in_an_env_var(Config) ->
     {ok, _PeerInfo} = edb_test_support:start_peer_node(Config, #{
         extra_args => ["-eval", InitCode]
     }),
-    % As the debuggee is up and ran the InitCode, the DAP server should send us an "initialized" event
+    % After the debuggee runs the init code, the DAP server sends an "initialized" event.
     {ok, [#{event := ~"initialized"}]} = edb_dap_test_client:wait_for_event(~"initialized", Client),
 
-    % Let's skip the configuration phase
+    % Skip the configuration phase.
     #{success := true} = edb_dap_test_client:configuration_done(Client),
 
-    % Sanity-check: we get some processes
+    % Sanity-check that processes are available.
     #{success := true, body := #{threads := [_ | _]}} = edb_dap_test_client:threads(Client),
 
     ok.
@@ -419,7 +419,7 @@ test_run_honors_timeout(Config) ->
         }
     }),
 
-    % The DAP server should send a "terminated" event due to timeout
+    % The DAP server should send a "terminated" event due to a timeout.
     {ok, [#{event := ~"terminated"}]} = edb_dap_test_client:wait_for_event(~"terminated", Client),
     ok.
 
@@ -433,7 +433,7 @@ test_run_passes_env(Config) ->
 
     #{success := true} = edb_dap_test_client:configuration_done(Client),
 
-    % Verify the launched node has the custom env var via DAP evaluate
+    % Verify the launched node has the custom environment variable via DAP evaluate.
     Response = edb_dap_test_client:evaluate(Client, #{
         expression => ~"os:getenv(\"EDB_TEST_CUSTOM_VAR\")",
         context => repl
@@ -450,8 +450,8 @@ test_run_captures_output(Config) ->
 
     % By the time we get the "initialized" event, the Erlang banner has already
     % been printed to stdout, so output events should be buffered.
-    % Note: stderr currently arrives as `stdout` category due to stderr_to_stdout
-    % merging in open_port — separate stderr support is a future enhancement.
+    % stderr currently arrives in the `stdout` category because `open_port` uses
+    % `stderr_to_stdout`; separate stderr support is a future enhancement.
     {ok, OutputEvents} = edb_dap_test_client:wait_for_event(~"output", Client),
     OutputTexts = [Out || #{body := #{output := Out}} <- OutputEvents],
     Concatenated = erlang:iolist_to_binary(OutputTexts),

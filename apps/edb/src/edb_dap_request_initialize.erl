@@ -80,8 +80,8 @@ initialize requests: https://microsoft.github.io/debug-adapter-protocol/specific
     %%  Client supports the `startDebugging` request
     supportsStartDebuggingRequest => boolean(),
     %% The client will interpret ANSI escape sequences in the display of
-    %% OutputEvent.output` and `Variable.value` fields when
-    %% Capabilities.supportsANSIStyling` is also enabled
+    %% `OutputEvent.output` and `Variable.value` fields when
+    %% `Capabilities.supportsANSIStyling` is also enabled.
     supportsANSIStyling => boolean()
 }.
 

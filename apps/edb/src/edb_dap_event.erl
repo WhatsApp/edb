@@ -18,7 +18,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-DAP Events
+DAP event constructors.
 """.
 -compile(warn_missing_spec_all).
 
@@ -148,14 +148,14 @@ output(Body) ->
 
     % If `allThreadsStopped` is true, a debug adapter can announce that all
     % threads have stopped.
-    % - The client should use this information to enable that all threads can
-    % be expanded to access their stacktraces.
+    % - The client should use this information to enable all threads to be
+    % expanded to access their stack traces.
     % - If the attribute is missing or false, only the thread with the given
     % `threadId` can be expanded.
     allThreadsStopped => boolean(),
 
-    % Ids of the breakpoints that triggered the event. In most cases there is
-    % only a single breakpoint but here are some examples for multiple
+    % IDs of the breakpoints that triggered the event. In most cases there is
+    % only a single breakpoint, but here are some examples with multiple
     % breakpoints:
     % - Different types of breakpoints map to the same location.
     % - Multiple source breakpoints get collapsed to the same instruction by

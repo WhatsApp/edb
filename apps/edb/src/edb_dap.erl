@@ -18,14 +18,14 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Support for the DAP Protocol
+Support for the Debug Adapter Protocol (DAP).
 
 The Debug Adapter Protocol (DAP) defines the abstract protocol
 used between a development tool (e.g. IDE or editor) and a
 debugger, using JSON-RPC as the underlying transport protocol.
 
 This module implements the types and functions required to
-encode and decode messages to and from the DAP protocol.
+encode and decode DAP messages.
 
 For the full specification, please refer to:
 
@@ -174,7 +174,7 @@ decode_frames(Data, Messages) ->
 
     %% If the value > 0 the contents of the source must be retrieved through the
     %% `source` request (even if a path is specified).
-    %% Since a `sourceReference` is only valid for a session, it can not be used
+    %% Since a `sourceReference` is only valid for a session, it cannot be used
     %% to persist a source.
     %% The value should be less than or equal to 2147483647 (2^31-1).
     sourceReference => number(),
@@ -189,11 +189,11 @@ decode_frames(Data, Messages) ->
     %% from source map', etc.
     origin => binary(),
 
-    %% A list of sources that are related to this source. These may be the source
-    %% that generated this source.
+    %% A list of sources that are related to this source. These may be the
+    %% sources that generated this source.
     sources => [source()],
 
-    %% Additional data that a debug adapter might want to loop through the client.
+    %% Additional data that a debug adapter might want to pass through the client.
     %% The client should leave the data intact and persist it across sessions. The
     %% client should not interpret the data.
     adapterData => map(),

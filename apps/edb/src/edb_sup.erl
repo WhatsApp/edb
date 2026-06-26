@@ -18,7 +18,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-edb top level supervisor.
+EDB top-level supervisor.
 """.
 -compile(warn_missing_spec_all).
 

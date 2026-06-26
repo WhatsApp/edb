@@ -14,7 +14,7 @@
 %% % @format
 -module(edb_dap_request_launch_arguments_SUITE).
 
-%% erlfmt;ignore
+%% erlfmt:ignore
 
 % @fb-only
 -oncall("whatsapp_server_devx").

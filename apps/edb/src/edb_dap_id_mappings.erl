@@ -18,16 +18,18 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-A mapper of IDs for the debug adapter
+ID mappings for the debug adapter.
 
-The DAP protocol expects numeric ids for threads, frames, scopes, etc. These ids
-are represented as number() in the JSON specification, and are expected to fit
-in a 64-bit float. Some ids like thread_ids are expected to be unique across the
-debugging session, while others (frame-ids, etc), need to be unique only between
-pauses. The specification recommends adapters to reset them on `continue` requests.
-For more details see https://microsoft.github.io/debug-adapter-protocol/overview
+The DAP protocol expects numeric IDs for threads, frames, scopes, and
+other resources. These IDs are represented as `number()` in the JSON
+specification and must fit in a 64-bit float. Some IDs, such as thread
+IDs, must be unique across the debugging session, while others, such as
+frame IDs, only need to be unique between pauses. The specification
+recommends resetting those IDs on `continue` requests.
+For more details, see https://microsoft.github.io/debug-adapter-protocol/overview
 
-This module implements the mapping of PIDs to thread-ids, etc, generically.
+This module implements generic mappings for PIDs, thread IDs, frame IDs,
+and variable references.
 """.
 -compile(warn_missing_spec_all).
 
@@ -55,7 +57,7 @@ This module implements the mapping of PIDs to thread-ids, etc, generically.
 
 -doc """
 An integer that fits in a 64-bit float.
-This is the requirement the DAP spec puts on ids.
+This is the requirement the DAP specification puts on IDs.
 """.
 -type id() :: non_neg_integer().
 

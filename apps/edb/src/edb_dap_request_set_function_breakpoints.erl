@@ -34,7 +34,7 @@ setFunctionBreakpoints requests: https://microsoft.github.io/debug-adapter-proto
 %% Types
 %% ------------------------------------------------------------------
 
-%%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
+%%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetFunctionBreakpoints
 -type arguments() :: #{
     %% The function names of the breakpoints.
     breakpoints := [function_breakpoint()]

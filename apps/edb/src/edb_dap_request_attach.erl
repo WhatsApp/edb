@@ -37,8 +37,8 @@ attach requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 %% Types
 %% ------------------------------------------------------------------
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Attach
-%%% Notice that, since , the arguments for this request are
-%%% not part of the DAP specification itself.
+%%% Attach arguments are not part of the DAP specification itself because
+%%% attaching is debugger/runtime specific.
 
 -export_type([arguments/0, config/0]).
 -type arguments() :: #{config := config()}.

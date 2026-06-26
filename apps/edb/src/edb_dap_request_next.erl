@@ -39,8 +39,7 @@ next requests: https://microsoft.github.io/debug-adapter-protocol/specification#
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
 -type arguments() :: #{
-    %  Specifies the thread for which to resume execution for one step (of the
-    %  given granularity).
+    %  Specifies the thread to resume for one step of the given granularity.
     threadId := integer(),
 
     %  If this flag is true, all other suspended threads are not resumed.

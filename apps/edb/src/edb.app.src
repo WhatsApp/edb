@@ -14,7 +14,7 @@
 %% limitations under the License.
 %% erlfmt:ignore
 {application, edb, [
-    {description, "The edb debugger"},
+    {description, "The EDB debugger"},
     {vsn, git},
     {modules, []},
     {applications, [

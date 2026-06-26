@@ -34,8 +34,8 @@ setExceptionBreakpoints requests: https://microsoft.github.io/debug-adapter-prot
 %% Types
 %% ------------------------------------------------------------------
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetExceptionBreakpoints
-%%% Notice that, since , the arguments for this request are
-%%% not part of the DAP specification itself.
+%%% Exception breakpoint arguments are not part of the DAP specification itself
+%%% because exceptions are debugger/runtime specific.
 
 -export_type([arguments/0]).
 -type arguments() :: #{
@@ -85,7 +85,7 @@ setExceptionBreakpoints requests: https://microsoft.github.io/debug-adapter-prot
 }.
 
 %% An ExceptionPathSegment represents a segment in a path that is used to
-%% match leafs or nodes in a tree of exceptions.
+%% match leaves or nodes in a tree of exceptions.
 %%
 %% If a segment consists of more than one name, it matches the names provided
 %% if negate is false or missing, or it matches anything except the names provided
@@ -95,8 +95,7 @@ setExceptionBreakpoints requests: https://microsoft.github.io/debug-adapter-prot
     %% matches anything except the names provided.
     negate => boolean(),
 
-    %% Depending on the value of `negate` the names that should match or not
-    %% match.
+    %% The names that should match, or not match, depending on `negate`.
     names := [binary()]
 }.
 
@@ -115,8 +114,8 @@ arguments_template() ->
     #{
         %% NB. We don't currently support exception breakpoints,
         %% but they are part of the configuration protocol, so
-        %% we expect to receive a message to with no filters
-        %% as "configurationDone"
+        %% we expect to receive a message with no filters before
+        %% "configurationDone".
         filters => edb_dap_parse:empty_list(),
         filterOptions => {optional, edb_dap_parse:empty_list()},
         exceptionOptions => {optional, edb_dap_parse:empty_list()}
@@ -144,5 +143,5 @@ handle(_UnexpectedState, _) ->
 %% ------------------------------------------------------------------
 -spec set_exception_breakpoints(Args) -> edb_dap_request:reaction(response()) when Args :: arguments().
 set_exception_breakpoints(#{filters := []}) ->
-    % No exception breakpoints supported atm
+    % No exception breakpoints are supported yet.
     #{response => edb_dap_request:success(#{breakpoints => []})}.

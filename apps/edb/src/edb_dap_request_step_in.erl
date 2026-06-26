@@ -38,8 +38,7 @@ step-in requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepIn
 -type arguments() :: #{
-    %  Specifies the thread for which to resume execution for one step-in (of the
-    %  given granularity).
+    %  Specifies the thread to resume for one step-in of the given granularity.
     threadId := integer(),
 
     %  If this flag is true, all other suspended threads are not resumed.

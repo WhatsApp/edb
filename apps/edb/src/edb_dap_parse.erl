@@ -17,7 +17,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Support for parsing of request arguments, etc
+Support for parsing request arguments and related DAP payloads.
 """.
 -compile(warn_missing_spec_all).
 
@@ -78,7 +78,7 @@ choice(Options) ->
         TryInOrder(Options)
     end.
 
-%% THe json library treats JSON NULL as the atom 'null'
+%% The `json` library treats JSON `null` as the atom `null`.
 -spec null() -> parser(null).
 null() ->
     fun(null) -> {ok, null} end.

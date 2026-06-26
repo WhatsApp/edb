@@ -17,7 +17,8 @@
 -module(edb_dap_reverse_request_run_in_terminal).
 
 -moduledoc """
-Handles Debug Adapter Protocol (DAP) runInTerminal reverse requests for the Erlang debugger.
+Handles Debug Adapter Protocol (DAP) runInTerminal reverse requests for
+the Erlang debugger.
 
 The module follows the Microsoft Debug Adapter Protocol specification for
 runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_RunInTerminal
@@ -60,13 +61,13 @@ runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protoc
     %% `supportsArgsCanBeInterpretedByShell` is true. If the client uses an
     %% intermediary shell to launch the application, then the client must not
     %% attempt to escape characters with special meanings for the shell. The user
-    %% is fully responsible for escaping as needed and that arguments using
-    %% special characters may not be portable across shells.
+    %% is fully responsible for escaping as needed; arguments using special
+    %% characters may not be portable across shells.
     argsCanBeInterpretedByShell => boolean()
 }.
 
 -type response_body() :: #{
-    %% The process ID. The value should be less than or equal to 2147483647 * (2^31-1).
+    %% The process ID. The value should be less than or equal to 2147483647 (2^31-1).
     %% NB. Currently not sent by VS Code. See https://github.com/microsoft/vscode/issues/61640#issuecomment-432696354
     processId => integer(),
 

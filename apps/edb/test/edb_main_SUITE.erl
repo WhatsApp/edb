@@ -52,7 +52,7 @@ end_per_testcase(_TestCase, _Config) ->
 escript_executable(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Escript = filename:join([DataDir, ?EDB]),
-    ?assert(filelib:is_file(Escript), "Escript should exists"),
+    ?assert(filelib:is_file(Escript), "Escript should exist"),
     {ok, FileInfo} = file:read_file_info(Escript),
     case FileInfo#file_info.mode of
         Mode when is_integer(Mode) ->

@@ -40,7 +40,7 @@ continue requests: https://microsoft.github.io/debug-adapter-protocol/specificat
     % execution (see `supportsSingleThreadExecutionRequests`) and the argument
     % `singleThread` is true, only the thread with this ID is resumed.
     threadId := edb_dap:thread_id(),
-    % If this flag is true, execution is resumed only for the thread with given
+    % If this flag is true, execution is resumed only for the thread with the given
     % `threadId`.
     singleThread => boolean()
 }.

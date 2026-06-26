@@ -18,9 +18,9 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Handling of DAP requests, responses and events
+Handles DAP requests, responses, and events.
 
-For details see https://microsoft.github.io/debug-adapter-protocol/specification
+For details, see https://microsoft.github.io/debug-adapter-protocol/specification
 """.
 -compile(warn_missing_spec_all).
 
@@ -274,9 +274,8 @@ handle_debuggee_port_event(UnexpectedEvent, _State) ->
 react(Reaction, State = #{state := attached}) ->
     react_1(Reaction, State);
 react(Reaction0 = #{error := {internal_error, _}}, State) ->
-    % We are not attached and crashing handling client messages, we
-    % are unlikely to be able to do any work, so just terminate
-    % the session
+    % We are not attached and are crashing while handling client messages, so we
+    % are unlikely to be able to do any work. Just terminate the session.
     Reaction1 = Reaction0#{
         new_state => #{state => terminating},
         actions => [{event, edb_dap_event:terminated()}]
@@ -353,8 +352,8 @@ build_error_response(Id, Message) ->
 log_error(_, {internal_error, #{class := Class, reason := Reason, stacktrace := ST}}) ->
     ?LOG_ERROR("Internal error: ~s", [erl_error:format_exception(Class, Reason, ST)]);
 log_error(true, _) ->
-    % A user error: will be logged as part of the response to the client, so we avoid
-    % duplicating this
+    % User errors are logged as part of the response to the client, so avoid
+    % duplicating them here.
     ok;
 log_error(false, {method_not_found, Method}) ->
     ?LOG_WARNING("Method not found: ~p", [Method]);

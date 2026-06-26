@@ -18,9 +18,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-DAP Request Handlers
-The actual implementation for the DAP requests.
-This function should be invoked by the DAP server.
+DAP request utilities.
 """.
 -compile(warn_missing_spec_all).
 

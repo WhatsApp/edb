@@ -20,13 +20,12 @@
 -compile(warn_missing_spec_all).
 
 -moduledoc """
-This module handles all the calls to edb:eval/1, and all callbacks
-are defined here. Because of that, this module will end up being
-transferred to the debuggee node, so the callbacks can be executed.
+This module handles calls to `edb:eval/1` and defines the callbacks
+that run on the debuggee node.
 
-It is very important that this has no dependencies on anything other
-than kernel, stdlib and edb_core, as those are the only apps that can
-be assumed to be running on the debuggee.
+It must not depend on anything beyond `kernel`, `stdlib`, and
+`edb_core`, which are the only applications assumed to be running on
+the debuggee.
 """.
 
 % Running

@@ -71,13 +71,13 @@ stackTrace requests: https://microsoft.github.io/debug-adapter-protocol/specific
 }.
 
 -type response_body() :: #{
-    % The frames of the stack frame. If the array has length zero, there are no
+    % The frames of the stack trace. If the array has length zero, there are no
     % stack frames available.
     % This means that there is no location information available.
     stackFrames := [stack_frame()],
     % The total number of frames available in the stack. If omitted or if
     % `totalFrames` is larger than the available frames, a client is expected
-    % to request frames until a request returns less frames than requested
+    % to request frames until a request returns fewer frames than requested
     % (which indicates the end of the stack). Returning monotonically
     % increasing `totalFrames` values for subsequent requests can be used to
     % enforce paging in the client.
@@ -86,7 +86,7 @@ stackTrace requests: https://microsoft.github.io/debug-adapter-protocol/specific
 
 -type stack_frame() :: #{
     % An identifier for the stack frame. It must be unique across all threads.
-    % This id can be used to retrieve the scopes of the frame with the `scopes`
+    % This ID can be used to retrieve the scopes of the frame with the `scopes`
     % request or to restart the execution of a stack frame.
     id := integer(),
     % The name of the stack frame, typically a method name.

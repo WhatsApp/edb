@@ -315,7 +315,7 @@ update_code_to_inject_info_in_env(CodeToInject, _Config, Env) ->
     % In ERL_FLAGS/ERL_AFLAGS, words are split by whitespace, subject to extra rules:
     %   - Things between single/double quotes are considered a single word (without the quotes)
     %   - The character that comes after a `\` is added verbatim to the current word.
-    % So we use `\` to escape whatespace and quotes
+    % So we use `\` to escape whitespace and quotes.
     CodeToInjectEscaped = re:replace(CodeToInject, ~"[\s'\"]", ~"\\\\&", [global]),
     prepend_to_env(~"ERL_AFLAGS", io_lib:format(~"-eval ~s", [CodeToInjectEscaped]), Env).
 

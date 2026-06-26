@@ -18,8 +18,8 @@
 -oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 -moduledoc """
-DAP Test Client
-This module is used to test the DAP server End-to-End.
+DAP test client.
+This module tests the DAP server end-to-end.
 """.
 
 -behaviour(gen_server).

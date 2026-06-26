@@ -18,8 +18,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Behaviour for handling client requests
-
+Behaviour for handling client requests.
 """.
 -compile(warn_missing_spec_all).
 
@@ -171,8 +170,8 @@ unknown_resource_1(Name, Id) ->
 
 -spec not_paused(Pid) -> error_reaction() when Pid :: pid().
 not_paused(_Pid) ->
-    % Not including the Pid in the message, since it will be displayed in the context of the wrong node
-    % but useful to have here for troubleshooting
+    % Do not include the PID in the message because it appears in the context of
+    % the wrong node, but keep it in the signature for troubleshooting.
     precondition_violation(~"Process is not paused").
 
 -spec unsupported(Msg) -> error_reaction() when Msg :: iodata().

@@ -226,7 +226,7 @@ test_evaluate_structured_result(Config) ->
             % Get the variablesReference to inspect the structure
             #{body := #{variablesReference := VarsRef}} = EvalResponse,
 
-            % Inspect the structure using variables request
+            % Inspect the structure using a variables request.
             Variables = edb_dap_test_support:get_variables(Client, VarsRef),
             ?assertEqual(
                 #{
@@ -307,7 +307,7 @@ test_evaluate_clipboard_context_returns_value_in_full(Config) ->
     {ok, _ThreadId, ST} = edb_dap_test_support:spawn_and_wait_for_bp(Client, Peer, {foo, go, []}),
     case ST of
         [#{id := TopFrameId} | _] ->
-            % Sanity-check: with 'watch' context truncates the result
+            % Sanity-check that the 'watch' context truncates the result.
             WatchResponse = evaluate_expression(Client, TopFrameId, ~"LongList", watch),
             ?assertEqual(
                 #{
@@ -320,7 +320,7 @@ test_evaluate_clipboard_context_returns_value_in_full(Config) ->
                 WatchResponse
             ),
 
-            % Evaluate with clipboard context shows full result
+            % The 'clipboard' context shows the full result.
             ClipboardResponse = evaluate_expression(Client, TopFrameId, ~"LongList", clipboard),
             ?assertEqual(
                 #{

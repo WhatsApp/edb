@@ -25,7 +25,7 @@
     groups/0
 ]).
 
-%% Parser testcases
+%% Parser test cases
 -export([
     test_null/1,
     test_boolean/1,
@@ -43,13 +43,13 @@
     test_template/1
 ]).
 
-%% parse function testcases
+%% Parse function test cases
 -export([
     test_optional_fields/1,
     test_nested_errors/1
 ]).
 
-%% parse function testcases
+%% Unknown-field parse function test cases
 -export([
     test_parse_rejecting_unknown/1,
     test_parse_allowing_unknown/1
@@ -235,7 +235,7 @@ test_map(_Config) ->
         m2 => #{foo => 42}
     }),
 
-    % Map keys come converted to atom when decode JSON, so need to handle those as well
+    % JSON decoding can convert map keys to atoms, so handle those as well.
     {ok, #{m1 := #{~"foo" := true, ~"bar" := false}, m2 := #{foo := 42}}} = parse(Template, #{
         m1 => #{foo => true, bar => false},
         m2 => #{foo => 42}

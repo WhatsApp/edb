@@ -18,8 +18,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Behaviour for handling reverse-requests to the client
-
+Behaviour for handling reverse requests sent to the client.
 """.
 -compile(warn_missing_spec_all).
 

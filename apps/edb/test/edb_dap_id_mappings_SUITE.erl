@@ -46,7 +46,7 @@ test_it_works(_Config) ->
     Frame3 = #{pid => Pid3, frame_no => 0},
     Frame4 = #{pid => Pid4, frame_no => 1},
 
-    % Assigns a new id to each pid, only if needed
+    % Assign a new ID to each PID, only if needed.
     ThreadId1 = 1 = edb_dap_id_mappings:pid_to_thread_id(Pid1),
     ThreadId2 = 2 = edb_dap_id_mappings:pid_to_thread_id(Pid2),
     #{
@@ -61,14 +61,14 @@ test_it_works(_Config) ->
     ?assertEqual(ThreadId3, edb_dap_id_mappings:pid_to_thread_id(Pid3)),
     ?assertEqual(ThreadId4, edb_dap_id_mappings:pid_to_thread_id(Pid4)),
 
-    % Looks up by ThreadId
+    % Look up by thread ID.
     {ok, Pid1} = edb_dap_id_mappings:thread_id_to_pid(ThreadId1),
     {ok, Pid2} = edb_dap_id_mappings:thread_id_to_pid(ThreadId2),
     {ok, Pid3} = edb_dap_id_mappings:thread_id_to_pid(ThreadId3),
     {ok, Pid4} = edb_dap_id_mappings:thread_id_to_pid(ThreadId4),
     {error, not_found} = edb_dap_id_mappings:thread_id_to_pid(741),
 
-    % Assigns a new id to each frame, only if needed
+    % Assign a new ID to each frame, only if needed.
     FrameId1 = 1 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame1),
     FrameId2 = 2 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame2),
     FrameId3 = 3 = edb_dap_id_mappings:pid_frame_to_frame_id(Frame3),
@@ -79,14 +79,14 @@ test_it_works(_Config) ->
     ?assertEqual(FrameId3, edb_dap_id_mappings:pid_frame_to_frame_id(Frame3)),
     ?assertEqual(FrameId4, edb_dap_id_mappings:pid_frame_to_frame_id(Frame4)),
 
-    % Looks up by FrameId
+    % Look up by frame ID.
     {ok, Frame1} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId1),
     {ok, Frame2} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId2),
     {ok, Frame3} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId3),
     {ok, Frame4} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId4),
     {error, not_found} = edb_dap_id_mappings:frame_id_to_pid_frame(741),
 
-    % Can reset ids, but ThreadIds remain
+    % Frame IDs can reset, but thread IDs remain.
     edb_dap_id_mappings:reset(),
     {ok, Pid1} = edb_dap_id_mappings:thread_id_to_pid(ThreadId1),
     {error, not_found} = edb_dap_id_mappings:frame_id_to_pid_frame(FrameId1),

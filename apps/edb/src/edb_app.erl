@@ -17,7 +17,7 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-edb public API
+EDB application callback module.
 """.
 -compile(warn_missing_spec_all).
 

@@ -78,7 +78,7 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
     % The variable's name.
     name := binary(),
     % The variable's value.
-    % This can be a multi-line text, e.g. for a function the body of a function.
+    % This can be multiline text, e.g. a function body.
     % For structured variables (which do not have a simple value), it is
     % recommended to provide a one-line representation of the structured object.
     % This helps to identify the structured object in the collapsed state when
@@ -169,11 +169,11 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
     % 'readOnly': Indicates that the object is read only.
     % 'rawString': Indicates that the object is a raw string.
     % 'hasObjectId': Indicates that the object can have an Object ID created for
-    % it. This is a vestigial attribute that is used by some clients; 'Object
-    % ID's are not specified in the protocol.
+    % it. This is a vestigial attribute that is used by some clients; object IDs
+    % are not specified in the protocol.
     % 'canHaveObjectId': Indicates that the object has an Object ID associated
     % with it. This is a vestigial attribute that is used by some clients;
-    % 'Object ID's are not specified in the protocol.
+    % object IDs are not specified in the protocol.
     % 'hasSideEffects': Indicates that the evaluation had side effects.
     % 'hasDataBreakpoint': Indicates that the object has its value tracked by a
     % data breakpoint.
@@ -197,11 +197,11 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
     % specific gesture to trigger its evaluation.
     % This mechanism can be used for properties that require executing code when
     % retrieving their value and where the code execution can be expensive and/or
-    % produce side-effects. A typical example are properties based on a getter
+    % produce side effects. A typical example is a property based on a getter
     % function.
     % Please note that in addition to the `lazy` flag, the variable's
     % `variablesReference` is expected to refer to a variable that will provide
-    % the value through another `variable` request.
+    % the value through another `variables` request.
     lazy => boolean()
 }.
 

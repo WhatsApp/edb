@@ -134,7 +134,7 @@ test_structured_variables(Config) ->
             ]
         }),
     ok = edb_dap_test_support:configure(Client, [{FooSrc, [{line, 7}]}]),
-    % eqwalizer:ignore Testing explicitly an improper list
+    % eqwalizer:ignore Explicitly testing an improper list
     ImproperList = [1, 2 | {a, b}],
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
         Client, Peer, {foo, go, [[1, 2, 3], #{life => 42}, ~"abcdefghijklmnopqrstuvwxyz", ImproperList]}
@@ -340,13 +340,13 @@ test_structured_variables_with_pagination(Config) ->
     T = {4, [], {6, 7}, 8, {}, 9},
     M = #{life => 42, death => 43, etc => 44, more => {45, 46, 47}, universe => 99},
     B = ~"abcdefghijklmnopqrstuvwxyz",
-    % eqwalizer:ignore Testing explicitly an improper list
+    % eqwalizer:ignore Explicitly testing an improper list
     ImproperList = [10, 20, 30, 40, 50 | {a, b}],
     {ok, _ThreadId, [#{id := TopFrameId} | _]} = edb_dap_test_support:spawn_and_wait_for_bp(
         Client, Peer, {foo, go, [L, T, M, B, ImproperList]}
     ),
 
-    % When client supports variable paging, scopes include variable count
+    % When the client supports variable paging, scopes include variable counts.
     #{~"Locals" := LocalsScope} = edb_dap_test_support:get_scopes(Client, TopFrameId),
     ?assertEqual(
         #{

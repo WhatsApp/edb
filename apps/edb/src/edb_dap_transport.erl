@@ -18,13 +18,11 @@
 
 -oncall("whatsapp_server_devx").
 -moduledoc """
-Transport layer of the DAP server
-This module deals with serialization/deserialization, sequencing
-and other low-level details of the DAP frontend for the edb Erlang
-debugger.
+Transport layer for the DAP server.
+This module handles serialization, deserialization, sequencing, and
+other low-level details of the DAP frontend for the EDB Erlang debugger.
 
-For the actual handling of requests, etc. see the edb_dap_server
-module.
+For request handling, see `edb_dap_server`.
 """.
 -compile(warn_missing_spec_all).
 
@@ -92,13 +90,13 @@ send_event(Event) ->
 
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
-    %% Ensure stdin/stdout are in binary mode, so there is no mangling of `\r` on windows, etc
+    %% Ensure stdin and stdout are in binary mode, so `\r` is not mangled on Windows.
     io:setopts([binary]),
 
-    %% Open stdin/out as a port, requires node to be started with -noinput
-    %% We do this to avoid the overhead of the normal Erlang stdout/in stack
-    %% which is very significant for raw binary data, mostly because it's prepared
-    %% to work with unicode input and does multiple encoding/decoding rounds for raw bytes
+    %% Open stdin/stdout as a port. This requires the node to start with `-noinput`.
+    %% This avoids the overhead of the normal Erlang stdout/stdin stack, which is
+    %% significant for raw binary data because it is prepared for Unicode input and
+    %% does multiple encoding/decoding rounds for raw bytes.
     Port = open_port({fd, 0, 1}, [eof, binary, stream]),
     State = #{io => Port, buffer => <<>>, seq => 1},
     {ok, State}.
