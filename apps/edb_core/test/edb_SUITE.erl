@@ -682,8 +682,11 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % edb:process_info() agrees with edb:processes()
     ProcessesResult0 = edb:processes(RelevantProcessInfoFields),
     ?assertEqual(
-        ProcessesResult0,
-        #{Pid => Info || Pid := _ <- ProcessesResult0, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]}
+        #{
+            Pid => Info
+         || Pid := _ <- ProcessesResult0, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]
+        },
+        ProcessesResult0
     ),
 
     % We spawn a process that will go through that line.
@@ -727,8 +730,11 @@ test_processes_reports_running_and_paused_processes(_Config) ->
     % edb:process_info() still agrees with edb:processes()
     ProcessesResult1 = edb:processes(RelevantProcessInfoFields),
     ?assertEqual(
-        ProcessesResult1,
-        #{Pid => Info || Pid := _ <- ProcessesResult1, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]}
+        #{
+            Pid => Info
+         || Pid := _ <- ProcessesResult1, {ok, Info} <- [edb:process_info(Pid, RelevantProcessInfoFields)]
+        },
+        ProcessesResult1
     ),
 
     % All processes are now actually suspended
