@@ -23,7 +23,7 @@
 % Creation
 -export([create/0]).
 
-% User-brekapoints manipulation
+% User-breakpoints manipulation
 -export([add_user_breakpoint/2, add_user_breakpoints/2]).
 -export([get_user_breakpoints/1, get_user_breakpoints/2]).
 -export([clear_user_breakpoint/2, clear_user_breakpoints/2, clear_user_breakpoints/3]).
@@ -1288,7 +1288,7 @@ Record of every breakpoint set in the VM: why it was set and any relevant metada
 
 -doc """
 A VM breakpoint can be set for multiple reasons. We only remove them when
-no reason remain to hold it remain. Each reason may have some associated metadata.
+no reasons remain to keep it. Each reason may have some associated metadata.
 """.
 -type vm_breakpoint_reasons() ::
     #{

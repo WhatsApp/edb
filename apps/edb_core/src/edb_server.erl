@@ -151,7 +151,7 @@ When users try to set a breakpoint on `Module`, it will be set on `Substitute` i
 This handles transitive substitutes as well, so if `Substitute` is substituted by another module,
 then setting a breakpoint on `Module` will set it on that module.
 If `Module` had breakpoints set, they will be transferred to `Substitute`.
-`AddedFrames` is a list of frames that is expected in stack trace when functions in
+`AddedFrames` is a list of frames that are expected in the stack trace when functions in
 `Substitute` are called. When transitivity occurs (A -> B -> C), the added frames
 from each substitution are accumulated, so the final stack trace will include
 frames from both A -> B and B -> C substitutions.

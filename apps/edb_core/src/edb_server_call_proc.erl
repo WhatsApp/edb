@@ -15,7 +15,7 @@
 %% % @format
 %%
 %% Support for calling node processes that could be paused
-%% There are times were we want to call standard processed to query
+%% There are times when we want to call standard processes to query
 %% node state. Typically these processes will be excluded from debugging
 %% but if they are not, we want to make sure that the call fails, instead
 %% of the debugger getting blocked

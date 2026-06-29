@@ -580,7 +580,7 @@ Execution will stop once `Pid` finishes executing the next expression.
 Caveat:
   * If the next expression is a *recursive* tail-call, execution will stop
     when the callee *starts*.
-  * This is unlike  *non-recursive* tail-calls, where execution will stop
+  * This is unlike *non-recursive* tail-calls, where execution will stop
     when the callee *ends*
 """.
 -spec step_over(Pid) -> ok | {error, step_error()} when

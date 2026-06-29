@@ -52,7 +52,7 @@ Support for parsing request arguments and related DAP payloads.
 %% Public API
 %% --------------------------------------------------------------------
 -spec parse(template(), term(), allow_unknown | reject_unknown) ->
-    {ok, map()} | {error, HumarReadableReason :: binary()}.
+    {ok, map()} | {error, HumanReadableReason :: binary()}.
 parse(Template, Map0, allow_unknown) when is_map(Map0) ->
     Map1 = maps:with(maps:keys(Template), Map0),
     parse(Template, Map1, reject_unknown);
