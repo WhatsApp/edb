@@ -578,7 +578,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
         {ok, resumed} = edb:continue(),
 
         ActualNode = peer:call(Peer, erlang, node, []),
-        ?assertEqual(edb:attached_node(), ActualNode),
+        ?assertEqual(ActualNode, edb:attached_node()),
         ok
     end).
 
@@ -605,7 +605,7 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
         {ok, resumed} = edb:continue(),
 
         ActualNode = peer:call(Peer, erlang, node, []),
-        ?assertEqual(edb:attached_node(), ActualNode),
+        ?assertEqual(ActualNode, edb:attached_node()),
         ok
     end).
 
@@ -1164,7 +1164,7 @@ test_reattaching_to_same_node_doesnt_detach(Config) ->
         {ok, #{node := Node, cookie := Cookie}} = edb_test_support:start_peer_node(Config, #{}),
 
         ok = edb:attach(#{node => Node, cookie => Cookie}),
-        ?assertEqual(edb:attached_node(), Node),
+        ?assertEqual(Node, edb:attached_node()),
 
         ok = edb_test_support:start_event_collector(),
 
@@ -1173,7 +1173,7 @@ test_reattaching_to_same_node_doesnt_detach(Config) ->
 
         % Re-attach to the same node, should be a no-op
         ok = edb:attach(#{node => Node, cookie => Cookie}),
-        ?assertEqual(edb:attached_node(), Node),
+        ?assertEqual(Node, edb:attached_node()),
 
         % The event collector should still be subscribed and receiving events
         {ok, SyncRef2} = edb_test_support:event_collector_send_sync(),
@@ -1206,7 +1206,7 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
         }),
 
         ok = edb:attach(#{node => Node1, cookie => Cookie}),
-        ?assertEqual(edb:attached_node(), Node1),
+        ?assertEqual(Node1, edb:attached_node()),
 
         ok = edb_test_support:start_event_collector(),
 
@@ -1215,7 +1215,7 @@ test_reattaching_to_different_node_detaches_from_old_node(Config) ->
 
         % Attach to a different node
         ok = edb:attach(#{node => Node2, cookie => Cookie}),
-        ?assertEqual(edb:attached_node(), Node2),
+        ?assertEqual(Node2, edb:attached_node()),
 
         ?assertEqual(
             [{sync, SyncRef}, unsubscribed],
@@ -1232,7 +1232,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
         }),
 
         ok = edb:attach(#{node => Node1, cookie => Cookie}),
-        ?assertEqual(edb:attached_node(), Node1),
+        ?assertEqual(Node1, edb:attached_node()),
 
         ok = edb_test_support:start_event_collector(),
 
@@ -1251,7 +1251,7 @@ test_reverse_attaching_to_a_node_detaches_from_old_node(Config) ->
             extra_args => ["-eval", InjectedCode]
         }),
         {ok, Node2} = wait_reverse_attach_event(Subscription, Ref),
-        ?assertEqual(edb:attached_node(), Node2),
+        ?assertEqual(Node2, edb:attached_node()),
 
         ?assertEqual(
             [{sync, SyncRef}, unsubscribed],
