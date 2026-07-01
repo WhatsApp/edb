@@ -30,7 +30,7 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
 -include_lib("edb/include/edb_dap.hrl").
 
 % Public API
--export([start_link/0]).
+-export([start_link/0, start_link/1]).
 -export([handle_message/1]).
 
 %% gen_server callbacks
@@ -47,6 +47,9 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
 %%% Types
 %%%---------------------------------------------------------------------------------
 -type client_info() :: edb_dap_request_initialize:arguments().
+-type options() :: #{
+    dap_language => module()
+}.
 
 -type attach_type() ::
     #{
@@ -62,17 +65,20 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
 -type state() ::
     #{
         % Server is up, waiting for an `initialize` request from the client
-        state := started
+        state := started,
+        dap_language := module()
     }
     | #{
         % Server received an `initialize` request and is waiting for `attach`/`launch` requests
         state := initialized,
-        client_info := client_info()
+        client_info := client_info(),
+        dap_language := module()
     }
     | #{
         % A `launch` request was received and we are waiting for the debuggee node to be up
         state := launching,
         client_info := client_info(),
+        dap_language := module(),
         port := port() | none,
         shell_process_id => integer(),
         reverse_attach_ref := reference(),
@@ -87,10 +93,12 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
         state := configuring,
         type := attach_type(),
         client_info := client_info(),
+        dap_language := module(),
         port := port() | none,
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
+        dap_language_state := edb_dap_language:state(),
         subscription := edb:event_subscription()
     }
     | #{
@@ -98,10 +106,12 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
         state := attached,
         type := attach_type(),
         client_info := client_info(),
+        dap_language := module(),
         port := port() | none,
         node := node(),
         reverse_attach_ref := reference() | undefined,
         cwd := binary(),
+        dap_language_state := edb_dap_language:state(),
         subscription := edb:event_subscription()
     }
     | #{
@@ -154,7 +164,11 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
 
 -spec start_link() -> {ok, pid()}.
 start_link() ->
-    {ok, _Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE, noargs, []).
+    start_link(#{}).
+
+-spec start_link(options()) -> {ok, pid()}.
+start_link(Options) ->
+    {ok, _Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE, Options, []).
 
 -spec handle_message(Message) -> ok when
     Message :: edb_dap:request() | edb_dap:response().
@@ -165,9 +179,10 @@ handle_message(Message) ->
 %%% Callbacks
 %%%---------------------------------------------------------------------------------
 
--spec init(noargs) -> {ok, state()}.
-init(noargs) ->
-    {ok, #{state => started}}.
+-spec init(options()) -> {ok, state()}.
+init(Options) ->
+    DapLanguage = maps:get(dap_language, Options, edb_dap_language_erlang),
+    {ok, #{state => started, dap_language => DapLanguage}}.
 
 -spec terminate(Reason :: term(), state()) -> ok.
 terminate(_Reason, _State) ->
