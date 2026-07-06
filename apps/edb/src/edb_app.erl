@@ -27,15 +27,10 @@ edb public API
 
 -spec start(application:start_type(), term()) -> {ok, pid()}.
 start(_StartType, _StartArgs) ->
-    Options =
-        case application:get_env(edb, dap_language) of
-            {ok, DapLanguage} ->
-                #{dap_language => DapLanguage};
-            undefined ->
-                #{}
-        end,
-    {ok, _Sup} = edb_sup:start_link(Options).
+    {ok, _Sup} = edb_sup:start_link().
 
 -spec stop(term()) -> ok.
 stop(_State) ->
     ok.
+
+%% internal functions

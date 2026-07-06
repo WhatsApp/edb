@@ -53,6 +53,9 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
     sourceModified => boolean()
 }.
 -type response() :: #{breakpoints := [breakpoint()]}.
+-type breakpoint_error() :: edb:add_breakpoint_error() | {source_lookup_failed, binary()}.
+-type breakpoint_result() :: ok | {error, edb:add_breakpoint_error()}.
+-type breakpoint_results_by_line() :: #{edb:line() => breakpoint_result()}.
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Types_Breakpoint
 -type breakpoint() :: #{
@@ -200,27 +203,28 @@ parse_arguments(Args) ->
 -spec handle(State, Args) -> edb_dap_request:reaction(response()) when
     State :: edb_dap_server:state(),
     Args :: arguments().
-handle(State = #{state := configuring}, Args) ->
-    set_breakpoints(State, Args);
-handle(State = #{state := attached}, Args) ->
-    set_breakpoints(State, Args);
+handle(#{state := configuring}, Args) ->
+    set_breakpoints(Args);
+handle(#{state := attached}, Args) ->
+    set_breakpoints(Args);
 handle(_UnexpectedState, _) ->
     edb_dap_request:unexpected_request().
 
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
--spec set_breakpoints(State, Args) -> edb_dap_request:reaction(response()) when
-    State :: edb_dap_server:state(),
+-spec set_breakpoints(Args) -> edb_dap_request:reaction(response()) when
     Args :: arguments().
-set_breakpoints(State0, Args = #{source := #{path := Path}}) ->
+set_breakpoints(Args = #{source := #{path := Path}}) ->
     SourceBreakpoints = maps:get(breakpoints, Args, []),
     SourceBreakpointLines = [Line || #{line := Line} <- SourceBreakpoints],
-    #{dap_language := DapLanguage, dap_language_state := DapLanguageState0} = State0,
-    {Modules, DapLanguageState1} = DapLanguage:source_to_modules(Path, SourceBreakpointLines, DapLanguageState0),
-    State1 = State0#{dap_language_state => DapLanguageState1},
-
-    LineResults = set_breakpoints_in_modules(Modules, SourceBreakpointLines),
+    LineResults =
+        case edb_dap_language:source_to_modules(Path, SourceBreakpointLines) of
+            {ok, Modules} ->
+                set_breakpoints_in_modules(Modules, SourceBreakpointLines);
+            {error, LookupReason} ->
+                [{Line, {error, {source_lookup_failed, LookupReason}}} || Line <- SourceBreakpointLines]
+        end,
 
     Breakpoints = [
         case Result of
@@ -232,10 +236,7 @@ set_breakpoints(State0, Args = #{source := #{path := Path}}) ->
         end
      || {Line, Result} <:- LineResults
     ],
-    #{
-        response => edb_dap_request:success(#{breakpoints => Breakpoints}),
-        new_state => State1
-    }.
+    #{response => edb_dap_request:success(#{breakpoints => Breakpoints})}.
 
 -spec set_breakpoints_in_modules(Modules, Lines) -> edb:set_breakpoints_result() when
     Modules :: [module()],
@@ -243,31 +244,29 @@ set_breakpoints(State0, Args = #{source := #{path := Path}}) ->
 set_breakpoints_in_modules([Module], Lines) ->
     edb:set_breakpoints(Module, Lines);
 set_breakpoints_in_modules(Modules, Lines) ->
-    ResultsByModule = [edb:set_breakpoints(Module, Lines) || Module <- Modules],
-    [{Line, merge_line_results(Line, ResultsByModule)} || Line <- Lines].
+    ResultsByLine = merge_module_results([edb:set_breakpoints(Module, Lines) || Module <- Modules]),
+    [{Line, maps:get(Line, ResultsByLine, {error, {badkey, Line}})} || Line <- Lines].
 
--spec merge_line_results(Line, ResultsByModule) -> ok | {error, edb:add_breakpoint_error()} when
-    Line :: edb:line(),
+-spec merge_module_results(ResultsByModule) -> breakpoint_results_by_line() when
     ResultsByModule :: [edb:set_breakpoints_result()].
-merge_line_results(Line, ResultsByModule) ->
-    LineResults = [
-        Result
-     || ModuleResults <- ResultsByModule,
-        {ResultLine, Result} <- ModuleResults,
-        ResultLine =:= Line
-    ],
-    case lists:member(ok, LineResults) of
-        true ->
-            ok;
-        false ->
-            case LineResults of
-                [{error, Reason} | _] -> {error, Reason};
-                [] -> {error, {badkey, Line}}
-            end
-    end.
+merge_module_results(ResultsByModule) ->
+    lists:foldl(
+        fun(ModuleResults, ResultsByLine) ->
+            maps:merge_with(
+                fun
+                    (_Line, ok, _ExistingResult) -> ok;
+                    (_Line, _Result, ExistingResult) -> ExistingResult
+                end,
+                maps:from_list(ModuleResults),
+                ResultsByLine
+            )
+        end,
+        #{},
+        ResultsByModule
+    ).
 
 -spec format_breakpoint_error(Error) -> binary() when
-    Error :: edb:add_breakpoint_error().
+    Error :: breakpoint_error().
 format_breakpoint_error(unsupported) ->
     ~"The node does not support setting breakpoints: +D is needed as emulator flag";
 format_breakpoint_error({badkey, Mod}) when is_atom(Mod) ->
@@ -278,5 +277,7 @@ format_breakpoint_error({badkey, Line}) when is_integer(Line) ->
     ~"Line is not executable";
 format_breakpoint_error({unsupported, Line}) when is_integer(Line) ->
     ~"Can't set a breakpoint on this line";
+format_breakpoint_error({source_lookup_failed, Reason}) when is_binary(Reason) ->
+    Reason;
 format_breakpoint_error(timeout_loading_module) ->
     ~"The module failed to be loaded in time; the process loading it may be paused".

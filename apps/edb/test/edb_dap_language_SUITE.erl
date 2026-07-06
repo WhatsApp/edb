@@ -39,9 +39,14 @@ all() ->
 
 init_per_testcase(_TestCase, Config) ->
     {ok, _} = application:ensure_all_started(edb_core),
+    ok = application:set_env(edb, dap_language, ?MODULE),
+    {ok, _} = edb_dap_language:start_link(),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    ok = stop_language_server(),
+    application:unset_env(edb, dap_language),
+    application:unset_env(edb, dap_language_test_state),
     _ = application:stop(edb_core),
     edb_test_support:stop_all_peers(),
     ok.
@@ -69,8 +74,10 @@ test_set_breakpoint_with_custom_dap_language(Config) ->
         modules_by_source => #{SourcePath => [Module]},
         source_lookups => []
     },
+    application:set_env(edb, dap_language_test_state, DapLanguageState0),
+    ok = edb_dap_language:reset(),
     Reaction = edb_dap_request_set_breakpoints:handle(
-        #{state => attached, dap_language => ?MODULE, dap_language_state => DapLanguageState0},
+        #{state => attached},
         #{
             source => #{path => SourcePath},
             breakpoints => [#{line => Line} || Line <- BreakpointLines]
@@ -83,23 +90,27 @@ test_set_breakpoint_with_custom_dap_language(Config) ->
                 #{
                     success := true,
                     body := #{breakpoints := [#{line := 4, verified := true}]}
-                },
-            new_state := #{
-                dap_language_state := #{source_lookups := [{SourcePath, BreakpointLines}]}
-            }
+                }
         },
         Reaction
     ),
+    #{callback_state := #{source_lookups := [{SourcePath, BreakpointLines}]}} = sys:get_state(edb_dap_language),
     ok.
 
 %%--------------------------------------------------------------------
 %% edb_dap_language callbacks
 %%--------------------------------------------------------------------
 init() ->
-    #{source_lookups => []}.
+    application:get_env(edb, dap_language_test_state, #{source_lookups => []}).
 
 source_to_modules(Path, Lines, State0 = #{modules_by_source := ModulesBySource}) ->
     Modules = maps:get(Path, ModulesBySource),
     SourceLookups = maps:get(source_lookups, State0),
     State1 = State0#{source_lookups => SourceLookups ++ [{Path, Lines}]},
-    {Modules, State1}.
+    {ok, Modules, State1}.
+
+stop_language_server() ->
+    case erlang:whereis(edb_dap_language) of
+        undefined -> ok;
+        Pid -> gen_server:stop(Pid)
+    end.

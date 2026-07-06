@@ -26,15 +26,17 @@ Default Erlang language hooks.
 
 -export([init/0, source_to_modules/3]).
 
--spec init() -> #{}.
+-type state() :: #{}.
+
+-spec init() -> state().
 init() ->
     #{}.
 
--spec source_to_modules(Path, Lines, State) -> {[module()], State} when
+-spec source_to_modules(Path, Lines, State) -> {ok, [module()], State} when
     Path :: binary(),
     Lines :: [edb:line()],
-    State :: #{}.
+    State :: state().
 source_to_modules(Path, _Lines, State) ->
     Extension = filename:extension(Path),
     ModuleName = filename:basename(Path, Extension),
-    {[binary_to_atom(unicode:characters_to_binary(ModuleName))], State}.
+    {ok, [binary_to_atom(unicode:characters_to_binary(ModuleName))], State}.
