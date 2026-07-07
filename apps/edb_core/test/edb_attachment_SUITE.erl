@@ -189,7 +189,7 @@ test_raises_error_until_attached(Config) ->
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
         ?assertMatch(Node, edb:attached_node()),
-        ?assertMatch(#{}, edb:processes([])),
+        ?assert(is_map(edb:processes([]))),
         ?assertEqual(#{Node => []}, edb:nodes()),
 
         % After detaching, we error again
@@ -520,7 +520,7 @@ test_raises_error_until_reverse_attached(Config) ->
         % We eventually attach, and no longer error
         {ok, Node} = wait_reverse_attach_event(Subscription, Ref),
         ?assertEqual(Node, edb:attached_node()),
-        ?assertMatch(#{}, edb:processes([])),
+        ?assert(is_map(edb:processes([]))),
 
         % After detaching, we error again
         ok = edb:detach(),
@@ -573,7 +573,7 @@ test_can_reverse_attach_to_node_with_dynamic_name(Config) ->
         % We eventually attach, and no longer error
         {ok, _} = wait_reverse_attach_event(Subscription, Ref),
 
-        ?assertMatch(#{}, edb:processes([])),
+        ?assert(is_map(edb:processes([]))),
 
         {ok, resumed} = edb:continue(),
 
@@ -600,7 +600,7 @@ test_can_reverse_attach_to_node_with_no_dist(Config) ->
         % We eventually attach, and no longer error
         {ok, _} = wait_reverse_attach_event(Subscription, Ref),
 
-        ?assertMatch(#{}, edb:processes([])),
+        ?assert(is_map(edb:processes([]))),
 
         {ok, resumed} = edb:continue(),
 
@@ -1056,7 +1056,7 @@ test_querying_on_a_vanished_node_detaches(Config) ->
         ok = edb_test_support:start_event_collector(),
 
         % Sanity check: no errors while attached
-        ?assertMatch(#{}, edb:processes([])),
+        ?assert(is_map(edb:processes([]))),
 
         % Kill the node, we will be detached
         ok = edb_test_support:stop_peer(Peer),
