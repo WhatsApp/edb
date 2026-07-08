@@ -132,7 +132,6 @@ reverse_attach_impl({attached, Node}, State0 = #{state := launching}) ->
     State1 = maps:without([shell_process_id], State0),
 
     ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
-    ok = edb_dap_language:reset(),
 
     AttachType0 = maps:with([shell_process_id], State0),
     AttachType1 = AttachType0#{request => launch, process_id => ProcessId},

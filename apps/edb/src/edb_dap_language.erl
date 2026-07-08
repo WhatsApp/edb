@@ -24,8 +24,10 @@ Language-specific hooks for the DAP adapter.
 
 -behaviour(gen_server).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([start_link/0]).
--export([reset/0, source_to_modules/2]).
+-export([source_to_modules/2]).
 
 -export([
     init/1,
@@ -70,10 +72,6 @@ is shown to the DAP client.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec reset() -> ok.
-reset() ->
-    gen_server:call(?SERVER, reset).
-
 -spec source_to_modules(Path, Lines) -> source_to_modules_result() when
     Path :: binary(),
     Lines :: [edb:line()].
@@ -85,8 +83,6 @@ init([]) ->
     {ok, init_state()}.
 
 -spec handle_call(term(), term(), server_state()) -> {reply, term(), server_state()}.
-handle_call(reset, _From, State0 = #{impl := Impl}) ->
-    {reply, ok, State0#{callback_state := Impl:init()}};
 handle_call({source_to_modules, Path, Lines}, _From, State0 = #{impl := Impl, callback_state := CallbackState0}) ->
     case Impl:source_to_modules(Path, Lines, CallbackState0) of
         {ok, Modules, CallbackState1} ->
@@ -96,11 +92,13 @@ handle_call({source_to_modules, Path, Lines}, _From, State0 = #{impl := Impl, ca
     end.
 
 -spec handle_cast(term(), server_state()) -> {noreply, server_state()}.
-handle_cast(_Request, State) ->
+handle_cast(Unexpected, State) ->
+    ?LOG_WARNING("Unexpected message: ~p", [Unexpected]),
     {noreply, State}.
 
 -spec handle_info(term(), server_state()) -> {noreply, server_state()}.
-handle_info(_Info, State) ->
+handle_info(Unexpected, State) ->
+    ?LOG_WARNING("Unexpected message: ~p", [Unexpected]),
     {noreply, State}.
 
 -spec init_state() -> server_state().

@@ -20,8 +20,8 @@
 -compile(warn_missing_spec_all).
 
 %% Public API
--export([start_test_client/1]).
--export([start_session_via_attach/4, start_session_via_launch/2, start_session_via_launch/3]).
+-export([start_test_client/1, start_test_client/2]).
+-export([start_session_via_attach/4, start_session_via_launch/2, start_session_via_launch/3, start_session_via_launch/4]).
 -export([start_session_via_launch_run/2]).
 -export([set_breakpoints/3]).
 -export([spawn_and_wait_for_bp/3, wait_for_bp/1]).
@@ -43,10 +43,14 @@
 
 -spec start_test_client(Config :: ct_suite:ct_config()) -> {ok, client()}.
 start_test_client(Config) ->
+    start_test_client(Config, []).
+
+-spec start_test_client(Config :: ct_suite:ct_config(), Env :: [{string(), string()}]) -> {ok, client()}.
+start_test_client(Config, Env) ->
     DataDir = proplists:get_value(data_dir, Config),
     Executable = filename:join([DataDir, "edb"]),
     Args = ["dap"],
-    edb_dap_test_client:start_link(Executable, Args).
+    edb_dap_test_client:start_link(Executable, Args, Env).
 
 -spec start_session_via_attach(Config, Node, Cookie, Cwd) -> {ok, client()} when
     Config :: ct_suite:ct_config(),
@@ -94,7 +98,20 @@ start_session_via_launch(Config, StartPeerOpts) ->
     Client :: client(),
     PeerInfo :: edb_test_support:start_peer_result().
 start_session_via_launch(Config, InitArguments, StartPeerOpts) ->
-    {ok, Client} = start_test_client(Config),
+    start_session_via_launch(Config, InitArguments, StartPeerOpts, []).
+
+-spec start_session_via_launch(Config, InitArguments, StartPeerOpts, AdapterEnv) -> {ok, Client, PeerInfo} when
+    Config :: ct_suite:ct_config(),
+    InitArguments :: #{
+        supportsRunInTerminalRequest => boolean(),
+        supportsVariablePaging => boolean()
+    },
+    StartPeerOpts :: edb_test_support:start_peer_node_opts(),
+    AdapterEnv :: [{string(), string()}],
+    Client :: client(),
+    PeerInfo :: edb_test_support:start_peer_result().
+start_session_via_launch(Config, InitArguments, StartPeerOpts, AdapterEnv) ->
+    {ok, Client} = start_test_client(Config, AdapterEnv),
 
     AdapterID = atom_to_binary(?MODULE),
     DefaulInitArguments = #{

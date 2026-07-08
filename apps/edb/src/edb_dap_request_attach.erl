@@ -83,7 +83,6 @@ handle(State0 = #{state := initialized}, Args) ->
             Node = maps:get(node, Config),
             ProcessId = list_to_integer(erpc:call(Node, os, getpid, [])),
             {ok, Subscription} = edb:subscribe(),
-            ok = edb_dap_language:reset(),
             State1 = State0#{
                 state => configuring,
                 type => #{

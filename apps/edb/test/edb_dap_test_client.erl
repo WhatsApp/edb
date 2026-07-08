@@ -24,7 +24,7 @@ This module is used to test the DAP server End-to-End.
 
 -behaviour(gen_server).
 
--export([start_link/2]).
+-export([start_link/2, start_link/3]).
 
 -export([
     initialize/2,
@@ -76,7 +76,11 @@ This module is used to test the DAP server End-to-End.
 
 -spec start_link(file:filename_all(), [string()]) -> {ok, pid()}.
 start_link(Executable, Args) ->
-    {ok, _Pid} = gen_server:start_link(?MODULE, #{executable => Executable, args => Args}, []).
+    start_link(Executable, Args, []).
+
+-spec start_link(file:filename_all(), [string()], [{string(), string()}]) -> {ok, pid()}.
+start_link(Executable, Args, Env) ->
+    {ok, _Pid} = gen_server:start_link(?MODULE, #{executable => Executable, args => Args, env => Env}, []).
 
 -spec initialize(client(), edb_dap_request_initialize:arguments()) -> edb_dap:response().
 initialize(Client, Args) ->
@@ -185,9 +189,15 @@ wait_for_reverse_request(Type, Client) ->
 respond_success(Client, ReverseRequest, ResponseBody) ->
     call(Client, {respond, true, ReverseRequest, ResponseBody}).
 
--spec init(#{executable := file:filename_all(), args := [string()]}) -> {ok, state()}.
-init(#{executable := Executable, args := Args}) ->
-    Opts = [{args, Args}, exit_status, eof, binary, stream, use_stdio],
+-spec init(#{executable := file:filename_all(), args := [string()], env := [{string(), string()}]}) ->
+    {ok, state()}.
+init(#{executable := Executable, args := Args, env := Env}) ->
+    Opts0 = [{args, Args}, exit_status, eof, binary, stream, use_stdio],
+    Opts =
+        case Env of
+            [] -> Opts0;
+            _ -> [{env, Env} | Opts0]
+        end,
     Port = open_port({spawn_executable, Executable}, Opts),
     State = #{
         io => Port,
