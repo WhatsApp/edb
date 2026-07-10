@@ -24,6 +24,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -45,6 +46,9 @@
     test_run_passes_env/1,
     test_run_captures_output/1
 ]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

@@ -23,6 +23,7 @@
 
 %% Test server callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -35,6 +36,9 @@
 ]).
 
 -define(EDB, "edb").
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

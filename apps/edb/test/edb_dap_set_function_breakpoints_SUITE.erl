@@ -23,6 +23,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -36,6 +37,9 @@
     test_error_invalid_name/1,
     test_error_function_not_found/1
 ]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

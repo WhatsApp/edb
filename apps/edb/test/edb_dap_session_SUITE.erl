@@ -24,6 +24,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     groups/0,
     init_per_testcase/2,
@@ -45,6 +46,9 @@
     test_terminates_when_node_goes_down/1,
     test_terminates_when_node_goes_down_while_configuring/1
 ]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

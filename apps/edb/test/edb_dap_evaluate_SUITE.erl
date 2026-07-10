@@ -23,6 +23,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -36,6 +37,9 @@
 -export([test_evaluate_structured_result/1]).
 -export([test_evaluate_clipboard_context_returns_value_in_full/1]).
 -export([test_evaluate_without_frame_id/1]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

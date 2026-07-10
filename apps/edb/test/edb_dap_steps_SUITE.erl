@@ -22,7 +22,7 @@
 -include_lib("assert/include/assert.hrl").
 
 %% CT callbacks
--export([all/0]).
+-export([suite/0, all/0]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 %% Test cases
@@ -33,6 +33,9 @@
 -export([test_step_in_errors_on_wrong_target/1]).
 -export([test_step_in_error_on_module_not_found/1]).
 -export([test_step_in_error_on_function_not_found/1]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

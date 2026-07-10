@@ -23,6 +23,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -32,6 +33,9 @@
 -export([
     test_can_pause_and_continue/1
 ]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

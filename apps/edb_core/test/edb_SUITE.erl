@@ -133,8 +133,7 @@
 suite() ->
     [
         % @fb-only: {appatic, #{enable_autoclean => true}},
-        {timetrap, {minutes, 1}}
-    ].
+        {timetrap, {minutes, 1}}, {procmop, #{cleanup_procs => true}}].
 
 groups() ->
     [

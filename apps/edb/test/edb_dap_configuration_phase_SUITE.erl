@@ -20,6 +20,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -30,6 +31,9 @@
     test_queries_fail_until_configured/1,
     test_setting_breakpoints_work_before_and_after_configuration/1
 ]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [

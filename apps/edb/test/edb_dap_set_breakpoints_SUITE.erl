@@ -23,6 +23,7 @@
 
 %% CT callbacks
 -export([
+    suite/0,
     all/0,
     init_per_testcase/2,
     end_per_testcase/2
@@ -31,6 +32,9 @@
 %% Test cases
 -export([test_error_set_breakpoint_bad_line/1]).
 -export([test_error_set_breakpoint_unknown_module/1]).
+
+suite() ->
+    [{procmop, #{cleanup_procs => true}}].
 
 all() ->
     [
