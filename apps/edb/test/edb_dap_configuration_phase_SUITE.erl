@@ -32,8 +32,11 @@
     test_setting_breakpoints_work_before_and_after_configuration/1
 ]).
 
+%% erlfmt:ignore
 suite() ->
-    [{procmop, #{cleanup_procs => true}}].
+    [
+        % @fb-only: {procmop, #{cleanup_procs => true}}
+    ].
 
 all() ->
     [

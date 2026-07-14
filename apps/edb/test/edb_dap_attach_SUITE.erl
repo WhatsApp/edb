@@ -35,8 +35,11 @@
 -export([test_fails_to_attach_if_wrong_cookie_is_given/1]).
 -export([test_validates_input/1]).
 
+%% erlfmt:ignore
 suite() ->
-    [{procmop, #{cleanup_procs => true}}].
+    [
+        % @fb-only: {procmop, #{cleanup_procs => true}}
+    ].
 
 all() ->
     [
