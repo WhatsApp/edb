@@ -38,11 +38,8 @@
 -export([test_evaluate_clipboard_context_returns_value_in_full/1]).
 -export([test_evaluate_without_frame_id/1]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

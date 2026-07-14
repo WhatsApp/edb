@@ -34,11 +34,8 @@
 -export([test_step_in_error_on_module_not_found/1]).
 -export([test_step_in_error_on_function_not_found/1]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

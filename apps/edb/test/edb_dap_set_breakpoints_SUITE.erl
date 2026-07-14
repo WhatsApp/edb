@@ -33,11 +33,8 @@
 -export([test_error_set_breakpoint_bad_line/1]).
 -export([test_error_set_breakpoint_unknown_module/1]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

@@ -38,11 +38,8 @@
     test_error_function_not_found/1
 ]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

@@ -37,11 +37,8 @@
 
 -define(EDB, "edb").
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

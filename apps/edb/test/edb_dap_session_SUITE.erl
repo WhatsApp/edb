@@ -47,11 +47,8 @@
     test_terminates_when_node_goes_down_while_configuring/1
 ]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [

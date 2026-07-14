@@ -44,11 +44,8 @@
     test_structured_variables_with_pagination/1
 ]).
 
-%% erlfmt:ignore
 suite() ->
-    [
-        % @fb-only: {procmop, #{cleanup_procs => true}}
-    ].
+    [].
 
 all() ->
     [
