@@ -192,12 +192,7 @@ respond_success(Client, ReverseRequest, ResponseBody) ->
 -spec init(#{executable := file:filename_all(), args := [string()], env := [{string(), string()}]}) ->
     {ok, state()}.
 init(#{executable := Executable, args := Args, env := Env}) ->
-    Opts0 = [{args, Args}, exit_status, eof, binary, stream, use_stdio],
-    Opts =
-        case Env of
-            [] -> Opts0;
-            _ -> [{env, Env} | Opts0]
-        end,
+    Opts = [{env, Env}, {args, Args}, exit_status, eof, binary, stream, use_stdio],
     Port = open_port({spawn_executable, Executable}, Opts),
     State = #{
         io => Port,
