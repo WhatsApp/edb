@@ -207,7 +207,7 @@ random_srcdir(CtConfig) ->
         cookie => atom(),
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
-        env => #{binary() => binary()},
+        env => #{binary() => binary() | null},
         extra_args => [binary() | string()],
         srcdir => binary(),
         modules => [module_spec()],
@@ -226,7 +226,7 @@ random_srcdir(CtConfig) ->
     #{
         copy_code_path => boolean(),
         enable_debugging_mode => boolean(),
-        env => #{binary() => binary()},
+        env => #{binary() => binary() | null},
         extra_args => [binary() | string()],
         srcdir => binary(),
         modules => [module_spec()],

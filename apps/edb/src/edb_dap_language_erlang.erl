@@ -39,4 +39,7 @@ init() ->
 source_to_modules(Path, _Lines, State) ->
     Extension = filename:extension(Path),
     ModuleName = filename:basename(Path, Extension),
-    {ok, [binary_to_atom(unicode:characters_to_binary(ModuleName))], State}.
+    case unicode:characters_to_binary(ModuleName) of
+        ModuleNameBin when is_binary(ModuleNameBin) ->
+            {ok, [binary_to_atom(ModuleNameBin)], State}
+    end.

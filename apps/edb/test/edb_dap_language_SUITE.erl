@@ -48,7 +48,10 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_set_breakpoints_with_custom_dap_language(Config) ->
-    DapServerBeamDir = filename:dirname(code:which(?MODULE)),
+    DapServerBeamDir =
+        case code:which(?MODULE) of
+            ModuleBeam when ModuleBeam =/= non_existing -> filename:dirname(ModuleBeam)
+        end,
     DapServerEnv = [
         {"ERL_AFLAGS",
             lists:flatten(
