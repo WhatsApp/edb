@@ -27,14 +27,18 @@
 ]).
 
 %% Test cases
--export([test_set_breakpoints_with_custom_dap_language/1]).
+-export([
+    test_set_breakpoints_with_custom_dap_language/1,
+    test_set_breakpoints_when_source_maps_to_no_modules/1
+]).
 
 %% edb_dap_language callbacks
 -export([init/0, source_to_modules/3]).
 
 all() ->
     [
-        test_set_breakpoints_with_custom_dap_language
+        test_set_breakpoints_with_custom_dap_language,
+        test_set_breakpoints_when_source_maps_to_no_modules
     ].
 
 init_per_testcase(_TestCase, Config) ->
@@ -48,30 +52,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% TEST CASES
 %%--------------------------------------------------------------------
 test_set_breakpoints_with_custom_dap_language(Config) ->
-    DapServerBeamDir =
-        case code:which(?MODULE) of
-            ModuleBeam when ModuleBeam =/= non_existing -> filename:dirname(ModuleBeam)
-        end,
-    DapServerEnv = [
-        {"ERL_AFLAGS",
-            lists:flatten(
-                io_lib:format("-pa ~s -eval application:set_env(edb,dap_language,~p)", [DapServerBeamDir, ?MODULE])
-            )}
-    ],
-
-    % Start a DAP server and debuggee node with foo1, foo2, and foo3 loaded.
-    % DapServerEnv configures this suite module as the DAP language callback.
-    {ok, Client, #{peer := Peer}} =
-        edb_dap_test_support:start_session_via_launch(
-            Config,
-            #{},
-            #{
-                modules => custom_language_modules()
-                % Prevent launch from inheriting the adapter ERL_AFLAGS.
-                % env => #{~"ERL_AFLAGS" => null}
-            },
-            DapServerEnv
-        ),
+    {ok, Client, #{peer := Peer}} = start_session_with_custom_dap_language(Config),
 
     % Set breakpoints on synthetic source bar.erl
     Response = edb_dap_test_client:set_breakpoints(Client, #{
@@ -125,6 +106,66 @@ test_set_breakpoints_with_custom_dap_language(Config) ->
 
     #{success := true} = edb_dap_test_client:continue(Client, #{threadId => ThreadId4}),
     ok.
+
+test_set_breakpoints_when_source_maps_to_no_modules(Config) ->
+    {ok, Client, #{}} = start_session_with_custom_dap_language(Config),
+
+    Response = edb_dap_test_client:set_breakpoints(Client, #{
+        source => #{path => ~"/tmp/unknown.erl"},
+        breakpoints => [#{line => Line} || Line <- [3, 5]]
+    }),
+    ?assertMatch(
+        #{
+            command := ~"setBreakpoints",
+            type := response,
+            success := true,
+            body :=
+                #{
+                    breakpoints :=
+                        [
+                            #{
+                                line := 3,
+                                message := ~"Module not found or failing to load",
+                                reason := ~"failed",
+                                verified := false
+                            },
+                            #{
+                                line := 5,
+                                message := ~"Module not found or failing to load",
+                                reason := ~"failed",
+                                verified := false
+                            }
+                        ]
+                }
+        },
+        Response
+    ),
+    ok.
+
+%%--------------------------------------------------------------------
+%% Helpers
+%%--------------------------------------------------------------------
+-spec start_session_with_custom_dap_language(Config) -> {ok, Client, PeerInfo} when
+    Config :: ct_suite:ct_config(),
+    Client :: edb_dap_test_client:client(),
+    PeerInfo :: edb_test_support:start_peer_result().
+start_session_with_custom_dap_language(Config) ->
+    DapServerBeamDir =
+        case code:which(?MODULE) of
+            ModuleBeam when ModuleBeam =/= non_existing -> filename:dirname(ModuleBeam)
+        end,
+    DapServerEnv = [
+        {"ERL_AFLAGS",
+            lists:flatten(
+                io_lib:format("-pa ~s -eval application:set_env(edb,dap_language,~p)", [DapServerBeamDir, ?MODULE])
+            )}
+    ],
+    edb_dap_test_support:start_session_via_launch(
+        Config,
+        #{},
+        #{modules => custom_language_modules()},
+        DapServerEnv
+    ).
 
 %%--------------------------------------------------------------------
 %% edb_dap_language callbacks

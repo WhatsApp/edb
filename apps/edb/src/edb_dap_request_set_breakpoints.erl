@@ -241,6 +241,8 @@ set_breakpoints(Args = #{source := #{path := Path}}) ->
 -spec set_breakpoints_in_modules(Modules, Lines) -> edb:set_breakpoints_result() when
     Modules :: [module()],
     Lines :: [edb:line()].
+set_breakpoints_in_modules([], Lines) ->
+    [{Line, {error, {badkey, no_module}}} || Line <- Lines];
 set_breakpoints_in_modules([Module], Lines) ->
     edb:set_breakpoints(Module, Lines);
 set_breakpoints_in_modules(Modules, Lines) ->
