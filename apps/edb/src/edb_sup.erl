@@ -65,6 +65,10 @@ init([]) ->
                 start => {edb_dap_id_mappings, start_link_var_reference_ids_server, []}
             },
             #{
+                id => edb_dap_language,
+                start => {edb_dap_language, start_link, []}
+            },
+            #{
                 id => edb_dap_server,
                 start => {edb_dap_server, start_link, []},
                 restart => transient
