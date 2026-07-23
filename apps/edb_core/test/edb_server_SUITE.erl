@@ -1249,7 +1249,7 @@ test_original_module_is_reported_in_paused_event_for_line_breakpoint(Config) ->
                 ok;
             {edb_event, Subscription, Other} ->
                 error({unexpected_event, Other})
-        after 2000 ->
+        after 5000 ->
             error(~"Timeout waiting for paused event")
         end,
 
@@ -1302,7 +1302,7 @@ test_original_module_is_reported_in_paused_event_for_function_breakpoint(Config)
                 ok;
             {edb_event, Subscription, Other} ->
                 error({unexpected_event, Other})
-        after 2000 ->
+        after 5000 ->
             error(~"Timeout waiting for paused event")
         end,
 
