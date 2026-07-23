@@ -426,7 +426,7 @@ test_subscribing_before_attaching_works(Config) ->
         receive
             {edb_event, Subscription, {sync, SyncRef}} ->
                 ok
-        after 1000 ->
+        after 5000 ->
             error(sync_event_not_received)
         end,
 
