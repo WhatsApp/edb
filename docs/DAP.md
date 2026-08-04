@@ -16,7 +16,7 @@ $PATH_TO_EDB/edb dap
 
 ## Debug Configurations
 
-The DAP specificatoin allows for two modes of operation:
+The DAP specification allows for two modes of operation:
   1. *Attaching* to a running program, or
   2. *Launching* a new node program
 
