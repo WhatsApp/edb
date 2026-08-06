@@ -20,7 +20,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 
-%% Compiling test modues
+%% Compiling test modules
 -export_type([module_spec/0, compile_opts/0]).
 -export([compile_modules/3, compile_module/3]).
 

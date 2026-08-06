@@ -2165,7 +2165,7 @@ test_step_over_goes_to_next_line(_Config) ->
     ?ASSERT_SYNC_RECEIVED_FROM_LINE(19, Pid),
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
-    % Sanity check that we hit the breapoint
+    % Sanity check that we hit the breakpoint
     ?assertEqual(
         #{Pid => #{type => line, line => 20, module => test_step_over}},
         edb:get_breakpoints_hit()
@@ -2226,7 +2226,7 @@ test_step_over_skips_same_name_fun_call(_Config) ->
     % No sync received yet
     ?ASSERT_NOTHING_ELSE_RECEIVED(),
 
-    % Sanity check that we hit the breapoint
+    % Sanity check that we hit the breakpoint
     ?assertEqual(
         #{Pid => #{type => line, line => 44, module => test_step_over}},
         edb:get_breakpoints_hit()
