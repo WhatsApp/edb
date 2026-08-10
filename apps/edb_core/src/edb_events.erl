@@ -13,12 +13,12 @@
 %% limitations under the License.
 %% % @format
 -module(edb_events).
--compile(warn_missing_spec_all).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
+-compile(warn_missing_spec_all).
 
 %% Public API
 -export([no_subscribers/0]).

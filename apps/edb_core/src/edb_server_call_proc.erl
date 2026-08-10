@@ -21,10 +21,10 @@
 %% of the debugger getting blocked
 
 -module(edb_server_call_proc).
--compile(warn_missing_spec_all).
 
 -oncall("whatsapp_server_devx").
 -moduledoc false.
+-compile(warn_missing_spec_all).
 -compile(warn_missing_spec_all).
 
 % Supported calls to standard services

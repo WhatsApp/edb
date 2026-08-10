@@ -15,10 +15,10 @@
 -module(edb_server_process).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
--compile({no_auto_import, [process_info/1, process_info/2]}).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
+-compile({no_auto_import, [process_info/1, process_info/2]}).
 
 % Suspending processes
 -export([try_suspend_process/1, try_resume_process/1]).
