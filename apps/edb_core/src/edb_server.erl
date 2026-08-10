@@ -15,9 +15,9 @@
 -module(edb_server).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 -behaviour(gen_server).
 
 %% External exports

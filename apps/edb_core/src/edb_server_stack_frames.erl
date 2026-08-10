@@ -15,9 +15,9 @@
 -module(edb_server_stack_frames).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 
 -export([raw_stack_frames/1, raw_user_stack_frames/1]).
 -export([user_frames_only/1, without_bottom_terminator_frame/1]).

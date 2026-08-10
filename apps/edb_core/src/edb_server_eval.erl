@@ -15,9 +15,9 @@
 -module(edb_server_eval).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 
 -export([eval/5]).
 -export([stash_object_code/3, get_object_code/1]).

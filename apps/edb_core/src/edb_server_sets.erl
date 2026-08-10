@@ -14,11 +14,11 @@
 %% % @format
 
 -module(edb_server_sets).
--compile(warn_missing_spec_all).
 
 -oncall("whatsapp_server_devx").
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 
 %% Public API
 -export([

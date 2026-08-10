@@ -16,11 +16,11 @@
 -module(edb_dap_test_client).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 -moduledoc """
 DAP test client.
 This module tests the DAP server end-to-end.
 """.
+-compile(warn_missing_spec_all).
 
 -behaviour(gen_server).
 

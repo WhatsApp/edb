@@ -19,9 +19,9 @@
 -module(edb_gatekeeper).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 
 -behavior(gen_server).
 

@@ -17,7 +17,6 @@
 -module(edb_dap_eval_delegate).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc """
 This module handles calls to `edb:eval/1` and defines the callbacks
@@ -27,6 +26,7 @@ It must not depend on anything beyond `kernel`, `stdlib`, and
 `edb_core`, which are the only applications assumed to be running on
 the debuggee.
 """.
+-compile(warn_missing_spec_all).
 
 % Running
 -export([eval/1]).

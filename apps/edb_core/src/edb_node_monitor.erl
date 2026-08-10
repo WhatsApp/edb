@@ -16,9 +16,9 @@
 -module(edb_node_monitor).
 
 -oncall("whatsapp_server_devx").
--compile(warn_missing_spec_all).
 
 -moduledoc false.
+-compile(warn_missing_spec_all).
 
 -behavior(gen_statem).
 
