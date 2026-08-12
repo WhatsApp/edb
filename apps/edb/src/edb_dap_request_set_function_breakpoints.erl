@@ -16,14 +16,14 @@
 
 -module(edb_dap_request_set_function_breakpoints).
 
+-oncall("whatsapp_server_devx").
+
 -moduledoc """
 Handles Debug Adapter Protocol (DAP) setFunctionBreakpoints requests for the Erlang debugger.
 
 The module follows the Microsoft Debug Adapter Protocol specification for
 setFunctionBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetFunctionBreakpoints
 """.
-
--oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_request).

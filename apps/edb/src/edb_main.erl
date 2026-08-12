@@ -15,11 +15,11 @@
 %%
 -module(edb_main).
 
+-oncall("whatsapp_server_devx").
+
 -moduledoc """
 The entry point for the Erlang Debugger (EDB) Escript.
 """.
-
--oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -export([main/1]).

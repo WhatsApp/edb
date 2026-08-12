@@ -16,14 +16,14 @@
 
 -module(edb_dap_request_next).
 
+-oncall("whatsapp_server_devx").
+
 -moduledoc """
 Handles Debug Adapter Protocol (DAP) next requests for the Erlang debugger.
 
 The module follows the Microsoft Debug Adapter Protocol specification for
 next requests: https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
 """.
-
--oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_request).

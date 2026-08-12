@@ -16,14 +16,14 @@
 
 -module(edb_dap_reverse_request_start_debugging).
 
+-oncall("whatsapp_server_devx").
+
 -moduledoc """
 Handles Debug Adapter Protocol (DAP) startDebugging reverse requests for the Erlang debugger.
 
 The module follows the Microsoft Debug Adapter Protocol specification for
 startDebugging reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_StartDebugging
 """.
-
--oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_reverse_request).

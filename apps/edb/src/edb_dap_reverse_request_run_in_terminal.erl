@@ -16,6 +16,8 @@
 
 -module(edb_dap_reverse_request_run_in_terminal).
 
+-oncall("whatsapp_server_devx").
+
 -moduledoc """
 Handles Debug Adapter Protocol (DAP) runInTerminal reverse requests for
 the Erlang debugger.
@@ -23,8 +25,6 @@ the Erlang debugger.
 The module follows the Microsoft Debug Adapter Protocol specification for
 runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protocol/specification#Reverse_Requests_RunInTerminal
 """.
-
--oncall("whatsapp_server_devx").
 -compile(warn_missing_spec_all).
 
 -behaviour(edb_dap_reverse_request).
