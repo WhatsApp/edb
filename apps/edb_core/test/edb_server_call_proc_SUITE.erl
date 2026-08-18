@@ -118,7 +118,7 @@ test_code_where_is_file_works(_Config) ->
     ),
 
     MyBean = atom_to_list(?MODULE) ++ ".bean",
-    ?assertMatch(
+    ?assertEqual(
         {call_ok, non_existing},
         edb_server_call_proc:code_where_is_file(MyBean)
     ).

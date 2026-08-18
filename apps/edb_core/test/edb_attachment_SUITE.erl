@@ -188,7 +188,7 @@ test_raises_error_until_attached(Config) ->
         % After attaching, edb_server is now loaded and we no longer error
         ok = edb:attach(#{node => Node, cookie => Cookie}),
         ?assertMatch({file, _}, peer:call(Peer, code, is_loaded, [edb_server])),
-        ?assertMatch(Node, edb:attached_node()),
+        ?assertEqual(Node, edb:attached_node()),
         ?assert(is_map(edb:processes([]))),
         ?assertEqual(#{Node => []}, edb:nodes()),
 
@@ -1076,7 +1076,7 @@ test_terminating_detaches(Config) ->
 
         % Sanity check: no errors while attached
         edb:attach(#{node => Node, cookie => Cookie}),
-        ?assertMatch(Node, edb:attached_node()),
+        ?assertEqual(Node, edb:attached_node()),
 
         % We error after stopping the session
         ok = edb:terminate(),
@@ -1084,7 +1084,7 @@ test_terminating_detaches(Config) ->
 
         % No errors if we re-attach
         edb:attach(#{node => Node, cookie => Cookie}),
-        ?assertMatch(Node, edb:attached_node()),
+        ?assertEqual(Node, edb:attached_node()),
 
         ok
     end).
@@ -1143,7 +1143,7 @@ test_reattaching_to_non_existent_node_doesnt_detach(Config) ->
         {ok, SyncRef2} = edb_test_support:event_collector_send_sync(),
 
         % Still attached to the original node
-        ?assertMatch(Node, edb:attached_node()),
+        ?assertEqual(Node, edb:attached_node()),
 
         edb:detach(),
 

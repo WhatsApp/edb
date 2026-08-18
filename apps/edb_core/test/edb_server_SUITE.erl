@@ -671,7 +671,7 @@ test_error_if_substitute_already_has_breakpoints_set(Config) ->
         ok = edb:add_breakpoint(test_module_substitute, 4),
 
         Error = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
-        ?assertMatch({error, already_has_breakpoints}, Error),
+        ?assertEqual({error, already_has_breakpoints}, Error),
         ok
     end),
     ok.
@@ -1533,7 +1533,7 @@ test_error_if_module_already_has_a_substitute(Config) ->
             Config, {source, BadSubstituteModuleSource}, #{load_it => true}
         ]),
         Error = peer:call(Peer, edb_server, add_module_substitute, [test_module, bad_test_module_substitute, []]),
-        ?assertMatch({error, already_substituted}, Error),
+        ?assertEqual({error, already_substituted}, Error),
         ok
     end),
     ok.
@@ -1574,7 +1574,7 @@ test_error_if_substitute_is_already_a_substitute(Config) ->
         % Try to set up second substitution: original2 -> substitute
         % This should fail because substitute is already a substitute for original1
         Error = peer:call(Peer, edb_server, add_module_substitute, [test_module_original2, test_module_substitute, []]),
-        ?assertMatch({error, is_already_a_substitute}, Error),
+        ?assertEqual({error, is_already_a_substitute}, Error),
         ok
     end),
     ok.
@@ -1614,7 +1614,7 @@ test_error_if_try_removing_intermediate_substitute(Config) ->
 
         % Remove the intermediate module substitute
         Error = peer:call(Peer, edb_server, remove_module_substitute, [test_module_intermediate]),
-        ?assertMatch({error, has_dependent_substitute}, Error)
+        ?assertEqual({error, has_dependent_substitute}, Error)
     end),
     ok.
 
@@ -1638,7 +1638,7 @@ test_error_if_try_removing_non_existent_substitute(Config) ->
 
         ok = peer:call(Peer, edb_server, add_module_substitute, [test_module, test_module_substitute, []]),
         Error = peer:call(Peer, edb_server, remove_module_substitute, [test_module]),
-        ?assertMatch({error, not_a_substitute}, Error),
+        ?assertEqual({error, not_a_substitute}, Error),
         ok
     end),
     ok.

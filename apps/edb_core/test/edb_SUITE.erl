@@ -2269,7 +2269,7 @@ test_step_over_fails_on_running_process(_Config) ->
     ),
 
     % Try to step over to reach next line
-    ?assertMatch({error, not_paused}, edb:step_over(Pid)),
+    ?assertEqual({error, not_paused}, edb:step_over(Pid)),
 
     % Still no breakpoint hit
     ?assertEqual(

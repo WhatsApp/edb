@@ -188,7 +188,7 @@ test_validate(_Config) ->
         runInTerminal => #{cwd => ~"/tmp", args => [~"erl"]},
         config => #{nameDomain => ~"shortnames"}
     },
-    ?assertMatch(
+    ?assertEqual(
         {error, ~"'run' and 'runInTerminal' are mutually exclusive"},
         edb_dap_request_launch:parse_arguments(BothPresent)
     ),
@@ -197,7 +197,7 @@ test_validate(_Config) ->
     NeitherPresent = #{
         config => #{nameDomain => ~"shortnames"}
     },
-    ?assertMatch(
+    ?assertEqual(
         {error, ~"either 'run' or 'runInTerminal' must be specified"},
         edb_dap_request_launch:parse_arguments(NeitherPresent)
     ).
