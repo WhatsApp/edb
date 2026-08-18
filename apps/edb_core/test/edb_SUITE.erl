@@ -4023,7 +4023,7 @@ test_eval_reports_being_killed(Config) ->
             _ -> ok
         end
     end,
-    ?assertMatch(
+    ?assertEqual(
         {eval_error, {killed, go_home}},
         edb:eval(Opts#{function => F})
     ),
