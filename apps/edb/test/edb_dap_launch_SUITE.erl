@@ -459,6 +459,6 @@ test_run_captures_output(Config) ->
     {ok, OutputEvents} = edb_dap_test_client:wait_for_event(~"output", Client),
     OutputTexts = [Out || #{body := #{output := Out}} <- OutputEvents],
     Concatenated = erlang:iolist_to_binary(OutputTexts),
-    ?assert(binary:match(Concatenated, ~"Erlang/OTP") =/= nomatch),
+    ?assertNotEqual(nomatch, binary:match(Concatenated, ~"Erlang/OTP")),
 
     ok.
