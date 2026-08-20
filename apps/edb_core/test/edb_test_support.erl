@@ -306,6 +306,17 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         end
      || Arg <- maps:get(extra_args, Opts, [])
     ],
+    SrcDir =
+        case Opts of
+            #{srcdir := GivenSrcDir} ->
+                GivenSrcDir;
+            _ ->
+                random_srcdir(CtConfig)
+        end,
+    WorkDir = file_name_all_to_string(filename:dirname(SrcDir)),
+    EbinDir = file_name_all_to_string(filename:join(WorkDir, "ebin")),
+    ok = file:make_dir(EbinDir),
+    CodePathArgs = ["-pa", EbinDir],
     PeerOpts0 = #{
         % TCP port, 0 stands for "automatic selection"
         connection => 0,
@@ -315,7 +326,7 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         peer_down => continue,
 
         wait_boot => ?PEER_BOOT_TIMEOUT_MS,
-        args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, ExtraArgs], Arg <- Args],
+        args => [Arg || Args <- [CommonArgs, CookieArgs, DebuggingArgs, CodePathArgs, ExtraArgs], Arg <- Args],
         env => [{binary_to_list(K), binary_to_list(V)} || K := V <- maps:get(env, Opts, #{})]
     },
     PeerOpts1 =
@@ -359,17 +370,6 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
         false ->
             ok
     end,
-    SrcDir =
-        case Opts of
-            #{srcdir := GivenSrcDir} ->
-                GivenSrcDir;
-            _ ->
-                random_srcdir(CtConfig)
-        end,
-    WorkDir = file_name_all_to_string(filename:dirname(SrcDir)),
-    EbinDir = filename:join(WorkDir, "ebin"),
-    ok = file:make_dir(EbinDir),
-    true = peer:call(Peer, code, add_patha, [EbinDir], ?PEER_BOOTSTRAP_CALL_TIMEOUT_MS),
 
     CompileOpts0 = #{work_dir => WorkDir},
     CompileOpts1 =
