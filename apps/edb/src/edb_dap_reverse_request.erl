@@ -28,13 +28,13 @@ Behaviour for handling reverse requests sent to the client.
 %% Helpers for behaviour implementations
 -export([unexpected_response/0]).
 
+-export_type([request/0, request/1, reaction/0]).
+
 -include_lib("edb/include/edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
--export_type([request/0, request/1, reaction/0]).
-
 -type reaction() :: #{
     error => edb_dap_server:error(),
     actions => [edb_dap_server:action()],

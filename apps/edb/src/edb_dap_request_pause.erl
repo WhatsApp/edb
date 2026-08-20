@@ -30,6 +30,8 @@ pause requests: https://microsoft.github.io/debug-adapter-protocol/specification
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -39,8 +41,6 @@ pause requests: https://microsoft.github.io/debug-adapter-protocol/specification
     % Pause execution for this thread.
     threadId := edb_dap:thread_id()
 }.
-
--export_type([arguments/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

@@ -30,6 +30,9 @@ setFunctionBreakpoints requests: https://microsoft.github.io/debug-adapter-proto
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, response/0]).
+-export_type([breakpoint/0, function_breakpoint/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -62,9 +65,6 @@ setFunctionBreakpoints requests: https://microsoft.github.io/debug-adapter-proto
 }.
 
 -type breakpoint() :: edb_dap_request_set_breakpoints:breakpoint().
-
--export_type([arguments/0, response/0]).
--export_type([breakpoint/0, function_breakpoint/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

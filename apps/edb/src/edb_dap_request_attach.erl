@@ -31,6 +31,8 @@ attach requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 -export([parse_arguments/1, handle/2]).
 -export([handle_bootstrap_failure/1]).
 
+-export_type([arguments/0, config/0]).
+
 -include_lib("edb/include/edb_dap.hrl").
 
 %% ------------------------------------------------------------------
@@ -40,7 +42,6 @@ attach requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 %%% Attach arguments are not part of the DAP specification itself because
 %%% attaching is debugger/runtime specific.
 
--export_type([arguments/0, config/0]).
 -type arguments() :: #{config := config()}.
 
 -type config() :: #{

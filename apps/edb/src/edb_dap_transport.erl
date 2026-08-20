@@ -28,8 +28,6 @@ For request handling, see `edb_dap_server`.
 
 -behaviour(gen_server).
 
--include_lib("kernel/include/logger.hrl").
-
 %% Public API
 -export([start_link/0]).
 -export([send_response/2, send_reverse_request/1, send_event/1]).
@@ -42,6 +40,11 @@ For request handling, see `edb_dap_server`.
     handle_cast/2,
     handle_info/2
 ]).
+
+-export_type([action/0]).
+
+-include_lib("kernel/include/logger.hrl").
+
 -define(SERVER, ?MODULE).
 
 -type state() :: #{
@@ -54,7 +57,6 @@ For request handling, see `edb_dap_server`.
     {event, edb_dap:event_type(), edb_dap:arguments()}
     | {reverse_request, edb_dap:command(), edb_dap:body()}
     | terminate.
--export_type([action/0]).
 
 %%%---------------------------------------------------------------------------------
 %%% API

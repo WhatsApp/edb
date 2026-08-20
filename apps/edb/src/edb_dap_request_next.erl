@@ -33,6 +33,8 @@ next requests: https://microsoft.github.io/debug-adapter-protocol/specification#
 -export([stepper/3]).
 -export([parse_stepping_granularity/0]).
 
+-export_type([arguments/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -49,8 +51,6 @@ next requests: https://microsoft.github.io/debug-adapter-protocol/specification#
     %  `statement` is assumed.
     granularity => edb_dap:stepping_granularity()
 }.
-
--export_type([arguments/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

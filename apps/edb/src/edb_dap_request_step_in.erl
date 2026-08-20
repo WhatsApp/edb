@@ -32,6 +32,8 @@ step-in requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 
 -export([react_to_call_target_error/1]).
 
+-export_type([arguments/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -51,8 +53,6 @@ step-in requests: https://microsoft.github.io/debug-adapter-protocol/specificati
     %  `statement` is assumed.
     granularity => edb_dap:stepping_granularity()
 }.
-
--export_type([arguments/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

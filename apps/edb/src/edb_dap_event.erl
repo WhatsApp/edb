@@ -30,6 +30,12 @@ DAP event constructors.
     terminated/0
 ]).
 
+-export_type([event/0, event/1]).
+-export_type([exited_body/0]).
+-export_type([output_body/0]).
+-export_type([stopped_body/0]).
+-export_type([terminated_body/0]).
+
 %%%---------------------------------------------------------------------------------
 %%% Types
 %%%---------------------------------------------------------------------------------
@@ -40,12 +46,6 @@ DAP event constructors.
     event := edb_dap:event_type(),
     body => T
 }.
--export_type([event/0, event/1]).
-
--export_type([exited_body/0]).
--export_type([output_body/0]).
--export_type([stopped_body/0]).
--export_type([terminated_body/0]).
 
 %%%---------------------------------------------------------------------------------
 %%% Exited event

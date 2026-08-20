@@ -30,6 +30,8 @@ continue requests: https://microsoft.github.io/debug-adapter-protocol/specificat
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, response_body/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -51,8 +53,6 @@ continue requests: https://microsoft.github.io/debug-adapter-protocol/specificat
     % were resumed.
     allThreadsContinued => boolean()
 }.
-
--export_type([arguments/0, response_body/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

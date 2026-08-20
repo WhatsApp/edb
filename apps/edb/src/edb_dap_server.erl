@@ -26,9 +26,6 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
 
 -behaviour(gen_server).
 
--include_lib("kernel/include/logger.hrl").
--include_lib("edb/include/edb_dap.hrl").
-
 % Public API
 -export([start_link/0]).
 -export([handle_message/1]).
@@ -41,6 +38,14 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
     handle_cast/2,
     handle_info/2
 ]).
+
+-export_type([state/0, attach_type/0, client_info/0]).
+-export_type([action/0]).
+-export_type([error/0]).
+
+-include_lib("kernel/include/logger.hrl").
+-include_lib("edb/include/edb_dap.hrl").
+
 -define(SERVER, ?MODULE).
 
 %%%---------------------------------------------------------------------------------
@@ -109,13 +114,10 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
         state := terminating
     }.
 
--export_type([state/0, attach_type/0, client_info/0]).
-
 -type action() ::
     {event, edb_dap_event:event()}
     | {reverse_request, edb_dap_reverse_request:request()}
     | terminate.
--export_type([action/0]).
 
 -type reaction() ::
     #{
@@ -141,7 +143,6 @@ For details, see https://microsoft.github.io/debug-adapter-protocol/specificatio
     | {invalid_params, Reason :: binary()}
     | {user_error, Id :: integer(), Msg :: iodata()}
     | {internal_error, #{class := error | exit | throw, reason := term(), stacktrace := erlang:stacktrace()}}.
--export_type([error/0]).
 
 -type cast_request() ::
     {handle_message, edb_dap:request() | edb_dap:response()}

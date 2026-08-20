@@ -30,6 +30,9 @@ stackTrace requests: https://microsoft.github.io/debug-adapter-protocol/specific
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, response_body/0]).
+-export_type([stack_frame_format/0, stack_frame/0]).
+
 -include_lib("kernel/include/logger.hrl").
 
 %% ------------------------------------------------------------------
@@ -124,9 +127,6 @@ stackTrace requests: https://microsoft.github.io/debug-adapter-protocol/specific
     % Values: normal | label | subtle
     presentationHint => binary()
 }.
-
--export_type([arguments/0, response_body/0]).
--export_type([stack_frame_format/0, stack_frame/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

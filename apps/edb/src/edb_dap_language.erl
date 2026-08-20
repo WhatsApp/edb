@@ -24,8 +24,6 @@ Language-specific hooks for the DAP adapter.
 
 -behaviour(gen_server).
 
--include_lib("kernel/include/logger.hrl").
-
 -export([start_link/0]).
 -export([source_to_modules/2]).
 
@@ -37,6 +35,8 @@ Language-specific hooks for the DAP adapter.
 ]).
 
 -export_type([state/0, source_to_modules_result/0]).
+
+-include_lib("kernel/include/logger.hrl").
 
 -define(SERVER, ?MODULE).
 

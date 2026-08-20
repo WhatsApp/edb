@@ -30,6 +30,8 @@ stepOut requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -46,8 +48,6 @@ stepOut requests: https://microsoft.github.io/debug-adapter-protocol/specificati
     %  `statement` is assumed.
     granularity => edb_dap:stepping_granularity()
 }.
-
--export_type([arguments/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

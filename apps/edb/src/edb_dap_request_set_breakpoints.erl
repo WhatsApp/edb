@@ -32,6 +32,9 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
 
 -export([source_template/0, format_breakpoint_error/1]).
 
+-export_type([arguments/0, response/0]).
+-export_type([breakpoint/0, sourceBreakpoint/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -149,8 +152,6 @@ setBreakpoints requests: https://microsoft.github.io/debug-adapter-protocol/spec
     %% `breakpointModes` the debug adapter advertised in its `Capabilities`.
     mode => binary()
 }.
--export_type([arguments/0, response/0]).
--export_type([breakpoint/0, sourceBreakpoint/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

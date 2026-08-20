@@ -31,6 +31,8 @@ runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protoc
 
 -export([make_request/1, handle_response/2]).
 
+-export_type([arguments/0, response_body/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -75,8 +77,6 @@ runInTerminal reverse requests: https://microsoft.github.io/debug-adapter-protoc
     %% equal to 2147483647 (2^31-1).
     shellProcessId => integer()
 }.
-
--export_type([arguments/0, response_body/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

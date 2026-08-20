@@ -30,6 +30,8 @@ disconnect requests: https://microsoft.github.io/debug-adapter-protocol/specific
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0]).
+
 -include_lib("kernel/include/logger.hrl").
 
 %% ------------------------------------------------------------------
@@ -55,8 +57,6 @@ disconnect requests: https://microsoft.github.io/debug-adapter-protocol/specific
     % capability `supportSuspendDebuggee` is true.
     suspendDebuggee => boolean()
 }.
-
--export_type([arguments/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

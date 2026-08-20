@@ -33,6 +33,9 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
 -export([value_format_template/0]).
 -export([scope_variables_ref/3, structure_variables_ref/2]).
 
+-export_type([arguments/0, response_body/0]).
+-export_type([variables_reference/0, variable/0, value_format/0, variable_presentation_hint/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -204,9 +207,6 @@ variables requests: https://microsoft.github.io/debug-adapter-protocol/specifica
     % the value through another `variables` request.
     lazy => boolean()
 }.
-
--export_type([arguments/0, response_body/0]).
--export_type([variables_reference/0, variable/0, value_format/0, variable_presentation_hint/0]).
 
 -spec value_format_template() -> edb_dap_parse:template().
 value_format_template() ->

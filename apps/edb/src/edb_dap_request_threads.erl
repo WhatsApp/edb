@@ -30,6 +30,9 @@ threads requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, threads/0]).
+-export_type([thread/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -44,8 +47,6 @@ threads requests: https://microsoft.github.io/debug-adapter-protocol/specificati
     id := number(),
     name := binary()
 }.
--export_type([arguments/0, threads/0]).
--export_type([thread/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

@@ -30,6 +30,8 @@ scopes requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, response_body/0, scope/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -94,8 +96,6 @@ scopes requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
     % it is 0- or 1-based.
     endColumn => number()
 }.
-
--export_type([arguments/0, response_body/0, scope/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->

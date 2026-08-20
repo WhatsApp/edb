@@ -30,6 +30,8 @@ startDebugging reverse requests: https://microsoft.github.io/debug-adapter-proto
 
 -export([make_request/1, handle_response/2]).
 
+-export_type([arguments/0, response_body/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -46,8 +48,6 @@ startDebugging reverse requests: https://microsoft.github.io/debug-adapter-proto
     }.
 
 -type response_body() :: #{}.
-
--export_type([arguments/0, response_body/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

@@ -38,13 +38,13 @@ Behaviour for handling client requests.
 
 -export([parse_empty_arguments/1]).
 
+-export_type([reaction/0, reaction/1, error_reaction/0, response/1, resource/0]).
+
 -include_lib("edb/include/edb_dap.hrl").
 
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
--export_type([reaction/0, reaction/1, error_reaction/0, response/1, resource/0]).
-
 -type reaction() :: reaction(none()).
 
 -type error_reaction() :: #{

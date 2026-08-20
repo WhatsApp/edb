@@ -30,13 +30,14 @@ configurationDone requests: https://microsoft.github.io/debug-adapter-protocol/s
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_ConfigurationDone
 -type arguments() :: #{}.
--export_type([arguments/0]).
 
 %% ------------------------------------------------------------------
 %% Behaviour implementation

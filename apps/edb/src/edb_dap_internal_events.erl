@@ -24,6 +24,8 @@ Handle events coming from the debugger.
 
 -export([handle_edb_event/2]).
 
+-export_type([reaction/0]).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("edb/include/edb_dap.hrl").
 
@@ -36,7 +38,6 @@ Handle events coming from the debugger.
     new_state => edb_dap_server:state(),
     error => edb_dap_server:error()
 }.
--export_type([reaction/0]).
 
 %%%---------------------------------------------------------------------------------
 %%% Public API

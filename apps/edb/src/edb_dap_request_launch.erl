@@ -28,9 +28,11 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 
 -behaviour(edb_dap_request).
 
--include_lib("edb/include/edb_dap.hrl").
-
 -export([parse_arguments/1, handle/2]).
+
+-export_type([arguments/0, run/0, run_in_terminal/0, config/0]).
+
+-include_lib("edb/include/edb_dap.hrl").
 
 -define(DEFAULT_ATTACH_TIMEOUT_IN_SECS, 60).
 
@@ -40,8 +42,6 @@ launch requests: https://microsoft.github.io/debug-adapter-protocol/specificatio
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Launch
 %%% Notice that, since launching is debugger/runtime specific, the arguments for this request are
 %%% not part of the DAP specification itself.
-
--export_type([arguments/0, run/0, run_in_terminal/0, config/0]).
 -type arguments() ::
     #{runInTerminal := run_in_terminal(), config := config()}
     | #{run := run(), config := config()}.

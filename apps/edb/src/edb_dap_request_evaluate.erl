@@ -30,6 +30,8 @@ evaluate requests: https://microsoft.github.io/debug-adapter-protocol/specificat
 
 -export([parse_arguments/1, handle/2]).
 
+-export_type([arguments/0, response_body/0]).
+
 %% ------------------------------------------------------------------
 %% Types
 %% ------------------------------------------------------------------
@@ -126,8 +128,6 @@ evaluate requests: https://microsoft.github.io/debug-adapter-protocol/specificat
     % 'Lifetime of Object References' in the Overview section for details.
     valueLocationReference => integer()
 }.
-
--export_type([arguments/0, response_body/0]).
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
