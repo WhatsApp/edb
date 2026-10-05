@@ -14,10 +14,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            otp-version: 29
+            otp-version: '29.0'
             rebar3-version: 3.25.0
           - os: macos-latest
-            otp-version: 29
+            otp-version: '29.0'
             rebar3-version: 3.25.0
     runs-on: ${{ matrix.os }}
     steps:
@@ -44,6 +44,18 @@ jobs:
         run: rebar3 fmt --check
       - name: XRef
         run: rebar3 xref
+      - name: Setup ELP
+        # setup-elp has no tagged releases yet: pin a commit
+        uses: erlef/setup-elp@7be8461ac17ddcf91ea0f8f01bee0452a3e05561
+        with:
+          elp-version: '2026-10-05'
+      # Both ELP steps are non-blocking until the existing violations are fixed.
+      - name: ELP Lint
+        run: elp lint
+        continue-on-error: true
+      - name: eqWAlizer
+        run: elp eqwalize-all --bail-on-error
+        continue-on-error: true
       - name: Create tarball edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
         run: 'tar -zcvf edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz -C _build/default/bin edb'
       - name: Upload EDB escript
