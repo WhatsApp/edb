@@ -45,10 +45,7 @@ jobs:
       - name: XRef
         run: rebar3 xref
       - name: Setup ELP
-        # setup-elp has no tagged releases yet: pin a commit
-        uses: erlef/setup-elp@7be8461ac17ddcf91ea0f8f01bee0452a3e05561
-        with:
-          elp-version: '2026-10-05'
+        uses: robertoaloi/setup-elp@elp-version-latest
       # Both ELP steps are non-blocking until the existing violations are fixed.
       - name: ELP Lint
         run: elp lint
