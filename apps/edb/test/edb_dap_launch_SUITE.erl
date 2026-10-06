@@ -135,6 +135,7 @@ test_passes_run_in_terminal_stuff_to_client(Config) ->
         edb_dap_test_client:wait_for_reverse_request(~"runInTerminal", Client),
 
     OLD_ERL_AFLAGS = list_to_binary(
+        % elp:ignore W0081 -- WAnnn codes are unknown to OSS ELP
         % elp:ignore WA014 (no_os_get_env) test parametrisation
         case os:getenv("ERL_AFLAGS", "") of
             "" -> "";

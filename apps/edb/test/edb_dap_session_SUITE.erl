@@ -252,6 +252,7 @@ wait_until_down(Peer, Timeout) ->
             ok;
         running when Timeout > 0 ->
             SleepTime = 10,
+            % elp:ignore W0081 -- WAnnn codes are unknown to OSS ELP
             % elp:ignore WA019 (no_sleep) -- need to poll
             timer:sleep(SleepTime),
             Timeout1 =
