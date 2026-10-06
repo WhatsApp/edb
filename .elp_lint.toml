@@ -1,0 +1,4 @@
+# ELP lint configuration for edb.
+
+[linters.atoms_exhaustion]
+enabled = false
