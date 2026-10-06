@@ -319,8 +319,10 @@ gen_start_peer(CtConfig, NodeInfo, Opts) ->
     ok = file:make_dir(EbinDir),
     CodePathArgs = ["-pa", EbinDir],
     PeerOpts0 = #{
-        % TCP port, 0 stands for "automatic selection"
-        connection => 0,
+        % 127.0.0.1, port 0 = automatic. With a bare port, peer listens on IPv4 only but the node dials ::1
+        % first, where an unrelated process can hold the same port number; the node then never reports back
+        % and peer:start_link/1 times out.
+        connection => {{127, 0, 0, 1}, 0},
 
         % The control process stays up when the connection is lost,
         % so we can query the node state, etc
