@@ -83,6 +83,23 @@ Set a breakpoint, pick a configuration from the **Run and Debug** view, and pres
 * **IntelliJ**: set up the [lsp4j](https://github.com/redhat-developer/lsp4ij) plugin.
 * **zed**: uses its native DAP support.
 
+## Installing from a release
+
+Prebuilt releases are published on the [Releases page](https://github.com/WhatsApp/edb/releases). Each release is a single portable tarball (Linux and macOS; Windows is not supported yet) containing an `edb` escript for OTP 28 and one for OTP 29 and later, plus an `edb` launcher that picks the right one based on the OTP version installed on your machine.
+
+Requirements: Erlang/OTP 28 or later, with `erl` on your `PATH`.
+
+```
+$ tar -xzf edb-1.0.0.tar.gz
+$ cd edb-1.0.0
+$ EDB_DISPATCH_DRYRUN=1 ./edb
+./otp-28/edb
+```
+
+The last command prints which bundled escript matches your installed OTP version. To start a debug server, run `./edb dap` (see the [DAP guide](docs/DAP.md)).
+
+The launcher resolves its bundled escripts relative to itself, so keep `edb`, `otp-28/` and `otp-29/` together; you can put the extracted directory on your `PATH` or symlink `edb` from a directory already on it. IDE integrations can point at the extracted `edb` directly.
+
 ## Building from source
 
 A version of `rebar3` built with Erlang/OTP 26 or higher is required. You can find instructions on how to build `rebar3` from source [here](https://rebar3.org/docs/getting-started/#installing-from-source).

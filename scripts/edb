@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# `edb` launcher: pick the bundled escript matching the installed OTP release.
+#
+# Expected layout next to this script:
+#   otp-28/edb   - escript built for OTP 28
+#   otp-29/edb   - escript built for OTP 29 and later
+#
+# If EDB_DISPATCH_DRYRUN is set to 1, print the selected escript path
+# instead of executing it.
+#
+# NOTE: Windows is not supported yet; that will need a separate .bat launcher
+# dispatching to the OTP 29 escript only (OTP 28 on Windows never works).
+
+set -euo pipefail
+
+die() {
+    echo "edb: $1" >&2
+    exit "${2:-1}"
+}
+
+SCRIPT_DIR=${0%/*}
+if [ "$SCRIPT_DIR" = "$0" ]; then
+    SCRIPT_DIR=.
+fi
+SCRIPT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR" && pwd)
+
+if ! command -v erl >/dev/null 2>&1; then
+    die "'erl' not found on PATH. edb requires Erlang/OTP 28 or later."
+fi
+
+if ! OTP_RELEASE=$(erl -noshell -eval 'io:format("~s", [erlang:system_info(otp_release)]), halt().' 2>/dev/null); then
+    die "could not determine the installed OTP release."
+fi
+OTP_MAJOR=${OTP_RELEASE%%.*}
+
+case $OTP_MAJOR in
+    '' | *[!0-9]*)
+        die "could not parse OTP release '$OTP_RELEASE'."
+        ;;
+esac
+
+if [ "$OTP_MAJOR" -lt 28 ]; then
+    die "requires Erlang/OTP 28 or later (found OTP $OTP_RELEASE)."
+fi
+
+if [ "$OTP_MAJOR" -eq 28 ]; then
+    ESCRIPT="$SCRIPT_DIR/otp-28/edb"
+else
+    ESCRIPT="$SCRIPT_DIR/otp-29/edb"
+fi
+
+if [ ! -x "$ESCRIPT" ]; then
+    die "bundled escript '$ESCRIPT' is missing or not executable."
+fi
+
+if [ "${EDB_DISPATCH_DRYRUN:-0}" = "1" ]; then
+    echo "$ESCRIPT"
+    exit 0
+fi
+
+# ${1+"$@"} instead of plain "$@" so this works under `set -u` even on
+# old bash versions (e.g. macOS /bin/bash 3.2), where "$@" with no
+# arguments counts as unbound.
+exec "$ESCRIPT" ${1+"$@"}

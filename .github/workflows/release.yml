@@ -1,0 +1,226 @@
+name: Release
+
+# Cutting a release takes two tags: <version> on main (OTP 29+ escript) and
+# <version>-otp28 on the otp-28.0 branch (OTP 28 escript). Pushing the main
+# tag builds both, bundles them into one tarball with the `edb` dispatcher,
+# and creates the GitHub Release. See RELEASE.md for the full process.
+#
+# NOTE: `tags` and `tags-ignore` cannot be combined on one event, so the
+# companion -otp28 tag is excluded with `!` (pushing it alone triggers
+# nothing; see the workflow-syntax docs on filter patterns).
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+      - '!*-otp28'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for the tarball name (e.g. 0.0.0-dryrun1). No release is created.'
+        required: true
+      main_ref:
+        description: 'Ref to build the OTP 29 escript from'
+        default: 'main'
+        required: true
+      otp28_ref:
+        description: 'Ref to build the OTP 28 escript from'
+        default: 'otp-28.0'
+        required: true
+
+run-name: ${{ github.event_name == 'push' && format('Release {0}', github.ref_name) || format('[dry-run] Release {0} (no publish)', inputs.version) }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.refs.outputs.version }}
+      main_ref: ${{ steps.refs.outputs.main_ref }}
+      otp28_ref: ${{ steps.refs.outputs.otp28_ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Resolve release refs
+        id: refs
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            MAIN_REF="$TAG"
+            OTP28_REF="$TAG-otp28"
+            VERSION="$TAG"
+          else
+            MAIN_REF="${{ inputs.main_ref }}"
+            OTP28_REF="${{ inputs.otp28_ref }}"
+            VERSION="${{ inputs.version }}"
+          fi
+          # A fetch materializes branches only as remote-tracking refs
+          # (origin/<name>); tags, SHAs, and the checked-out branch resolve
+          # directly. Downstream checkout still receives the plain name.
+          ref_exists() {
+            git rev-parse --verify --quiet "$1^{commit}" >/dev/null \
+              || git rev-parse --verify --quiet "origin/$1^{commit}" >/dev/null
+          }
+          if ! ref_exists "$MAIN_REF"; then
+            echo "::error::Main ref '$MAIN_REF' not found."
+            exit 1
+          fi
+          if ! ref_exists "$OTP28_REF"; then
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "::error::OTP 28 ref '$OTP28_REF' not found. Push tag '$OTP28_REF' on the otp-28.0 branch first (see RELEASE.md)."
+            else
+              echo "::error::OTP 28 ref '$OTP28_REF' not found: no such branch, tag, or commit."
+            fi
+            exit 1
+          fi
+          echo "version=$VERSION" >>"$GITHUB_OUTPUT"
+          echo "main_ref=$MAIN_REF" >>"$GITHUB_OUTPUT"
+          echo "otp28_ref=$OTP28_REF" >>"$GITHUB_OUTPUT"
+          echo "Resolved version=$VERSION main_ref=$MAIN_REF otp28_ref=$OTP28_REF"
+      - name: Summarize release mode
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            {
+              echo "## Publishing release \`${{ github.ref_name }}\`"
+              echo ""
+              echo "Main ref: \`${{ steps.refs.outputs.main_ref }}\`"
+              echo "OTP 28 ref: \`${{ steps.refs.outputs.otp28_ref }}\`"
+              echo ""
+              echo "The \`publish\` job will create the GitHub Release with the tarball attached."
+            } >>"$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Dry run: no release will be created"
+              echo ""
+              echo "Version label: \`${{ steps.refs.outputs.version }}\`"
+              echo "Main ref: \`${{ steps.refs.outputs.main_ref }}\`"
+              echo "OTP 28 ref: \`${{ steps.refs.outputs.otp28_ref }}\`"
+              echo ""
+              echo "The assembled tarball will be available as the \`edb-tarball\` artifact on this run."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+  build-otp28:
+    needs: resolve
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout ${{ needs.resolve.outputs.otp28_ref }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.otp28_ref }}
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '28.0'
+          rebar3-version: 3.25.0
+      - name: Escriptize
+        run: rebar3 escriptize
+      - name: Upload OTP 28 escript
+        uses: actions/upload-artifact@v4
+        with:
+          name: edb-otp28
+          path: _build/default/bin/edb
+
+  build-otp29:
+    needs: resolve
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout ${{ needs.resolve.outputs.main_ref }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.main_ref }}
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '29.0'
+          rebar3-version: 3.25.0
+      - name: Escriptize
+        run: rebar3 escriptize
+      - name: Upload OTP 29 escript
+        uses: actions/upload-artifact@v4
+        with:
+          name: edb-otp29
+          path: _build/default/bin/edb
+
+  assemble:
+    needs: [resolve, build-otp28, build-otp29]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout ${{ needs.resolve.outputs.main_ref }} (dispatcher + tests)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.main_ref }}
+      - name: Download OTP 28 escript
+        uses: actions/download-artifact@v4
+        with:
+          name: edb-otp28
+          path: dist/edb-${{ needs.resolve.outputs.version }}/otp-28/
+      - name: Download OTP 29 escript
+        uses: actions/download-artifact@v4
+        with:
+          name: edb-otp29
+          path: dist/edb-${{ needs.resolve.outputs.version }}/otp-29/
+      - name: Assemble tarball
+        run: |
+          VERSION="${{ needs.resolve.outputs.version }}"
+          ROOT="dist/edb-$VERSION"
+          cp scripts/edb "$ROOT/edb"
+          # Artifact round-trips may lose the executable bit; set it explicitly.
+          chmod +x "$ROOT/edb" "$ROOT/otp-28/edb" "$ROOT/otp-29/edb"
+          tar -czf "edb-$VERSION.tar.gz" -C dist "edb-$VERSION"
+          tar -tzf "edb-$VERSION.tar.gz"
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: edb-tarball
+          path: edb-${{ needs.resolve.outputs.version }}.tar.gz
+
+  smoke:
+    needs: [resolve, assemble]
+    strategy:
+      matrix:
+        include:
+          - otp-version: '28.0'
+            expect: otp-28
+          - otp-version: '29.0'
+            expect: otp-29
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: edb-tarball
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp-version }}
+      - name: Smoke-test dispatcher on OTP ${{ matrix.otp-version }}
+        run: |
+          tar -xzf edb-${{ needs.resolve.outputs.version }}.tar.gz
+          cd edb-${{ needs.resolve.outputs.version }}
+          SELECTED=$(EDB_DISPATCH_DRYRUN=1 ./edb)
+          case $SELECTED in
+            */${{ matrix.expect }}/edb) echo "Selected $SELECTED, as expected" ;;
+            *) echo "::error::OTP ${{ matrix.otp-version }} selected $SELECTED, expected ${{ matrix.expect }}/edb"; exit 1 ;;
+          esac
+          # Boot check: the escript must load and run under this OTP (a
+          # bytecode/OTP mismatch crashes the loader instead of printing usage).
+          # `--help` is not a real flag; argparse answers with usage text.
+          ./edb --help 2>&1 | grep -q "Usage:"
+
+  publish:
+    needs: [resolve, smoke]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: edb-tarball
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release create "$TAG" --title "$TAG" --generate-notes "edb-$TAG.tar.gz"
