@@ -213,10 +213,14 @@ guess_module_source(Module) ->
             undefined;
         {call_ok, BeamPath} ->
             case filelib:find_source(BeamPath) of
-                {ok, SourcePath} when is_list(SourcePath) ->
-                    % eqwalizer:ignore incompatible_types -- file:name() vs file:filename() hell
-                    SourcePath;
-                _ ->
+                {ok, SourcePath} ->
+                    case filename:flatten(SourcePath) of
+                        FlatSourcePath when is_list(FlatSourcePath) ->
+                            FlatSourcePath;
+                        _ ->
+                            undefined
+                    end;
+                {error, not_found} ->
                     undefined
             end
     end.
