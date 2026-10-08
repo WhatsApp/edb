@@ -2,7 +2,7 @@
 
 A modern step-debugger for Erlang. When a process hits a breakpoint, `edb` freezes the whole node so you can inspect every process running inside it. It is IDE agnostic and works with any IDE that [implements the Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/implementors/tools/).
 
-It requires OTP 29 or later. For more technical details, see our [paper](https://dl.acm.org/doi/pdf/10.1145/3759161.3763047) in the Erlang 2025 Workshop.
+Building `edb` from source requires OTP 29 or later. Prebuilt releases also support OTP 28 by including a separately built compatible escript. For more technical details, see our [paper](https://dl.acm.org/doi/pdf/10.1145/3759161.3763047) in the Erlang 2025 Workshop.
 
 ## Getting Started
 
@@ -82,6 +82,21 @@ Set a breakpoint, pick a configuration from the **Run and Debug** view, and pres
 * **vim/neovim**: pick a DAP client such as [vimspector](https://github.com/puremourning/vimspector) or [nvim-dap](https://github.com/mfussenegger/nvim-dap).
 * **IntelliJ**: set up the [lsp4j](https://github.com/redhat-developer/lsp4ij) plugin.
 * **zed**: uses its native DAP support.
+
+## Installing from a release
+
+Prebuilt releases are published on the [Releases page](https://github.com/WhatsApp/edb/releases). Each release is a single portable tarball (Linux and macOS; Windows is not supported yet) containing an `edb` escript for OTP 28 and one for OTP 29 and later, plus an `edb` launcher that picks the right one based on the OTP version installed on your machine.
+
+Requirements: Erlang/OTP 28 or later, with `erl` on your `PATH`.
+
+```
+$ tar -xzf edb-1.0.0.tar.gz
+$ cd edb-1.0.0
+```
+
+To start a debug server, run `./edb dap` (see the [DAP guide](docs/DAP.md)).
+
+The launcher resolves its bundled escripts relative to itself, so keep `edb`, `otp-28/` and `otp-29/` together; you can put the extracted directory on your `PATH` or symlink `edb` from a directory already on it. IDE integrations can point at the extracted `edb` directly.
 
 ## Building from source
 

@@ -6,29 +6,27 @@ on:
   pull_request:
     branches:
       - main
-  release:
-    types: [published]
 jobs:
   build:
     strategy:
       matrix:
         include:
           - os: ubuntu-22.04
-            otp-version: '29.0'
+            otp-version: '29.1'
             rebar3-version: 3.25.0
           - os: macos-latest
-            otp-version: '29.0'
+            otp-version: '29.1'
             rebar3-version: 3.25.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: erlef/setup-beam@e6d7c94229049569db56a7ad5a540c051a010af9 # v1.20.4
         with:
           otp-version: ${{matrix.otp-version}}
           rebar3-version: ${{matrix.rebar3-version}}
       - name: Cache Hex packages
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.cache/rebar3/hex/hexpm/packages
           key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
@@ -59,28 +57,12 @@ jobs:
       - name: Create tarball edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
         run: 'tar -zcvf edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz -C _build/default/bin edb'
       - name: Upload EDB escript
-        uses: "actions/upload-artifact@v4"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
           path: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
-      - env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        id: get_release_url
-        name: Get release url
-        if: ${{ github.event_name == 'release' }}
-        uses: "bruceadams/get-release@v1.3.2"
-      - env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        name: Upload release asset edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
-        if: ${{ github.event_name == 'release' }}
-        uses: "actions/upload-release-asset@v1.0.2"
-        with:
-          asset_content_type: application/octet-stream
-          asset_name: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
-          asset_path: edb-${{ matrix.os }}-otp-${{ matrix.otp-version }}.tar.gz
-          upload_url: "${{ steps.get_release_url.outputs.upload_url }}"
       - name: Cache Dialyzer PLTs
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.cache/rebar3/rebar3_*.plt
           key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
