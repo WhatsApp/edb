@@ -12,10 +12,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            otp-version: '29.1'
+            otp-version: '29.0'
             rebar3-version: 3.25.0
           - os: macos-26
-            otp-version: '29.1'
+            otp-version: '29.0'
             rebar3-version: 3.25.0
     runs-on: ${{ matrix.os }}
     steps:
