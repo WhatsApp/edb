@@ -12,10 +12,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            otp-version: '29.0'
+            otp-version: '29.1'
             rebar3-version: 3.25.0
           - os: macos-26
-            otp-version: '29.0'
+            otp-version: '29.1'
             rebar3-version: 3.25.0
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,7 +46,7 @@ jobs:
         # setup-elp has no tagged releases yet: pin a commit
         uses: erlef/setup-elp@7be8461ac17ddcf91ea0f8f01bee0452a3e05561
         with:
-          elp-version: '2026-10-05'
+          elp-version: '2026-10-14'
       # Both ELP steps are non-blocking until the existing violations are fixed.
       - name: ELP Lint
         run: elp lint
