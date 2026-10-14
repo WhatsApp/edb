@@ -152,7 +152,7 @@ test_set_breakpoints_when_source_maps_to_no_modules(Config) ->
 start_session_with_custom_dap_language(Config) ->
     DapServerBeamDir =
         case code:which(?MODULE) of
-            ModuleBeam when ModuleBeam =/= non_existing -> filename:dirname(ModuleBeam)
+            ModuleBeam when is_list(ModuleBeam) -> filename:dirname(ModuleBeam)
         end,
     DapServerEnv = [
         {"ERL_AFLAGS",
