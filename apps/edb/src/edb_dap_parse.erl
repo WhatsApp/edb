@@ -108,7 +108,7 @@ atom() ->
 -spec atom(A) -> parser(A2) when
     A :: atom(),
     % With bounded polymorphism, we'd use A instead of A2
-    A2 :: dynamic().
+    A2 :: atom().
 atom(A) when is_atom(A) ->
     fun
         F(X) when X =:= A -> {ok, A};
