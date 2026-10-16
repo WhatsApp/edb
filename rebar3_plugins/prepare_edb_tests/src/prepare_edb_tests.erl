@@ -14,8 +14,8 @@
 %% @format
 %%
 -module(prepare_edb_tests).
--compile(warn_missing_spec_all).
 -oncall("was_devx").
+-compile(warn_missing_spec_all).
 
 -export([init/1, do/1, format_error/1]).
 
