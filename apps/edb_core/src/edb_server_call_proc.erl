@@ -52,9 +52,9 @@ code_where_is_file(Filename) ->
     code_server_call({where_is_file, Filename}, TimeoutMs).
 
 -spec code_server_call(Request, TimeoutMs) -> result(Response) when
-    Request :: term(),
+    Request :: {where_is_file, file:filename()},
     TimeoutMs :: pos_integer(),
-    Response :: dynamic().
+    Response :: non_existing | file:filename().
 code_server_call(Request, TimeoutMs) ->
     %% See code_server:call()
     safe_send_recv(
