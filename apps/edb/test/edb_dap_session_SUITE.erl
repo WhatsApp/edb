@@ -46,7 +46,6 @@
 
 -include_lib("assert/include/assert.hrl").
 -include_lib("edb/include/edb_dap.hrl").
--include_lib("wa_test/include/test_helpers.hrl").
 
 suite() ->
     [].
@@ -247,16 +246,21 @@ test_terminates_when_node_goes_down_while_configuring(Config) ->
 -spec wait_until_down(Peer, Timeout) -> ok when
     Peer :: edb_test_support:peer(),
     Timeout :: timeout().
-wait_until_down(Peer, infinity) ->
-    wait_until_down_forever(Peer);
 wait_until_down(Peer, Timeout) ->
-    {down, _} = ?WAIT_UNTIL_MATCH({down, _}, peer:get_state(Peer), Timeout),
-    ok.
-
--spec wait_until_down_forever(edb_test_support:peer()) -> ok.
-wait_until_down_forever(Peer) ->
-    try ?WAIT_UNTIL_MATCH({down, _}, peer:get_state(Peer), 60_000) of
-        {down, _} -> ok
-    catch
-        error:{wait_until_match_timeout, _} -> wait_until_down_forever(Peer)
+    case peer:get_state(Peer) of
+        {down, _} ->
+            ok;
+        running when Timeout > 0 ->
+            SleepTime = 10,
+            % elp:ignore W0081 -- WAnnn codes are unknown to OSS ELP
+            % elp:ignore WA019 (no_sleep) -- need to poll
+            timer:sleep(SleepTime),
+            Timeout1 =
+                case Timeout of
+                    infinity -> Timeout;
+                    _ -> Timeout - SleepTime
+                end,
+            wait_until_down(Peer, Timeout1);
+        running ->
+            error(peer_never_died)
     end.
