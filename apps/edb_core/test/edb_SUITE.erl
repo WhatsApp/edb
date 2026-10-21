@@ -3899,7 +3899,7 @@ test_eval_evaluates(Config) ->
     FrameIds = [Id || #{id := Id} <- Frames],
 
     % Sanity-check: We do have frames
-    ?assert(length(FrameIds) > 0),
+    ?assertMatch([_ | _], FrameIds),
 
     FrameVars = [Vars || Id <- FrameIds, {ok, Vars} <- [edb:stack_frame_vars(Pid, Id)]],
 
