@@ -18,7 +18,7 @@ If using VSCode, install the [Erlang Language Platform](https://marketplace.visu
 
 Since the debugger is a development-only tool, restrict the options to the `test` profile in your `rebar.config`:
 
-```
+```text
 {profiles, [
     {test, [
         {erl_opts, [debug_info, beam_debug_info, beam_debug_stack]}
@@ -89,7 +89,7 @@ Prebuilt releases are published on the [Releases page](https://github.com/WhatsA
 
 Requirements: Erlang/OTP 28 or later, with `erl` on your `PATH`.
 
-```
+```bash
 $ tar -xzf edb-1.0.0.tar.gz
 $ cd edb-1.0.0
 ```
@@ -102,13 +102,13 @@ The launcher resolves its bundled escripts relative to itself, so keep `edb`, `o
 
 A version of `rebar3` built with Erlang/OTP 26 or higher is required. You can find instructions on how to build `rebar3` from source [here](https://rebar3.org/docs/getting-started/#installing-from-source).
 
-```
+```bash
 $ rebar3 escriptize
 ```
 
 The produced `edb` escript will be available in:
 
-```
+```text
 _build/default/bin/edb
 ```
 
@@ -120,7 +120,7 @@ When starting `edb` as a DAP debugger, it logs useful information that can help 
 
 To find the location of the EDB DAP logs on your machine, open an Erlang shell and run:
 
-```
+```bash
 $ erl
 
 Erlang/OTP [...]

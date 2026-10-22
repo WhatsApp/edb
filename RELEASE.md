@@ -14,12 +14,12 @@ escript, anything older is a hard error).
 
 1. Decide the version (e.g. `1.0.0`).
 2. Tag both branches:
-   ```
+   ```bash
    $ git tag 1.0.0 origin/main
    $ git tag otp28-1.0.0 origin/otp-28.0
    ```
 3. Push both tags:
-   ```
+   ```bash
    $ git push origin otp28-1.0.0 1.0.0
    ```
    Pushing the `otp28-` tag triggers nothing; pushing the main tag starts

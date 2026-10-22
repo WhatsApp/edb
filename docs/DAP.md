@@ -10,7 +10,7 @@ to set it up.
 
 Your IDE will need to be able to start `edb` in DAP mode. For that, configure it with the following command:
 
-```
+```text
 $PATH_TO_EDB/edb dap
 ```
 
