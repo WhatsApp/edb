@@ -667,8 +667,9 @@ on_node_connected(State0 = #{state := attachment_in_progress, type := attach, no
         end,
     State2.
 
--spec call_edb_server(Request :: edb_server:call_request(), state(), data()) -> Result when
-    Result :: {{reply, dynamic()} | not_attached, state(), data()}.
+-spec call_edb_server(Request, state(), data()) -> Result when
+    Request :: {subscribe_to_events, pid()} | {remove_event_subscription, edb_events:subscription()},
+    Result :: {{reply, ok | {ok, edb_events:subscription()}} | not_attached, state(), data()}.
 call_edb_server(Request, State0, Data0) ->
     case State0 of
         #{state := up} ->
