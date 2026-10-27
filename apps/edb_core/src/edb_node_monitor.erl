@@ -283,8 +283,8 @@ handle_event(
     );
 handle_event({call, From}, {reverse_attach_notification, GatekeeperId, Node}, State, Data) ->
     reverse_attach_notification_impl(GatekeeperId, Node, From, State, Data);
-handle_event({call, From}, nodes, State, Data) ->
-    nodes_impl(From, State, Data);
+handle_event({call, From}, nodes, State, _Data) ->
+    nodes_impl(From, State);
 handle_event({call, From}, detach, State, Data) ->
     detach_impl(From, State, Data);
 handle_event({call, From}, {subscribe_to_events, Pid}, State, Data) ->
@@ -502,9 +502,9 @@ reverse_attach_notification_impl(
 reverse_attach_notification_impl(_, _, From, _, _) ->
     {keep_state_and_data, {reply, From, ok}}.
 
--spec nodes_impl(From, state(), data()) -> reply(#{node() => []}) when
+-spec nodes_impl(From, state()) -> reply(#{node() => []}) when
     From :: gen_statem:from().
-nodes_impl(From, State0, _Data0) ->
+nodes_impl(From, State0) ->
     Nodes =
         case State0 of
             #{state := up, nodes := NodesMap} -> NodesMap;

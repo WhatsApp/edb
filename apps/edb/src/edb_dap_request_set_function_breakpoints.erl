@@ -108,8 +108,8 @@ set_function_breakpoints(Args) ->
     ParsedNames = lists:enumerate([parse_function_name(N) || #{name := N} <- BreakpointsReq]),
     IndexedMFAs = [{Idx, MFA} || {Idx, {ok, MFA}} <- ParsedNames],
     IndexedInvalidNames = [
-        {Idx, #{verified => false, message => invalid_name_error(Name), reason => failed}}
-     || {Idx, {invalid, Name}} <- ParsedNames
+        {Idx, #{verified => false, message => invalid_name_error(), reason => failed}}
+     || {Idx, {invalid, _}} <- ParsedNames
     ],
 
     RawResults = edb:set_function_breakpoints([MFA || {_, MFA} <- IndexedMFAs]),
@@ -180,9 +180,8 @@ parse_mfa({M, F, A}) when is_atom(M), is_atom(F), is_integer(A), A >= 0 ->
 parse_mfa(_) ->
     error.
 
--spec invalid_name_error(Name) -> binary() when
-    Name :: binary().
-invalid_name_error(_Name) ->
+-spec invalid_name_error() -> binary().
+invalid_name_error() ->
     ~"Not a valid function name. Valid formats: `M:F/A`; `fun M:F/A`; {M, F, A}".
 
 -spec format_function_breakpoint_error(Error) -> binary() when
