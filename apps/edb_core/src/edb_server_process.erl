@@ -44,7 +44,7 @@
     | message_queue_len
     | parent
     | registered_name.
--type erlang_process_info_result_item() :: {dynamic(), dynamic()}.
+-type erlang_process_info_result_item() :: eqwalizer_types:'erlang:process_info_result_item'().
 
 %% ------------------------------------------------------------------
 %% Suspending processes
