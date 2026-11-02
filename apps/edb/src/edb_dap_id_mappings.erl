@@ -52,7 +52,6 @@ and variable references.
 
 -export_type([id/0]).
 -export_type([pid_frame/0]).
--export_type([frame_scope/0]).
 -export_type([vars_info/0]).
 
 -doc """
@@ -77,7 +76,6 @@ This is the requirement the DAP specification puts on IDs.
         accessor := edb_dap_eval_delegate:accessor(),
         evaluate_name := edb_dap_eval_delegate:eval_name()
     }.
--type frame_scope() :: #{frame := id(), scope := scope()}.
 
 -type state(A) :: id_mapping(A).
 

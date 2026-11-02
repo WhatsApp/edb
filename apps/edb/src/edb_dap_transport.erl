@@ -41,8 +41,6 @@ For request handling, see `edb_dap_server`.
     handle_info/2
 ]).
 
--export_type([action/0]).
-
 -include_lib("kernel/include/logger.hrl").
 
 -define(SERVER, ?MODULE).
@@ -52,11 +50,6 @@ For request handling, see `edb_dap_server`.
     buffer := binary(),
     seq := pos_integer()
 }.
-
--type action() ::
-    {event, edb_dap:event_type(), edb_dap:arguments()}
-    | {reverse_request, edb_dap:command(), edb_dap:body()}
-    | terminate.
 
 %%%---------------------------------------------------------------------------------
 %%% API
