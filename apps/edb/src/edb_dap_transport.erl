@@ -51,6 +51,18 @@ For request handling, see `edb_dap_server`.
     seq := pos_integer()
 }.
 
+-type payload() ::
+    #{
+        type := response,
+        request_seq := edb_dap:seq(),
+        command := edb_dap:command(),
+        success := boolean(),
+        message => binary(),
+        body => edb_dap:body()
+    }
+    | #{type := request, command := edb_dap:command(), arguments => edb_dap:arguments()}
+    | #{type := event, event := edb_dap:event_type(), body => edb_dap:body()}.
+
 %%%---------------------------------------------------------------------------------
 %%% API
 %%%---------------------------------------------------------------------------------
@@ -115,7 +127,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(Request, state()) -> {noreply, state()} when
-    Request :: {send, map()}.
+    Request :: {send, payload()}.
 handle_cast({send, Payload}, State) ->
     {noreply, send(Payload, State)};
 handle_cast(_, State) ->
@@ -148,7 +160,7 @@ forward_incoming(Message) ->
     edb_dap_server:handle_message(Message).
 
 -spec send(Payload, State) -> State when
-    Payload :: map(),
+    Payload :: payload(),
     State :: state().
 send(Payload, State0 = #{io := IO, seq := Seq}) ->
     ?LOG_INFO("<== ~p", [Payload]),
