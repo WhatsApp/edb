@@ -120,10 +120,10 @@ decode_frames(Data, Messages) ->
 %%% Base Protocol
 %%%---------------------------------------------------------------------------------
 
-% elp:ignore W0091 (unused_exported_type) - Models the DAP ProtocolMessage base type
+% elp:ignore W0092 (unused_exported_type) - Models the DAP ProtocolMessage base type
 -type protocol_message_type() :: request | response | event.
 -type seq() :: pos_integer().
-% elp:ignore W0091 (unused_exported_type) - Models the DAP ProtocolMessage base type
+% elp:ignore W0092 (unused_exported_type) - Models the DAP ProtocolMessage base type
 -type protocol_message() :: #{seq := seq(), type := protocol_message_type()}.
 -type command() :: binary().
 -type body() :: map().
