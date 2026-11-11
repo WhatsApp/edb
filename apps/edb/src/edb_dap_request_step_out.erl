@@ -37,17 +37,7 @@ stepOut requests: https://microsoft.github.io/debug-adapter-protocol/specificati
 %% ------------------------------------------------------------------
 
 %%% https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepOut
--type arguments() :: #{
-    %  Specifies the thread to resume for one step-out of the given granularity.
-    threadId := integer(),
-
-    %  If this flag is true, all other suspended threads are not resumed.
-    singleThread => boolean(),
-
-    %  Stepping granularity. If no granularity is specified, a granularity of
-    %  `statement` is assumed.
-    granularity => edb_dap:stepping_granularity()
-}.
+-type arguments() :: edb_dap_request_next:arguments().
 
 -spec arguments_template() -> edb_dap_parse:template().
 arguments_template() ->
