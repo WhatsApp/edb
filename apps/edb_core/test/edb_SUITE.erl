@@ -4065,6 +4065,8 @@ whereis_proc(RegisteredName) ->
         undefined -> error({proc_not_found, RegisteredName})
     end.
 
+-spec compile_dummy_apps(Config) -> ok when
+    Config :: ct_suite:ct_config().
 compile_dummy_apps(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     PrivDir = proplists:get_value(priv_dir, Config),

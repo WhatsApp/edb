@@ -170,16 +170,23 @@ start_session_with_custom_dap_language(Config) ->
 %%--------------------------------------------------------------------
 %% edb_dap_language callbacks
 %%--------------------------------------------------------------------
+-spec init() -> edb_dap_language:state().
 init() ->
     #{}.
 
 % The test callback returns more than one runtime module for bar.erl.
+-spec source_to_modules(Path, Lines, State) -> {ok, Modules, State} when
+    Path :: binary(),
+    Lines :: [edb:line()],
+    Modules :: [module()],
+    State :: edb_dap_language:state().
 source_to_modules(Path, _Lines, State) ->
     case filename:basename(Path, filename:extension(Path)) of
         ~"bar" -> {ok, [foo1, foo2], State};
         _ -> {ok, [], State}
     end.
 
+-spec custom_language_modules() -> [{source, [binary()]}].
 custom_language_modules() ->
     [
         {source, [

@@ -238,6 +238,10 @@ test_can_attach_async_with_infinity_timeout(Config) ->
     NodeStartupDelayInMs = 500,
     test_can_attach_async(Config, NodeStartupDelayInMs, infinity).
 
+-spec test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) -> ok when
+    Config :: ct_suite:ct_config(),
+    NodeStartupDelayInMs :: non_neg_integer(),
+    AttachTimeout :: timeout().
 test_can_attach_async(Config, NodeStartupDelayInMs, AttachTimeout) ->
     edb_test_support:on_debugger_node(Config, fun() ->
         Node = edb_test_support:random_node("debuggee"),
