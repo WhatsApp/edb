@@ -22,7 +22,6 @@
 -export([
     all/0,
     groups/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -56,9 +55,6 @@ groups() ->
             test_code_where_is_file_works
         ]}
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     ok = ping_server_stop(),
