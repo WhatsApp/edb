@@ -20,7 +20,6 @@
 %% CT callbacks
 -export([
     all/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -40,9 +39,6 @@ all() ->
         test_set_breakpoints_with_custom_dap_language,
         test_set_breakpoints_when_source_maps_to_no_modules
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),

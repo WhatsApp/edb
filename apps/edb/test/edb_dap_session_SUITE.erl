@@ -24,7 +24,6 @@
     suite/0,
     all/0,
     groups/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -72,9 +71,6 @@ groups() ->
             test_terminates_when_node_goes_down_while_configuring
         ]}
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),

@@ -21,7 +21,7 @@
 
 %% CT callbacks
 -export([suite/0, all/0]).
--export([init_per_testcase/2, end_per_testcase/2]).
+-export([end_per_testcase/2]).
 
 %% Test cases
 -export([test_next_works/1]).
@@ -48,9 +48,6 @@ all() ->
         test_step_in_error_on_module_not_found,
         test_step_in_error_on_function_not_found
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),

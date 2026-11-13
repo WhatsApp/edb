@@ -20,9 +20,7 @@
 %% Test server callbacks
 -export([
     all/0,
-    suite/0,
-    init_per_testcase/2,
-    end_per_testcase/2
+    suite/0
 ]).
 
 %% Test cases
@@ -42,12 +40,6 @@ suite() ->
     [
         % @fb-only: {wa_ct_log_sentinel, #{enable => true, enable_zero_error_logs_check => true}}
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    ok.
 
 strip_suffix(_Config) ->
     ?assertEqual(<<"/my/repo/my/">>, edb_dap_utils:strip_suffix(<<"/my/repo/my/">>, <<"app">>)),

@@ -22,7 +22,6 @@
 -export([
     suite/0,
     all/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -40,9 +39,6 @@ all() ->
         test_queries_fail_until_configured,
         test_setting_breakpoints_work_before_and_after_configuration
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),

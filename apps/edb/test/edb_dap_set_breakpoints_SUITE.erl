@@ -23,7 +23,6 @@
 -export([
     suite/0,
     all/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -41,9 +40,6 @@ all() ->
         test_error_set_breakpoint_bad_line,
         test_error_set_breakpoint_unknown_module
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),

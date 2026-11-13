@@ -23,7 +23,6 @@
 -export([
     suite/0,
     all/0,
-    init_per_testcase/2,
     end_per_testcase/2
 ]).
 
@@ -66,9 +65,6 @@ all() ->
         test_run_passes_env,
         test_run_captures_output
     ].
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
 
 end_per_testcase(_TestCase, _Config) ->
     edb_test_support:stop_all_peers(),
