@@ -105,20 +105,14 @@ atom() ->
         (B) when is_binary(B) -> {ok, binary_to_atom(B)}
     end.
 
--spec atom(A) -> parser(A2) when
-    A :: atom(),
-    % With bounded polymorphism, we'd use A instead of A2
-    A2 :: atom().
+-spec atom(A) -> parser(A).
 atom(A) when is_atom(A) ->
     fun
         F(X) when X =:= A -> {ok, A};
         F(X) when is_binary(X) -> F(binary_to_atom(X))
     end.
 
--spec atoms([A]) -> parser(A2) when
-    A :: atom(),
-    % With bounded polymorphism, we'd use A instead of A2
-    A2 :: dynamic().
+-spec atoms([A]) -> parser(A).
 atoms(As) when is_list(As) ->
     choice([atom(A) || A <- As]).
 
