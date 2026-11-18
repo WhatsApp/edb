@@ -854,7 +854,7 @@ call_server(Request, Timeout) ->
             error(not_attached)
     end.
 
--spec rpc_attached_node(M, F, Args) -> dynamic() when
+-spec rpc_attached_node(M, F, Args) -> term() when
     M :: module(),
     F :: atom(),
     Args :: [term()].
