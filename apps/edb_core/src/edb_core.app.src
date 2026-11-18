@@ -18,7 +18,6 @@
     {vsn, git},
     {modules, []},
     {applications, [
-        % @fb-only: otp_compatibility,
         kernel,
         stdlib,
         compiler,
