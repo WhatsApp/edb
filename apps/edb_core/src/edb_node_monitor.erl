@@ -229,7 +229,14 @@ safe_sname_hostname() ->
     | {subscribe_to_events, pid()}
     | {remove_event_subscription, edb:event_subscription()}.
 
--spec call(call_request()) -> dynamic().
+-spec call
+    ({attach, node(), timeout()}) ->
+        ok | {error, attachment_in_progress | nodedown | {bootstrap_failed, edb:bootstrap_failure()}};
+    ({expect_reverse_attach, expect_reverse_attach_args()}) -> ok | {error, attachment_in_progress};
+    (nodes) -> #{node() => []};
+    (detach) -> ok;
+    ({subscribe_to_events, pid()}) -> {ok, edb:event_subscription()};
+    ({remove_event_subscription, edb:event_subscription()}) -> ok.
 call(Request) ->
     case gen_statem:call(?MODULE, Request, infinity) of
         badarg ->
